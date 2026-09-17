@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "운영본부 상품 소싱기",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "지금 보고 있는 쇼핑몰 페이지에서 상품 정보를 바로 수집해 운영본부 관제실로 보냅니다.",
   "permissions": ["activeTab", "scripting"],
   "host_permissions": ["https://shorts-maker-omega.vercel.app/*"],
