@@ -12,11 +12,21 @@ export interface LogEntry {
   message: string;
 }
 
+export interface SourcedProduct {
+  id: string;
+  url: string;
+  title: string;
+  price: string | null;
+  image: string | null;
+  scrapedAt: string;
+}
+
 interface State {
   departments: Department[];
   projects: Project[];
   log: LogEntry[];
   completedToday: number;
+  sourcedProducts: SourcedProduct[];
 }
 
 const STATE_KEY = "shorts-maker:state";
@@ -37,12 +47,14 @@ function defaultState(): State {
     projects: structuredClone(projects),
     log: [],
     completedToday: 0,
+    sourcedProducts: [],
   };
 }
 
 // 실제 연동이 없는 직원에게 예전에 잘못 찍혔던 "이상발생" 표시가
 // 영원히 남아있지 않도록, 매번 상태를 읽을 때 원래 모습으로 되돌린다.
 function healState(state: State): State {
+  if (!state.sourcedProducts) state.sourcedProducts = [];
   for (const department of state.departments) {
     const fresh = initialDepartments.find((d) => d.id === department.id);
     if (!fresh) continue;
@@ -165,6 +177,61 @@ export async function reorderAgents(
   department.agents = reordered;
   await writeState(state);
   return true;
+}
+
+export async function addSourcedProducts(
+  products: Array<{ url: string; title: string; price: string | null; image: string | null }>,
+): Promise<SourcedProduct[]> {
+  const state = await readState();
+  const now = new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" });
+
+  const existingUrls = new Set(state.sourcedProducts.map((p) => p.url));
+  const added: SourcedProduct[] = [];
+
+  for (const product of products) {
+    if (existingUrls.has(product.url)) continue;
+    const entry: SourcedProduct = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      url: product.url,
+      title: product.title,
+      price: product.price,
+      image: product.image,
+      scrapedAt: now,
+    };
+    state.sourcedProducts.unshift(entry);
+    existingUrls.add(product.url);
+    added.push(entry);
+  }
+
+  state.sourcedProducts = state.sourcedProducts.slice(0, 200);
+
+  if (added.length > 0) {
+    const department = state.departments.find((d) => d.id === "store");
+    const agent = department?.agents.find((a) => a.id === "s1");
+    if (agent) {
+      agent.status = "active";
+      agent.task = `신상품 후보 스캔 - 방금 ${added.length}건 수집`;
+    }
+    const logEntry: LogEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      time: now,
+      departmentId: "store",
+      agentId: "s1",
+      agentName: agent?.name ?? "상품소싱이",
+      message: `확장프로그램으로 상품 ${added.length}건 수집`,
+    };
+    state.log.unshift(logEntry);
+    state.log = state.log.slice(0, 30);
+    state.completedToday += 1;
+  }
+
+  await writeState(state);
+  return added;
+}
+
+export async function getSourcedProducts(): Promise<SourcedProduct[]> {
+  const state = await readState();
+  return state.sourcedProducts;
 }
 
 export function isSharedStorageConfigured(): boolean {
