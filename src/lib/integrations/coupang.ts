@@ -64,12 +64,20 @@ export async function fetchCoupangProducts(): Promise<CoupangProduct[]> {
     },
   });
 
+  const rawText = await res.text();
+
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`쿠팡 상품 조회 실패 (${res.status}): ${text}`);
+    throw new Error(`쿠팡 상품 조회 실패 (${res.status}): ${rawText.slice(0, 500)}`);
   }
 
-  const data = await res.json();
+  let data: { data?: CoupangProduct[] };
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    throw new Error(
+      `쿠팡이 JSON이 아닌 응답을 줌 (status ${res.status}): ${rawText.slice(0, 500)}`,
+    );
+  }
   return data.data ?? [];
 }
 
