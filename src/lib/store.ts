@@ -144,6 +144,29 @@ export async function reportFailure(input: {
   return entry;
 }
 
+export async function reorderAgents(
+  departmentId: string,
+  orderedAgentIds: string[],
+): Promise<boolean> {
+  const state = await readState();
+  const department = state.departments.find((d) => d.id === departmentId);
+  if (!department) return false;
+
+  const byId = new Map(department.agents.map((a) => [a.id, a]));
+  const reordered = orderedAgentIds
+    .map((id) => byId.get(id))
+    .filter((a): a is (typeof department.agents)[number] => Boolean(a));
+
+  // 혹시 빠진 직원이 있으면(동기화 문제 등) 맨 뒤에 그대로 붙여 잃어버리지 않게 한다.
+  for (const agent of department.agents) {
+    if (!orderedAgentIds.includes(agent.id)) reordered.push(agent);
+  }
+
+  department.agents = reordered;
+  await writeState(state);
+  return true;
+}
+
 export function isSharedStorageConfigured(): boolean {
   return getRedis() !== null;
 }
