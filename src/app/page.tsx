@@ -37,9 +37,21 @@ export default function Home() {
 
     load();
     const timer = setInterval(load, 4000);
+
+    // 다른 탭/창을 보다가 돌아왔을 때 새로고침 없이 바로 최신 상태를 보여준다.
+    // (브라우저는 화면에서 벗어난 탭의 setInterval을 느리게/멈추게 만들기 때문에
+    // 그 사이에 놓친 변경사항을 탭이 다시 보일 때 즉시 한 번 더 가져온다.)
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+
     return () => {
       cancelled = true;
       clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
     };
   }, []);
 

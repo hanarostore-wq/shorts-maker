@@ -1,8 +1,9 @@
 "use client";
 
 import type { Agent } from "@/lib/types";
-import { getAgentPlatforms } from "@/lib/agentIntegrations";
+import { getAgentPlatforms, getAgentReport } from "@/lib/agentIntegrations";
 import { IntegrationPanel } from "./IntegrationPanel";
+import { SourcingReport } from "./SourcingReport";
 
 export function AgentDetailModal({
   agent,
@@ -12,6 +13,7 @@ export function AgentDetailModal({
   onClose: () => void;
 }) {
   const platforms = getAgentPlatforms(agent.id);
+  const report = getAgentReport(agent.id);
 
   return (
     <div
@@ -19,7 +21,7 @@ export function AgentDetailModal({
       onClick={onClose}
     >
       <div
-        className="flex w-full max-w-md flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-4"
+        className="flex w-full max-w-lg flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b-2 border-zinc-800 pb-2">
@@ -33,9 +35,9 @@ export function AgentDetailModal({
         </div>
         <p className="text-[11px] text-zinc-500">{agent.task}</p>
 
-        {platforms.length > 0 ? (
-          <IntegrationPanel platforms={platforms} />
-        ) : (
+        {report === "sourcing" && <SourcingReport />}
+        {platforms.length > 0 && <IntegrationPanel platforms={platforms} />}
+        {report === null && platforms.length === 0 && (
           <p className="text-[11px] text-zinc-600">
             이 직원은 아직 실제 연동이 없습니다.
           </p>
