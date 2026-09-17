@@ -1,3 +1,5 @@
+import { fetchViaFixedIp } from "@/lib/proxyFetch";
+
 const BASE_URL = "https://api.commerce.naver.com/external";
 
 interface NaverProduct {
@@ -35,7 +37,7 @@ async function getAccessToken(): Promise<string> {
     type: "SELF",
   });
 
-  const res = await fetch(`${BASE_URL}/v1/oauth2/token`, {
+  const res = await fetchViaFixedIp(`${BASE_URL}/v1/oauth2/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
@@ -54,7 +56,7 @@ export async function fetchNaverProducts(): Promise<NaverProduct[]> {
   const accessToken = await getAccessToken();
 
   // 상품 검색은 GET이 아니라 POST + JSON 바디로 조건을 전달해야 한다.
-  const res = await fetch(`${BASE_URL}/v1/products/search`, {
+  const res = await fetchViaFixedIp(`${BASE_URL}/v1/products/search`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
