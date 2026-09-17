@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { departments as initialDepartments, projects } from "./mock-data";
+import { getAgentPlatforms } from "./agentIntegrations";
 import type { Department, Project } from "./types";
 
 export interface LogEntry {
@@ -39,14 +40,36 @@ function defaultState(): State {
   };
 }
 
+// 실제 연동이 없는 직원에게 예전에 잘못 찍혔던 "이상발생" 표시가
+// 영원히 남아있지 않도록, 매번 상태를 읽을 때 원래 모습으로 되돌린다.
+function healState(state: State): State {
+  for (const department of state.departments) {
+    const fresh = initialDepartments.find((d) => d.id === department.id);
+    if (!fresh) continue;
+    for (const agent of department.agents) {
+      const isAnomaly = agent.task.startsWith("⚠");
+      const isIntegrated = getAgentPlatforms(agent.id).length > 0;
+      if (isAnomaly && !isIntegrated) {
+        const freshAgent = fresh.agents.find((a) => a.id === agent.id);
+        if (freshAgent) {
+          agent.status = freshAgent.status;
+          agent.task = freshAgent.task;
+        }
+      }
+    }
+  }
+  return state;
+}
+
 async function readState(): Promise<State> {
   const redis = getRedis();
   if (!redis) {
     if (!memoryState) memoryState = defaultState();
+    memoryState = healState(memoryState);
     return memoryState;
   }
   const stored = await redis.get<State>(STATE_KEY);
-  return stored ?? defaultState();
+  return healState(stored ?? defaultState());
 }
 
 async function writeState(state: State): Promise<void> {

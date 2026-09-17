@@ -102,7 +102,6 @@ export default function Home() {
             <DepartmentFloor
               key={department.id}
               department={department}
-              log={state.log}
               onAgentClick={setSelectedAgent}
             />
           ))}

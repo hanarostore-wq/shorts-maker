@@ -1,21 +1,16 @@
 import type { Agent, Department } from "@/lib/types";
-import type { LogEntry } from "@/lib/store";
 import { AgentSeat } from "./AgentSeat";
 import { getAgentPlatforms } from "@/lib/agentIntegrations";
 
 export function DepartmentFloor({
   department,
-  log,
   onAgentClick,
 }: {
   department: Department;
-  log: LogEntry[];
   onAgentClick: (agent: Agent) => void;
 }) {
   const activeCount = department.agents.filter((a) => a.status === "active").length;
   const utilization = Math.round((activeCount / department.agents.length) * 100);
-  const deptLog = log.filter((entry) => entry.departmentId === department.id).slice(0, 5);
-  const anomalyCount = department.agents.filter((a) => a.task.startsWith("⚠")).length;
 
   return (
     <div className="flex flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-3">
@@ -39,7 +34,7 @@ export function DepartmentFloor({
         <span className="text-[11px] font-bold text-zinc-500">가동률 {utilization}%</span>
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+      <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-8">
         {department.agents.map((agent) => {
           const clickable = getAgentPlatforms(agent.id).length > 0;
           return (
@@ -50,34 +45,6 @@ export function DepartmentFloor({
             />
           );
         })}
-      </div>
-
-      <div className="flex flex-col gap-1.5 border-t-2 border-zinc-800 pt-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-bold text-zinc-400">부서 현황</span>
-          {anomalyCount > 0 && (
-            <span className="text-[11px] font-bold text-rose-400">
-              ⚠ 이상 {anomalyCount}건
-            </span>
-          )}
-        </div>
-        {deptLog.length === 0 ? (
-          <span className="text-[11px] text-zinc-600">아직 처리한 작업이 없습니다.</span>
-        ) : (
-          deptLog.map((entry) => (
-            <div key={entry.id} className="flex items-baseline gap-2 text-[11px]">
-              <span className="shrink-0 font-mono text-zinc-600">{entry.time}</span>
-              <span
-                className={`shrink-0 font-bold ${
-                  entry.message.startsWith("⚠") ? "text-rose-400" : "text-emerald-400"
-                }`}
-              >
-                {entry.agentName}
-              </span>
-              <span className="truncate text-zinc-300">{entry.message}</span>
-            </div>
-          ))
-        )}
       </div>
     </div>
   );
