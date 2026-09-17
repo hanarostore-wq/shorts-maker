@@ -57,22 +57,45 @@ function parseAbcmartSingle($: cheerio.CheerioAPI, url: string): ScrapedSinglePr
 
   const images: string[] = [];
   const seenBasenames = new Set<string>();
+  const pushImage = (src: string | undefined) => {
+    const resolved = abs(src, url);
+    if (!resolved) return;
+    const key = imageBasename(resolved);
+    if (seenBasenames.has(key)) return;
+    seenBasenames.add(key);
+    images.push(resolved);
+  };
+
+  // 1) 썸네일 갤러리 + 확대 상세컷(밑창/박스 등)
   $(".product-detail-box .detail-thumbs-list img, .product-detail-box .detail-images img").each(
-    (_, el) => {
-      const src = $(el).attr("src") ?? $(el).attr("data-src");
-      const resolved = abs(src, url);
-      if (!resolved) return;
-      const key = imageBasename(resolved);
-      if (seenBasenames.has(key)) return;
-      seenBasenames.add(key);
-      images.push(resolved);
-    },
+    (_, el) => pushImage($(el).attr("src") ?? $(el).attr("data-src")),
   );
+  // 2) 진짜 "상세페이지" — 세로로 긴 배너 이미지 여러 장 (에디터로 작성된 상세설명)
+  $("#product-detail-description-wrapper img").each((_, el) =>
+    pushImage($(el).attr("src") ?? $(el).attr("data-src")),
+  );
+
   const ogImage = abs(meta("og:image"), url);
   const allImages =
     images.length > 0
       ? images
       : (Array.from(new Set([ogImage].filter(Boolean))) as string[]);
+
+  // 사이즈 변환표(KR/US/UK/EU)도 상세페이지의 일부로 텍스트로 담는다.
+  const sizeTableLines: string[] = [];
+  $(".size-guide-wrap table").each((_, table) => {
+    $(table)
+      .find("tr")
+      .each((_, tr) => {
+        const cells = $(tr)
+          .find("th, td")
+          .map((_, cell) => $(cell).text().trim())
+          .get()
+          .filter(Boolean);
+        if (cells.length > 0) sizeTableLines.push(cells.join(" | "));
+      });
+  });
+  const sizeTableText = sizeTableLines.length > 0 ? sizeTableLines.join("\n") : null;
 
   // .price-cost 안에 정가/할인가/할인액이 섞여 있어서, 음수(할인액)가 아닌 것 중
   // 가장 작은 값(할인 후 최종가)을 최종 판매가로 판단한다.
@@ -98,8 +121,7 @@ function parseAbcmartSingle($: cheerio.CheerioAPI, url: string): ScrapedSinglePr
     options.push(qty > 0 ? size : `${size} (품절)`);
   });
 
-  const description =
-    $(".detail-box-left").text().replace(/\s+/g, " ").trim().slice(0, 1000) || null;
+  const description = sizeTableText;
 
   return {
     url,
