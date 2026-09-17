@@ -42,9 +42,7 @@ export function SourcingReport() {
       <span className="text-[11px] text-zinc-500">총 {products.length}건</span>
       {products.map((p) => {
         const hasValidLink = /^https?:\/\//.test(p.url);
-        const hasDetail = Boolean(
-          p.description || (p.options && p.options.length > 0) || (p.images && p.images.length > 1),
-        );
+        const allImages = Array.from(new Set([p.image, ...(p.images ?? [])].filter(Boolean))) as string[];
         const isExpanded = expandedId === p.id;
         return (
           <div key={p.id} className="border border-zinc-800 bg-zinc-900">
@@ -59,28 +57,26 @@ export function SourcingReport() {
               )}
               <button
                 className="flex min-w-0 flex-1 flex-col items-start text-left"
-                onClick={() => hasDetail && setExpandedId(isExpanded ? null : p.id)}
+                onClick={() => setExpandedId(isExpanded ? null : p.id)}
               >
-                {hasValidLink ? (
-                  <a
-                    href={p.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="truncate text-[11px] font-bold text-zinc-200 hover:underline"
-                  >
-                    {p.title}
-                  </a>
-                ) : (
-                  <span className="truncate text-[11px] font-bold text-zinc-200">{p.title}</span>
-                )}
+                <span className="truncate text-[11px] font-bold text-zinc-200">{p.title}</span>
                 <span className="text-[10px] text-zinc-500">
-                  {p.scrapedAt}
-                  {hasDetail ? (isExpanded ? " · 접기 ▲" : " · 상세보기 ▼") : ""}
+                  {p.scrapedAt} · 사진 {allImages.length}장 {isExpanded ? "▲" : "▼"}
                 </span>
               </button>
               {p.price && (
                 <span className="shrink-0 text-[11px] font-bold text-emerald-400">{p.price}</span>
+              )}
+              {hasValidLink && (
+                <a
+                  href={p.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 text-xs text-zinc-500 hover:text-zinc-300"
+                  title="원본 페이지 열기"
+                >
+                  🔗
+                </a>
               )}
               <button
                 onClick={() => handleRemove(p.id)}
@@ -94,18 +90,20 @@ export function SourcingReport() {
 
             {isExpanded && (
               <div className="flex flex-col gap-2 border-t border-zinc-800 p-2">
-                {p.images && p.images.length > 1 && (
-                  <div className="flex gap-1 overflow-x-auto">
-                    {p.images.map((img, i) => (
+                {allImages.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {allImages.map((img, i) => (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         key={i}
                         src={img}
                         alt=""
-                        className="h-14 w-14 shrink-0 object-cover"
+                        className="h-20 w-20 border border-zinc-800 object-cover"
                       />
                     ))}
                   </div>
+                ) : (
+                  <span className="text-[10px] text-zinc-600">수집된 사진이 없습니다.</span>
                 )}
                 {p.options && p.options.length > 0 && (
                   <div className="flex flex-col gap-1">
