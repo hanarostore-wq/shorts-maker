@@ -6,6 +6,7 @@ import { DepartmentFloor } from "@/components/DepartmentFloor";
 import { ProjectGrid } from "@/components/ProjectGrid";
 import { ActivityLog } from "@/components/ActivityLog";
 import { DemoTrigger } from "@/components/DemoTrigger";
+import { IntegrationPanel } from "@/components/IntegrationPanel";
 import type { Department, Project } from "@/lib/types";
 import type { LogEntry } from "@/lib/store";
 
@@ -68,6 +69,8 @@ export default function Home() {
           <DemoTrigger departments={state.departments} />
         </div>
       </header>
+
+      <IntegrationPanel />
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-bold text-zinc-300">진행 프로젝트</h2>
