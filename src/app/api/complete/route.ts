@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const entry = reportCompletion({ departmentId, agentId, message });
+  const entry = await reportCompletion({ departmentId, agentId, message });
   if (!entry) {
     return NextResponse.json({ error: "해당 부서/직원을 찾을 수 없습니다." }, { status: 404 });
   }

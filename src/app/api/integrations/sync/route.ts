@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     }
     try {
       const products = await fetchNaverProducts();
-      reportCompletion({
+      await reportCompletion({
         departmentId: "store",
         agentId: "s1",
         message: `스마트스토어 상품 ${products.length}건 조회 완료`,
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, count: products.length, products });
     } catch (error) {
       const message = error instanceof Error ? error.message : "알 수 없는 오류";
-      reportFailure({ departmentId: "store", agentId: "s1", message });
+      await reportFailure({ departmentId: "store", agentId: "s1", message });
       return NextResponse.json({ error: message }, { status: 502 });
     }
   }
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     }
     try {
       const products = await fetchCoupangProducts();
-      reportCompletion({
+      await reportCompletion({
         departmentId: "store",
         agentId: "s3",
         message: `쿠팡 상품 ${products.length}건 조회 완료`,
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, count: products.length, products });
     } catch (error) {
       const message = error instanceof Error ? error.message : "알 수 없는 오류";
-      reportFailure({ departmentId: "store", agentId: "s3", message });
+      await reportFailure({ departmentId: "store", agentId: "s3", message });
       return NextResponse.json({ error: message }, { status: 502 });
     }
   }
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     try {
       const deployment = await fetchLatestDeployment();
       const stateLabel = describeState(deployment.state);
-      reportCompletion({
+      await reportCompletion({
         departmentId: "ops",
         agentId: "o4",
         message: `${deployment.name} - ${stateLabel}`,
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, deployment });
     } catch (error) {
       const message = error instanceof Error ? error.message : "알 수 없는 오류";
-      reportFailure({ departmentId: "ops", agentId: "o4", message });
+      await reportFailure({ departmentId: "ops", agentId: "o4", message });
       return NextResponse.json({ error: message }, { status: 502 });
     }
   }
