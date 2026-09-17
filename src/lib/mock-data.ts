@@ -22,6 +22,7 @@ export const departments: Department[] = [
       { id: "s3", name: "가격감시자", task: "경쟁가 모니터링 (쿠팡 연동됨)", status: "idle" },
       { id: "s4", name: "주문관리자", task: "주문/재고 동기화 - 아직 연동 안 됨", status: "offline" },
       { id: "s5", name: "고객응대원", task: "고객문의 정리 - 아직 연동 안 됨", status: "offline" },
+      { id: "s6", name: "서버관리원", task: "스토어 API 연동 관리 (클릭해서 조회)", status: "idle" },
     ],
   },
   {

@@ -11,7 +11,7 @@ const dotByStatus: Record<Agent["status"], string> = {
   active: "bg-emerald-400",
   standby: "bg-sky-400",
   idle: "bg-zinc-500",
-  offline: "bg-rose-500",
+  offline: "bg-zinc-600",
 };
 
 const personByStatus: Record<Agent["status"], string> = {
@@ -28,12 +28,26 @@ const screenColorByStatus: Record<Agent["status"], string> = {
   offline: "bg-zinc-950",
 };
 
-export function AgentSeat({ agent }: { agent: Agent }) {
+export function AgentSeat({
+  agent,
+  onClick,
+}: {
+  agent: Agent;
+  onClick?: () => void;
+}) {
   const isActive = agent.status === "active";
   const isOffline = agent.status === "offline";
+  const isAnomaly = agent.task.startsWith("⚠");
 
   return (
-    <div className="flex flex-col items-center gap-1 border-2 border-zinc-700 bg-zinc-900 p-2">
+    <div
+      onClick={onClick}
+      className={`flex flex-col items-center gap-1 border-2 p-2 ${
+        isAnomaly
+          ? "border-rose-600 bg-rose-950/40"
+          : "border-zinc-700 bg-zinc-900"
+      } ${onClick ? "cursor-pointer hover:border-zinc-500" : ""}`}
+    >
       {/* 데스크 장면: 모니터가 위, 캐릭터가 그 아래에서 책상을 보고 앉아있음 */}
       <div className="flex h-16 w-14 flex-col items-center justify-end">
         {/* 모니터 */}
@@ -61,7 +75,7 @@ export function AgentSeat({ agent }: { agent: Agent }) {
                     : ""
               }`}
             >
-              {personByStatus[agent.status]}
+              {isAnomaly ? "😱" : personByStatus[agent.status]}
             </span>
           ) : (
             <span className="text-lg leading-none opacity-40">🪑</span>
@@ -74,13 +88,21 @@ export function AgentSeat({ agent }: { agent: Agent }) {
       <span className="w-full truncate text-center text-[11px] font-bold text-zinc-100">
         {agent.name}
       </span>
-      <span className="w-full truncate text-center text-[10px] text-zinc-500">
+      <span
+        className={`w-full truncate text-center text-[10px] ${
+          isAnomaly ? "text-rose-400" : "text-zinc-500"
+        }`}
+      >
         {agent.task}
       </span>
       <div className="flex items-center gap-1">
-        <span className={`h-1.5 w-1.5 ${dotByStatus[agent.status]}`} />
-        <span className="text-[10px] font-bold text-zinc-400">
-          {labelByStatus[agent.status]}
+        <span
+          className={`h-1.5 w-1.5 ${isAnomaly ? "bg-rose-500" : dotByStatus[agent.status]}`}
+        />
+        <span
+          className={`text-[10px] font-bold ${isAnomaly ? "text-rose-400" : "text-zinc-400"}`}
+        >
+          {isAnomaly ? "이상발생" : labelByStatus[agent.status]}
         </span>
       </div>
     </div>

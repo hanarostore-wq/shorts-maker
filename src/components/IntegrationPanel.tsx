@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { Platform } from "@/lib/agentIntegrations";
 
 interface Status {
   naver: boolean;
@@ -8,13 +9,13 @@ interface Status {
   vercel: boolean;
 }
 
-const PLATFORM_LABEL: Record<keyof Status, string> = {
+const PLATFORM_LABEL: Record<Platform, string> = {
   naver: "스마트스토어",
   coupang: "쿠팡",
   vercel: "Vercel",
 };
 
-export function IntegrationPanel() {
+export function IntegrationPanel({ platforms }: { platforms: Platform[] }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
@@ -25,7 +26,7 @@ export function IntegrationPanel() {
       .then(setStatus);
   }, []);
 
-  const sync = async (platform: keyof Status) => {
+  const sync = async (platform: Platform) => {
     setLoading(platform);
     setResult(null);
     try {
@@ -50,10 +51,9 @@ export function IntegrationPanel() {
   };
 
   return (
-    <div className="flex flex-col gap-2 border-2 border-zinc-700 bg-zinc-950 p-3">
-      <span className="text-sm font-bold text-zinc-300">외부 연동 상태</span>
+    <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-3">
-        {(["naver", "coupang", "vercel"] as const).map((platform) => (
+        {platforms.map((platform) => (
           <StatusRow
             key={platform}
             label={PLATFORM_LABEL[platform]}
