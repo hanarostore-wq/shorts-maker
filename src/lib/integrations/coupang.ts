@@ -9,6 +9,13 @@ interface CoupangProduct {
   statusName: string;
 }
 
+// HTML 응답이 오면 <title>만 뽑아 간단히 요약한다 (로그에 원문 HTML을 그대로 안 남기기 위함).
+function summarize(rawText: string): string {
+  const titleMatch = rawText.match(/<title>(.*?)<\/title>/i);
+  if (titleMatch) return titleMatch[1].trim();
+  return rawText.replace(/\s+/g, " ").slice(0, 120);
+}
+
 function getCredentials() {
   const accessKey = process.env.COUPANG_ACCESS_KEY;
   const secretKey = process.env.COUPANG_SECRET_KEY;
@@ -67,16 +74,14 @@ export async function fetchCoupangProducts(): Promise<CoupangProduct[]> {
   const rawText = await res.text();
 
   if (!res.ok) {
-    throw new Error(`쿠팡 상품 조회 실패 (${res.status}): ${rawText.slice(0, 500)}`);
+    throw new Error(`쿠팡 상품 조회 실패 (${res.status}): ${summarize(rawText)}`);
   }
 
   let data: { data?: CoupangProduct[] };
   try {
     data = JSON.parse(rawText);
   } catch {
-    throw new Error(
-      `쿠팡이 JSON이 아닌 응답을 줌 (status ${res.status}): ${rawText.slice(0, 500)}`,
-    );
+    throw new Error(`쿠팡 접근 거부됨 (status ${res.status}): ${summarize(rawText)}`);
   }
   return data.data ?? [];
 }

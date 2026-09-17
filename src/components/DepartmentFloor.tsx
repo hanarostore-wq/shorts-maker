@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { Agent, Department } from "@/lib/types";
 import { AgentSeat } from "./AgentSeat";
-import { getAgentPlatforms } from "@/lib/agentIntegrations";
+import { isAgentClickable } from "@/lib/agentIntegrations";
 
 export function DepartmentFloor({
   department,
@@ -54,7 +54,7 @@ export function DepartmentFloor({
 
       <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-8">
         {department.agents.map((agent) => {
-          const clickable = getAgentPlatforms(agent.id).length > 0;
+          const clickable = isAgentClickable(agent.id);
           return (
             <div
               key={agent.id}
