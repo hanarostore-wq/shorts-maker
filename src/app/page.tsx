@@ -7,7 +7,6 @@ import { ProjectGrid } from "@/components/ProjectGrid";
 import { ActivityLog } from "@/components/ActivityLog";
 import { AutoSync } from "@/components/AutoSync";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
-import { SourcedProductsPanel } from "@/components/SourcedProductsPanel";
 import type { Agent, Department, Project } from "@/lib/types";
 import type { LogEntry } from "@/lib/store";
 
@@ -132,7 +131,6 @@ export default function Home() {
         <ProjectGrid projects={state.projects} />
       </section>
 
-      <SourcedProductsPanel />
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-bold text-zinc-300">부서 관제 · 전체 층</h2>
