@@ -101,7 +101,7 @@ export async function reportCompletion(input: {
 
   const entry: LogEntry = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    time: new Date().toLocaleTimeString("ko-KR"),
+    time: new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }),
     departmentId: department.id,
     agentId: agent.id,
     agentName: agent.name,
@@ -131,7 +131,7 @@ export async function reportFailure(input: {
 
   const entry: LogEntry = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    time: new Date().toLocaleTimeString("ko-KR"),
+    time: new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }),
     departmentId: department.id,
     agentId: agent.id,
     agentName: agent.name,
