@@ -4,7 +4,7 @@ const labelByStatus: Record<Agent["status"], string> = {
   active: "업무중",
   standby: "대기",
   idle: "휴면",
-  offline: "오프라인",
+  offline: "퇴근",
 };
 
 const dotByStatus: Record<Agent["status"], string> = {

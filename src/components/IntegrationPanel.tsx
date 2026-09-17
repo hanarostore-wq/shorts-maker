@@ -5,7 +5,14 @@ import { useEffect, useState } from "react";
 interface Status {
   naver: boolean;
   coupang: boolean;
+  vercel: boolean;
 }
+
+const PLATFORM_LABEL: Record<keyof Status, string> = {
+  naver: "스마트스토어",
+  coupang: "쿠팡",
+  vercel: "Vercel",
+};
 
 export function IntegrationPanel() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -18,7 +25,7 @@ export function IntegrationPanel() {
       .then(setStatus);
   }, []);
 
-  const sync = async (platform: "naver" | "coupang") => {
+  const sync = async (platform: keyof Status) => {
     setLoading(platform);
     setResult(null);
     try {
@@ -29,12 +36,14 @@ export function IntegrationPanel() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setResult(`❌ ${platform === "naver" ? "스마트스토어" : "쿠팡"} 오류: ${data.error}`);
+        setResult(`❌ ${PLATFORM_LABEL[platform]} 오류: ${data.error}`);
+      } else if (platform === "vercel") {
+        setResult(`✅ Vercel: ${data.deployment.name} - ${data.deployment.state}`);
       } else {
-        setResult(`✅ ${platform === "naver" ? "스마트스토어" : "쿠팡"} 상품 ${data.count}건 조회 완료`);
+        setResult(`✅ ${PLATFORM_LABEL[platform]} 상품 ${data.count}건 조회 완료`);
       }
     } catch {
-      setResult(`❌ ${platform === "naver" ? "스마트스토어" : "쿠팡"} 요청 자체가 실패했습니다`);
+      setResult(`❌ ${PLATFORM_LABEL[platform]} 요청 자체가 실패했습니다`);
     } finally {
       setLoading(null);
     }
@@ -42,20 +51,17 @@ export function IntegrationPanel() {
 
   return (
     <div className="flex flex-col gap-2 border-2 border-zinc-700 bg-zinc-950 p-3">
-      <span className="text-sm font-bold text-zinc-300">스토어 연동 상태</span>
+      <span className="text-sm font-bold text-zinc-300">외부 연동 상태</span>
       <div className="flex flex-wrap items-center gap-3">
-        <StatusRow
-          label="스마트스토어"
-          connected={status?.naver ?? null}
-          onSync={() => sync("naver")}
-          loading={loading === "naver"}
-        />
-        <StatusRow
-          label="쿠팡"
-          connected={status?.coupang ?? null}
-          onSync={() => sync("coupang")}
-          loading={loading === "coupang"}
-        />
+        {(["naver", "coupang", "vercel"] as const).map((platform) => (
+          <StatusRow
+            key={platform}
+            label={PLATFORM_LABEL[platform]}
+            connected={status?.[platform] ?? null}
+            onSync={() => sync(platform)}
+            loading={loading === platform}
+          />
+        ))}
       </div>
       {result && <span className="text-[11px] text-zinc-400">{result}</span>}
     </div>
