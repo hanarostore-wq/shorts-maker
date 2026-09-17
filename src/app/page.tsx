@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { StatCounter } from "@/components/StatCounter";
 import { DepartmentFloor } from "@/components/DepartmentFloor";
 import { ProjectGrid } from "@/components/ProjectGrid";
 import { ActivityLog } from "@/components/ActivityLog";
 import { AutoSync } from "@/components/AutoSync";
-import type { Department, Project } from "@/lib/types";
+import { AgentDetailModal } from "@/components/AgentDetailModal";
+import type { Agent, Department, Project } from "@/lib/types";
 import type { LogEntry } from "@/lib/store";
 
 interface State {
@@ -19,6 +19,7 @@ interface State {
 
 export default function Home() {
   const [state, setState] = useState<State | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
 
   useEffect(() => {
     const source = new EventSource("/api/stream");
@@ -38,11 +39,17 @@ export default function Home() {
 
   const allAgents = state.departments.flatMap((d) => d.agents);
   const counts = {
-    active: allAgents.filter((a) => a.status === "active").length,
+    active: allAgents.filter((a) => a.status === "active" && !a.task.startsWith("⚠")).length,
     standby: allAgents.filter((a) => a.status === "standby").length,
     idle: allAgents.filter((a) => a.status === "idle").length,
-    offline: allAgents.filter((a) => a.status === "offline").length,
+    offline: allAgents.filter((a) => a.status === "offline" && !a.task.startsWith("⚠")).length,
+    anomaly: allAgents.filter((a) => a.task.startsWith("⚠")).length,
   };
+
+  // 모달이 열려 있는 동안에도 최신 상태를 따라가도록 매 렌더링마다 다시 찾는다.
+  const liveSelectedAgent = selectedAgent
+    ? allAgents.find((a) => a.id === selectedAgent.id) ?? selectedAgent
+    : null;
 
   return (
     <div className="flex flex-1 flex-col gap-6 bg-black px-4 py-6 font-mono sm:px-8">
@@ -59,21 +66,15 @@ export default function Home() {
             <StatCounter label="업무중" value={counts.active} tone="green" />
             <StatCounter label="대기" value={counts.standby} tone="blue" />
             <StatCounter label="휴면" value={counts.idle} tone="gray" />
-            <StatCounter label="퇴근" value={counts.offline} tone="red" />
+            <StatCounter label="퇴근" value={counts.offline} tone="gray" />
+            <StatCounter label="이상발생" value={counts.anomaly} tone="red" />
             <StatCounter label="오늘 완료" value={state.completedToday} tone="green" />
           </div>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-zinc-500">
-            {state.departments.length}개 부서 · {allAgents.length}명 직원 실시간 운영 중
-          </p>
-          <Link
-            href="/settings"
-            className="border-2 border-zinc-700 px-3 py-1.5 text-xs font-bold text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
-          >
-            ⚙ 설정
-          </Link>
-        </div>
+        <p className="text-xs text-zinc-500">
+          {state.departments.length}개 부서 · {allAgents.length}명 직원 실시간 운영 중 ·
+          직원을 클릭하면 연동 상태를 조회할 수 있습니다
+        </p>
       </header>
 
       <section className="flex flex-col gap-3">
@@ -85,7 +86,12 @@ export default function Home() {
         <h2 className="text-sm font-bold text-zinc-300">부서 관제 · 전체 층</h2>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {state.departments.map((department) => (
-            <DepartmentFloor key={department.id} department={department} />
+            <DepartmentFloor
+              key={department.id}
+              department={department}
+              log={state.log}
+              onAgentClick={setSelectedAgent}
+            />
           ))}
         </div>
       </section>
@@ -93,6 +99,10 @@ export default function Home() {
       <section className="flex flex-col gap-3">
         <ActivityLog log={state.log} />
       </section>
+
+      {liveSelectedAgent && (
+        <AgentDetailModal agent={liveSelectedAgent} onClose={() => setSelectedAgent(null)} />
+      )}
     </div>
   );
 }
