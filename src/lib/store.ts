@@ -64,3 +64,31 @@ export function reportCompletion(input: {
   emitter.emit("update", state);
   return entry;
 }
+
+export function reportFailure(input: {
+  departmentId: string;
+  agentId: string;
+  message: string;
+}) {
+  const department = state.departments.find((d) => d.id === input.departmentId);
+  if (!department) return null;
+  const agent = department.agents.find((a) => a.id === input.agentId);
+  if (!agent) return null;
+
+  agent.status = "offline";
+  agent.task = `⚠ ${input.message}`;
+
+  const entry: LogEntry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    time: new Date().toLocaleTimeString("ko-KR"),
+    departmentId: department.id,
+    agentId: agent.id,
+    agentName: agent.name,
+    message: `⚠ ${input.message}`,
+  };
+  state.log.unshift(entry);
+  state.log = state.log.slice(0, 30);
+
+  emitter.emit("update", state);
+  return entry;
+}

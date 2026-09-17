@@ -6,11 +6,11 @@ export const departments: Department[] = [
     name: "스토어부서",
     icon: "🛒",
     agents: [
-      { id: "s1", name: "상품소싱이", task: "신상품 후보 스캔", status: "active" },
-      { id: "s2", name: "상세페이지작가", task: "상세페이지 작성", status: "active" },
-      { id: "s3", name: "가격감시자", task: "경쟁가 모니터링", status: "active" },
-      { id: "s4", name: "주문관리자", task: "주문/재고 동기화", status: "standby" },
-      { id: "s5", name: "고객응대원", task: "고객문의 정리", status: "idle" },
+      { id: "s1", name: "상품소싱이", task: "신상품 후보 스캔 (스마트스토어 연동됨)", status: "idle" },
+      { id: "s2", name: "상세페이지작가", task: "상세페이지 작성 - 아직 연동 안 됨", status: "offline" },
+      { id: "s3", name: "가격감시자", task: "경쟁가 모니터링 (쿠팡 연동됨)", status: "idle" },
+      { id: "s4", name: "주문관리자", task: "주문/재고 동기화 - 아직 연동 안 됨", status: "offline" },
+      { id: "s5", name: "고객응대원", task: "고객문의 정리 - 아직 연동 안 됨", status: "offline" },
     ],
   },
   {
@@ -18,11 +18,11 @@ export const departments: Department[] = [
     name: "쇼츠부서",
     icon: "🎬",
     agents: [
-      { id: "v1", name: "대본작가", task: "쇼츠 대본 초안", status: "active" },
-      { id: "v2", name: "영상감독", task: "영상 컷 구성", status: "active" },
-      { id: "v3", name: "썸네일디자이너", task: "썸네일 생성", status: "active" },
-      { id: "v4", name: "업로드담당", task: "업로드 예약", status: "standby" },
-      { id: "v5", name: "수익집계원", task: "조회수/수익 집계", status: "idle" },
+      { id: "v1", name: "대본작가", task: "쇼츠 대본 초안 - 아직 연동 안 됨", status: "offline" },
+      { id: "v2", name: "영상감독", task: "영상 컷 구성 - 아직 연동 안 됨", status: "offline" },
+      { id: "v3", name: "썸네일디자이너", task: "썸네일 생성 - 아직 연동 안 됨", status: "offline" },
+      { id: "v4", name: "업로드담당", task: "업로드 예약 - 아직 연동 안 됨", status: "offline" },
+      { id: "v5", name: "수익집계원", task: "조회수/수익 집계 - 아직 연동 안 됨", status: "offline" },
     ],
   },
   {
@@ -30,10 +30,10 @@ export const departments: Department[] = [
     name: "블로그부서",
     icon: "✍️",
     agents: [
-      { id: "b1", name: "키워드조사원", task: "키워드 리서치", status: "active" },
-      { id: "b2", name: "글쓰기작가", task: "포스트 작성", status: "active" },
-      { id: "b3", name: "SEO점검원", task: "검색최적화 점검", status: "standby" },
-      { id: "b4", name: "발행담당", task: "발행/스케줄링", status: "idle" },
+      { id: "b1", name: "키워드조사원", task: "키워드 리서치 - 아직 연동 안 됨", status: "offline" },
+      { id: "b2", name: "글쓰기작가", task: "포스트 작성 - 아직 연동 안 됨", status: "offline" },
+      { id: "b3", name: "SEO점검원", task: "검색최적화 점검 - 아직 연동 안 됨", status: "offline" },
+      { id: "b4", name: "발행담당", task: "발행/스케줄링 - 아직 연동 안 됨", status: "offline" },
     ],
   },
   {
@@ -41,9 +41,9 @@ export const departments: Department[] = [
     name: "운영부서",
     icon: "⚙️",
     agents: [
-      { id: "o1", name: "정산담당", task: "채널별 수익 집계", status: "active" },
-      { id: "o2", name: "보고서작성원", task: "일일 리포트 생성", status: "standby" },
-      { id: "o3", name: "이상감지원", task: "이상 감지/알림", status: "idle" },
+      { id: "o1", name: "정산담당", task: "채널별 수익 집계 - 아직 연동 안 됨", status: "offline" },
+      { id: "o2", name: "보고서작성원", task: "일일 리포트 생성 - 아직 연동 안 됨", status: "offline" },
+      { id: "o3", name: "이상감지원", task: "이상 감지/알림 - 아직 연동 안 됨", status: "offline" },
     ],
   },
 ];

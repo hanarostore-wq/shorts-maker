@@ -21,12 +21,22 @@ function getCredentials() {
 }
 
 // 쿠팡 Open API는 HMAC-SHA256으로 서명한 Authorization 헤더(CEA algorithm)를 요구한다.
+// signed-date는 반드시 yyMMdd'T'HHmmss'Z' (연도 2자리, UTC) 형식이어야 한다.
+function getSignedDate(): string {
+  const now = new Date();
+  const yy = String(now.getUTCFullYear()).slice(-2);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const MM = pad(now.getUTCMonth() + 1);
+  const dd = pad(now.getUTCDate());
+  const HH = pad(now.getUTCHours());
+  const mm = pad(now.getUTCMinutes());
+  const ss = pad(now.getUTCSeconds());
+  return `${yy}${MM}${dd}T${HH}${mm}${ss}Z`;
+}
+
 function buildAuthorizationHeader(method: string, path: string, query: string) {
   const { accessKey, secretKey } = getCredentials();
-  const datetime = new Date()
-    .toISOString()
-    .replace(/[-:]|\.\d{3}/g, "")
-    .slice(0, 15) + "Z";
+  const datetime = getSignedDate();
 
   const message = `${datetime}${method}${path}${query}`;
   const signature = crypto
