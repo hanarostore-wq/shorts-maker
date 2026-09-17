@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { addSourcedProducts, getSourcedProducts } from "@/lib/store";
+import { addSourcedProducts, getSourcedProducts, removeSourcedProduct } from "@/lib/store";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
@@ -54,4 +54,20 @@ export async function POST(request: Request) {
     { ok: true, addedCount: added.length, skippedCount: valid.length - added.length },
     { headers: CORS_HEADERS },
   );
+}
+
+export async function DELETE(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+
+  if (!id) {
+    return NextResponse.json({ error: "id가 필요합니다." }, { status: 400, headers: CORS_HEADERS });
+  }
+
+  const removed = await removeSourcedProduct(id);
+  if (!removed) {
+    return NextResponse.json({ error: "해당 상품을 찾을 수 없습니다." }, { status: 404, headers: CORS_HEADERS });
+  }
+
+  return NextResponse.json({ ok: true }, { headers: CORS_HEADERS });
 }

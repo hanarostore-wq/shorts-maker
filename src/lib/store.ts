@@ -234,6 +234,21 @@ export async function getSourcedProducts(): Promise<SourcedProduct[]> {
   return state.sourcedProducts;
 }
 
+export async function removeSourcedProduct(id: string): Promise<boolean> {
+  const state = await readState();
+  const before = state.sourcedProducts.length;
+  state.sourcedProducts = state.sourcedProducts.filter((p) => p.id !== id);
+  if (state.sourcedProducts.length === before) return false;
+  await writeState(state);
+  return true;
+}
+
+export async function clearSourcedProducts(): Promise<void> {
+  const state = await readState();
+  state.sourcedProducts = [];
+  await writeState(state);
+}
+
 export function isSharedStorageConfigured(): boolean {
   return getRedis() !== null;
 }
