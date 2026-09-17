@@ -22,11 +22,24 @@ export default function Home() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
 
   useEffect(() => {
-    const source = new EventSource("/api/stream");
-    source.onmessage = (event) => {
-      setState(JSON.parse(event.data));
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const res = await fetch("/api/state", { cache: "no-store" });
+        const data = await res.json();
+        if (!cancelled) setState(data);
+      } catch {
+        // 다음 주기에 재시도
+      }
     };
-    return () => source.close();
+
+    load();
+    const timer = setInterval(load, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, []);
 
   if (!state) {
