@@ -71,21 +71,17 @@ function parseAbcmartSingle($: cheerio.CheerioAPI, url: string): ScrapedSinglePr
   });
   const price = prices.length > 0 ? `${Math.min(...prices).toLocaleString("ko-KR")}원` : null;
 
-  // 색상/사이즈별 옵션 목록 (jQuery UI가 만드는 실제 옵션 셀렉트).
-  // 같은 패턴(id="ui-id-*")의 셀렉트가 카테고리 메뉴 등에도 쓰여서,
-  // "이 상품명으로 시작하는 옵션"만 진짜 옵션으로 인정한다.
-  const titlePrefix = title.slice(0, 8).toLowerCase();
+  // 사이즈 옵션: ul.size-list 안의 li[data-product-type="option"]에
+  // 실제 사이즈(data-product-option-name)와 재고 수량이 들어있다.
+  // 재고 수량이 0이면 품절로 표시한다.
   const options: string[] = [];
-  $('select[id^="ui-id-"] option').each((_, el) => {
-    const text = $(el).text().trim();
-    if (
-      text &&
-      text.includes(" - ") &&
-      text.toLowerCase().startsWith(titlePrefix) &&
-      !OFFLINE_OPTION_PATTERN.test(text)
-    ) {
-      options.push(text.split(" - ").pop()?.trim() ?? text);
-    }
+  $('ul.size-list li[data-product-type="option"]').each((_, el) => {
+    const $el = $(el);
+    const size =
+      $el.attr("data-product-option-name") ?? $el.find("button").text().trim();
+    if (!size) return;
+    const qty = Number($el.attr("data-product-option-quantity") ?? "0");
+    options.push(qty > 0 ? size : `${size} (품절)`);
   });
 
   const description =
