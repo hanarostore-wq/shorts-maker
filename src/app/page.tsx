@@ -6,6 +6,7 @@ import { StatCounter } from "@/components/StatCounter";
 import { DepartmentFloor } from "@/components/DepartmentFloor";
 import { ProjectGrid } from "@/components/ProjectGrid";
 import { ActivityLog } from "@/components/ActivityLog";
+import { AutoSync } from "@/components/AutoSync";
 import type { Department, Project } from "@/lib/types";
 import type { LogEntry } from "@/lib/store";
 
@@ -45,6 +46,7 @@ export default function Home() {
 
   return (
     <div className="flex flex-1 flex-col gap-6 bg-black px-4 py-6 font-mono sm:px-8">
+      <AutoSync />
       <header className="flex flex-col gap-4 border-b-2 border-zinc-700 pb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
