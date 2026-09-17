@@ -18,6 +18,9 @@ export interface SourcedProduct {
   title: string;
   price: string | null;
   image: string | null;
+  images?: string[];
+  options?: string[];
+  description?: string | null;
   scrapedAt: string;
 }
 
@@ -180,7 +183,15 @@ export async function reorderAgents(
 }
 
 export async function addSourcedProducts(
-  products: Array<{ url: string; title: string; price: string | null; image: string | null }>,
+  products: Array<{
+    url: string;
+    title: string;
+    price: string | null;
+    image: string | null;
+    images?: string[];
+    options?: string[];
+    description?: string | null;
+  }>,
 ): Promise<SourcedProduct[]> {
   const state = await readState();
   const now = new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" });
@@ -196,6 +207,9 @@ export async function addSourcedProducts(
       title: product.title,
       price: product.price,
       image: product.image,
+      images: product.images,
+      options: product.options,
+      description: product.description,
       scrapedAt: now,
     };
     state.sourcedProducts.unshift(entry);

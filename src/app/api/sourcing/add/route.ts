@@ -21,6 +21,9 @@ interface RawProduct {
   title?: string;
   price?: string | null;
   image?: string | null;
+  images?: string[];
+  options?: string[];
+  description?: string | null;
 }
 
 export async function POST(request: Request) {
@@ -40,6 +43,9 @@ export async function POST(request: Request) {
       title: p.title!,
       price: p.price ?? null,
       image: p.image ?? null,
+      images: p.images,
+      options: p.options,
+      description: p.description,
     }));
 
   if (valid.length === 0) {

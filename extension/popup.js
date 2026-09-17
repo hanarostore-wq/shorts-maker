@@ -17,6 +17,7 @@ function extractFromPage() {
   const scrolledBottom = window.scrollY + window.innerHeight;
 
   const anchors = Array.from(document.querySelectorAll("a")).filter((a) => {
+    if (!/^https?:\/\//.test(a.href || "")) return false;
     const img = a.querySelector("img");
     if (!img) return false;
     if (!priceRegex.test(a.innerText || "")) return false;
@@ -49,7 +50,7 @@ function extractFromPage() {
     return { type: "list", products };
   }
 
-  // 목록이 아니라 상품 상세 페이지로 보이는 경우: 메타태그 기반 단건 추출
+  // 목록이 아니라 상품 상세 페이지로 보이는 경우: 메타태그 + 옵션/설명까지 최대한 수집
   const meta = (name) =>
     document.querySelector(`meta[property="${name}"]`)?.content ||
     document.querySelector(`meta[name="${name}"]`)?.content ||
@@ -57,7 +58,46 @@ function extractFromPage() {
 
   const title = meta("og:title") || document.title || "이름 확인 불가";
   const image = meta("og:image");
-  const bodyMatch = (document.body.innerText || "").match(priceRegex);
+  const bodyText = document.body.innerText || "";
+  const bodyMatch = bodyText.match(priceRegex);
+
+  // 추가 이미지: og:image 외 상품 갤러리로 보이는 img들(대표 이미지와 비슷한 위치)
+  const galleryImages = Array.from(
+    document.querySelectorAll(
+      '[class*="thumb" i] img, [class*="gallery" i] img, [class*="detail" i] img',
+    ),
+  )
+    .map((img) => abs(img.src))
+    .filter(Boolean);
+  const images = Array.from(new Set([image, ...galleryImages].filter(Boolean))).slice(0, 8);
+
+  // 옵션(사이즈/색상 등): <select>의 선택지, 옵션처럼 보이는 버튼/li 텍스트
+  const selectOptions = Array.from(document.querySelectorAll("select"))
+    .flatMap((select) =>
+      Array.from(select.options)
+        .map((o) => o.textContent.trim())
+        .filter((t) => t && !/선택|choose|select/i.test(t)),
+    );
+  const buttonOptions = Array.from(
+    document.querySelectorAll(
+      '[class*="option" i] li, [class*="option" i] button, [class*="option" i] label',
+    ),
+  )
+    .map((el) => el.textContent.trim())
+    .filter((t) => t && t.length < 40);
+  // 매장 픽업 등 오프라인 전용 옵션은 온라인 판매와 무관하므로 제외한다.
+  const excludePattern = /매장|픽업|pickup|store\s*pick|방문\s*수령/i;
+  const options = Array.from(new Set([...selectOptions, ...buttonOptions]))
+    .filter((t) => !excludePattern.test(t))
+    .slice(0, 30);
+
+  // 상세 설명: "detail"/"description" 등이 포함된 영역의 텍스트 일부
+  const detailEl = document.querySelector(
+    '[class*="detail" i], [class*="description" i], [id*="detail" i]',
+  );
+  const description = detailEl
+    ? detailEl.innerText.replace(/\s+/g, " ").trim().slice(0, 1000)
+    : null;
 
   return {
     type: "single",
@@ -66,6 +106,9 @@ function extractFromPage() {
       title,
       price: bodyMatch ? bodyMatch[0] : null,
       image,
+      images,
+      options,
+      description,
     },
   };
 }
@@ -100,7 +143,7 @@ btn.addEventListener("click", async () => {
     } else {
       statusEl.textContent =
         data.addedCount > 0
-          ? `✅ "${result.product.title}" 수집 완료`
+          ? `✅ "${result.product.title}" 수집 완료 (옵션 ${result.product.options.length}개, 이미지 ${result.product.images.length}장)`
           : `이미 수집된 상품입니다.`;
     }
   } catch (error) {
