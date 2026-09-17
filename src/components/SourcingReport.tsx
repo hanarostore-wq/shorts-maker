@@ -59,7 +59,12 @@ export function SourcingReport() {
                 className="flex min-w-0 flex-1 flex-col items-start text-left"
                 onClick={() => setExpandedId(isExpanded ? null : p.id)}
               >
-                <span className="truncate text-[11px] font-bold text-zinc-200">{p.title}</span>
+                <span className="flex items-center gap-1 truncate text-[11px] font-bold text-zinc-200">
+                  {p.title}
+                  <span className="shrink-0 rounded-none border border-zinc-700 px-1 text-[9px] font-bold text-emerald-400">
+                    v{p.revision ?? 1}
+                  </span>
+                </span>
                 <span className="text-[10px] text-zinc-500">
                   {p.scrapedAt} · 사진 {allImages.length}장 {isExpanded ? "▲" : "▼"}
                 </span>

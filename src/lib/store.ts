@@ -22,6 +22,7 @@ export interface SourcedProduct {
   options?: string[];
   description?: string | null;
   scrapedAt: string;
+  revision: number;
 }
 
 interface State {
@@ -192,7 +193,7 @@ export async function addSourcedProducts(
     options?: string[];
     description?: string | null;
   }>,
-): Promise<SourcedProduct[]> {
+): Promise<{ added: SourcedProduct[]; updatedCount: number }> {
   const state = await readState();
   const now = new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" });
 
@@ -212,6 +213,7 @@ export async function addSourcedProducts(
       existing.options = product.options;
       existing.description = product.description;
       existing.scrapedAt = now;
+      existing.revision = (existing.revision ?? 1) + 1;
       updatedCount++;
       continue;
     }
@@ -225,6 +227,7 @@ export async function addSourcedProducts(
       options: product.options,
       description: product.description,
       scrapedAt: now,
+      revision: 1,
     };
     state.sourcedProducts.unshift(entry);
     byUrl.set(product.url, entry);
@@ -260,7 +263,7 @@ export async function addSourcedProducts(
   }
 
   await writeState(state);
-  return added;
+  return { added, updatedCount };
 }
 
 export async function getSourcedProducts(): Promise<SourcedProduct[]> {

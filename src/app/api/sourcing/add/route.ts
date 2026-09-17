@@ -55,9 +55,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const added = await addSourcedProducts(valid);
+  const { added, updatedCount } = await addSourcedProducts(valid);
   return NextResponse.json(
-    { ok: true, addedCount: added.length, skippedCount: valid.length - added.length },
+    { ok: true, addedCount: added.length, updatedCount },
     { headers: CORS_HEADERS },
   );
 }

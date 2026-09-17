@@ -49,12 +49,12 @@ btn.addEventListener("click", async () => {
     if (!res.ok) {
       statusEl.textContent = `❌ 실패: ${data.error ?? "알 수 없는 오류"}`;
     } else if (data.mode === "list") {
-      statusEl.textContent = `✅ ${data.addedCount}건 수집 완료 (중복 ${data.skippedCount}건 제외)\n총 ${data.foundCount}개 발견`;
+      statusEl.textContent = `✅ 신규 ${data.addedCount}건, 갱신 ${data.updatedCount}건\n총 ${data.foundCount}개 발견`;
     } else {
       statusEl.textContent =
         data.addedCount > 0
-          ? `✅ "${data.product.title}" 수집 완료 (옵션 ${data.product.options.length}개, 이미지 ${data.product.images.length}장)`
-          : `이미 수집된 상품입니다.`;
+          ? `✅ "${data.product.title}" 신규 수집 (옵션 ${data.product.options.length}개, 이미지 ${data.product.images.length}장)`
+          : `✅ "${data.product.title}" 갱신 완료 (옵션 ${data.product.options.length}개, 이미지 ${data.product.images.length}장) · 관제실 팝업에서 버전 확인 가능`;
     }
   } catch (error) {
     statusEl.textContent = `❌ 오류: ${error instanceof Error ? error.message : error}`;

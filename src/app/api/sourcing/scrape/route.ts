@@ -31,27 +31,28 @@ export async function POST(request: Request) {
     const listProducts = parseListProducts(html, url);
 
     if (listProducts.length >= 2) {
-      const added = await addSourcedProducts(listProducts);
+      const { added, updatedCount } = await addSourcedProducts(listProducts);
       return NextResponse.json(
         {
           ok: true,
           mode: "list",
           foundCount: listProducts.length,
           addedCount: added.length,
-          skippedCount: listProducts.length - added.length,
+          updatedCount,
         },
         { headers: CORS_HEADERS },
       );
     }
 
     const product = parseSingleProduct(html, url);
-    const added = await addSourcedProducts([product]);
+    const { added, updatedCount } = await addSourcedProducts([product]);
     return NextResponse.json(
       {
         ok: true,
         mode: "single",
         product,
         addedCount: added.length,
+        updatedCount,
       },
       { headers: CORS_HEADERS },
     );
