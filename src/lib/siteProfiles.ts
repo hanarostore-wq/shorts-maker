@@ -1,0 +1,198 @@
+import * as cheerio from "cheerio";
+
+export interface ScrapedSingleProduct {
+  url: string;
+  title: string;
+  price: string | null;
+  image: string | null;
+  images: string[];
+  options: string[];
+  description: string | null;
+}
+
+export interface ScrapedListProduct {
+  url: string;
+  title: string;
+  price: string | null;
+  image: string | null;
+}
+
+const PRICE_REGEX = /\d{1,3}(?:,\d{3})+\s*원?/;
+const OFFLINE_OPTION_PATTERN = /매장|픽업|pickup|store\s*pick|방문\s*수령/i;
+
+function abs(url: string | undefined | null, base: string): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url, base).href;
+  } catch {
+    return null;
+  }
+}
+
+// 사이트마다 다른 HTML 구조에 맞춰 상세 페이지를 파싱하는 규칙.
+// 새 쇼핑몰을 추가할 땐 hostname 조건을 늘리고 이 패턴을 참고해서 작성한다.
+interface SiteProfile {
+  matches: (hostname: string) => boolean;
+  parseSingle: ($: cheerio.CheerioAPI, url: string) => ScrapedSingleProduct;
+}
+
+function parseAbcmartSingle($: cheerio.CheerioAPI, url: string): ScrapedSingleProduct {
+  const meta = (name: string) => $(`meta[property="${name}"]`).attr("content") ?? null;
+
+  const rawTitle = meta("og:title") ?? $("title").first().text().trim() ?? "이름 확인 불가";
+  // "나이키 코트 비전 로우 넥스트 네이처 NIKE COURT VISION LO NN - 나이키" → 끝의 " - 브랜드" 제거
+  const title = rawTitle.replace(/\s*-\s*[^-]{1,10}$/, "").trim() || rawTitle;
+
+  const images: string[] = [];
+  $(".detail-images img, .detail-thumbs-list img").each((_, el) => {
+    const src = $(el).attr("src") ?? $(el).attr("data-src");
+    const resolved = abs(src, url);
+    if (resolved) images.push(resolved);
+  });
+  const ogImage = abs(meta("og:image"), url);
+  const allImages = Array.from(new Set([ogImage, ...images].filter(Boolean))) as string[];
+
+  // .price-cost 안에 정가/할인가/할인액이 섞여 있어서, 음수(할인액)가 아닌 것 중
+  // 가장 작은 값(할인 후 최종가)을 최종 판매가로 판단한다.
+  const prices: number[] = [];
+  $(".price-cost").each((_, el) => {
+    const text = $(el).text().replace(/[^0-9-]/g, "");
+    if (!text || text.startsWith("-")) return;
+    const value = Number(text);
+    if (Number.isFinite(value) && value > 0) prices.push(value);
+  });
+  const price = prices.length > 0 ? `${Math.min(...prices).toLocaleString("ko-KR")}원` : null;
+
+  // 색상/사이즈별 옵션 목록 (jQuery UI가 만드는 실제 옵션 셀렉트)
+  const options: string[] = [];
+  $('select[id^="ui-id-"] option').each((_, el) => {
+    const text = $(el).text().trim();
+    if (text && text.includes(" - ") && !OFFLINE_OPTION_PATTERN.test(text)) {
+      options.push(text.split(" - ").pop()?.trim() ?? text);
+    }
+  });
+
+  const description =
+    $(".detail-box-left").text().replace(/\s+/g, " ").trim().slice(0, 1000) || null;
+
+  return {
+    url,
+    title,
+    price,
+    image: ogImage,
+    images: allImages,
+    options: Array.from(new Set(options)).slice(0, 30),
+    description,
+  };
+}
+
+const profiles: SiteProfile[] = [
+  {
+    matches: (hostname) => hostname.includes("a-rt.com"),
+    parseSingle: parseAbcmartSingle,
+  },
+];
+
+function genericParseSingle($: cheerio.CheerioAPI, url: string): ScrapedSingleProduct {
+  const meta = (name: string) =>
+    $(`meta[property="${name}"]`).attr("content") ?? $(`meta[name="${name}"]`).attr("content") ?? null;
+
+  const title = meta("og:title") ?? $("title").first().text().trim() ?? "이름 확인 불가";
+  const ogImage = meta("og:image");
+
+  const galleryImages: string[] = [];
+  $('[class*="thumb"] img, [class*="gallery"] img, [class*="detail"] img').each((_, el) => {
+    const src = $(el).attr("src") ?? $(el).attr("data-src");
+    const resolved = abs(src, url);
+    if (resolved) galleryImages.push(resolved);
+  });
+
+  const images = Array.from(new Set([abs(ogImage, url), ...galleryImages].filter(Boolean))) as string[];
+
+  const bodyText = $("body").text();
+  const priceMatch = bodyText.match(PRICE_REGEX);
+
+  const selectOptions: string[] = [];
+  $("select option").each((_, el) => {
+    const text = $(el).text().trim();
+    if (text && !/선택|choose|select/i.test(text)) selectOptions.push(text);
+  });
+
+  const buttonOptions: string[] = [];
+  $('[class*="option"] li, [class*="option"] button, [class*="option"] label').each((_, el) => {
+    const text = $(el).text().trim();
+    if (text && text.length < 40) buttonOptions.push(text);
+  });
+
+  const options = Array.from(new Set([...selectOptions, ...buttonOptions]))
+    .filter((t) => !OFFLINE_OPTION_PATTERN.test(t))
+    .slice(0, 30);
+
+  const detailEl = $('[class*="detail"], [class*="description"], [id*="detail"]').first();
+  const description = detailEl.length
+    ? detailEl.text().replace(/\s+/g, " ").trim().slice(0, 1000) || null
+    : null;
+
+  return {
+    url,
+    title: title.trim(),
+    price: priceMatch ? priceMatch[0] : null,
+    image: abs(ogImage, url),
+    images,
+    options,
+    description,
+  };
+}
+
+export function parseSingleProduct(html: string, url: string): ScrapedSingleProduct {
+  const $ = cheerio.load(html);
+  const hostname = new URL(url).hostname;
+  const profile = profiles.find((p) => p.matches(hostname));
+  return profile ? profile.parseSingle($, url) : genericParseSingle($, url);
+}
+
+// 목록 페이지: 이미지+가격이 함께 있는 링크를 상품 카드로 간주하고,
+// scrollY(현재까지 스크롤한 위치) 기준으로 그 안에 있는 것만 포함한다.
+// 서버는 좌표(rect) 계산을 할 수 없으므로, 클라이언트에서 이미
+// "스크롤한 범위까지"만 추린 HTML 조각을 넘겨받는 것을 전제로 하거나,
+// 여기서는 문서 순서상 상위 N개로 근사한다.
+export function parseListProducts(html: string, url: string, maxItems = 60): ScrapedListProduct[] {
+  const $ = cheerio.load(html);
+  const seen = new Set<string>();
+  const products: ScrapedListProduct[] = [];
+
+  $("a").each((_, el) => {
+    if (products.length >= maxItems) return;
+    const $a = $(el);
+    const href = $a.attr("href");
+    const resolvedUrl = abs(href, url);
+    if (!resolvedUrl || !/^https?:\/\//.test(resolvedUrl)) return;
+    if (seen.has(resolvedUrl)) return;
+
+    const img = $a.find("img").first();
+    if (img.length === 0) return;
+
+    const text = $a.text();
+    const priceMatch = text.match(PRICE_REGEX);
+    if (!priceMatch) return;
+
+    seen.add(resolvedUrl);
+    const imgSrc = img.attr("src") ?? img.attr("data-src");
+    const title =
+      img.attr("alt")?.trim() ||
+      text
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean)[0] ||
+      "이름 확인 불가";
+
+    products.push({
+      url: resolvedUrl,
+      title,
+      price: priceMatch[0],
+      image: abs(imgSrc, url),
+    });
+  });
+
+  return products;
+}
