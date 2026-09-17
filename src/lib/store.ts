@@ -196,11 +196,25 @@ export async function addSourcedProducts(
   const state = await readState();
   const now = new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" });
 
-  const existingUrls = new Set(state.sourcedProducts.map((p) => p.url));
+  const byUrl = new Map(state.sourcedProducts.map((p) => [p.url, p]));
   const added: SourcedProduct[] = [];
+  let updatedCount = 0;
 
   for (const product of products) {
-    if (existingUrls.has(product.url)) continue;
+    const existing = byUrl.get(product.url);
+    if (existing) {
+      // 같은 상품을 다시 소싱하면 최신 정보로 덮어쓴다 (사이트 규칙이
+      // 개선됐을 때 예전 부실한 데이터가 그대로 남아있지 않도록).
+      existing.title = product.title;
+      existing.price = product.price;
+      existing.image = product.image;
+      existing.images = product.images;
+      existing.options = product.options;
+      existing.description = product.description;
+      existing.scrapedAt = now;
+      updatedCount++;
+      continue;
+    }
     const entry: SourcedProduct = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       url: product.url,
@@ -213,18 +227,24 @@ export async function addSourcedProducts(
       scrapedAt: now,
     };
     state.sourcedProducts.unshift(entry);
-    existingUrls.add(product.url);
+    byUrl.set(product.url, entry);
     added.push(entry);
   }
 
   state.sourcedProducts = state.sourcedProducts.slice(0, 200);
 
-  if (added.length > 0) {
+  if (added.length > 0 || updatedCount > 0) {
     const department = state.departments.find((d) => d.id === "store");
     const agent = department?.agents.find((a) => a.id === "s1");
+    const summary = [
+      added.length > 0 ? `신규 ${added.length}건` : null,
+      updatedCount > 0 ? `갱신 ${updatedCount}건` : null,
+    ]
+      .filter(Boolean)
+      .join(", ");
     if (agent) {
       agent.status = "active";
-      agent.task = `신상품 후보 스캔 - 방금 ${added.length}건 수집`;
+      agent.task = `신상품 후보 스캔 - 방금 ${summary}`;
     }
     const logEntry: LogEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -232,7 +252,7 @@ export async function addSourcedProducts(
       departmentId: "store",
       agentId: "s1",
       agentName: agent?.name ?? "상품소싱이",
-      message: `확장프로그램으로 상품 ${added.length}건 수집`,
+      message: `확장프로그램으로 상품 ${summary}`,
     };
     state.log.unshift(logEntry);
     state.log = state.log.slice(0, 30);
