@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchNaverProducts, isNaverConfigured } from "@/lib/integrations/naver";
 import { fetchCoupangProducts, isCoupangConfigured } from "@/lib/integrations/coupang";
-import { reportCompletion } from "@/lib/store";
+import { reportCompletion, reportFailure } from "@/lib/store";
 
 export async function POST(request: Request) {
   const { platform } = await request.json();
@@ -22,10 +22,9 @@ export async function POST(request: Request) {
       });
       return NextResponse.json({ ok: true, count: products.length, products });
     } catch (error) {
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : "알 수 없는 오류" },
-        { status: 502 },
-      );
+      const message = error instanceof Error ? error.message : "알 수 없는 오류";
+      reportFailure({ departmentId: "store", agentId: "s1", message });
+      return NextResponse.json({ error: message }, { status: 502 });
     }
   }
 
@@ -45,10 +44,9 @@ export async function POST(request: Request) {
       });
       return NextResponse.json({ ok: true, count: products.length, products });
     } catch (error) {
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : "알 수 없는 오류" },
-        { status: 502 },
-      );
+      const message = error instanceof Error ? error.message : "알 수 없는 오류";
+      reportFailure({ departmentId: "store", agentId: "s3", message });
+      return NextResponse.json({ error: message }, { status: 502 });
     }
   }
 

@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { StatCounter } from "@/components/StatCounter";
 import { DepartmentFloor } from "@/components/DepartmentFloor";
 import { ProjectGrid } from "@/components/ProjectGrid";
 import { ActivityLog } from "@/components/ActivityLog";
-import { DemoTrigger } from "@/components/DemoTrigger";
-import { IntegrationPanel } from "@/components/IntegrationPanel";
 import type { Department, Project } from "@/lib/types";
 import type { LogEntry } from "@/lib/store";
 
@@ -66,11 +65,14 @@ export default function Home() {
           <p className="text-xs text-zinc-500">
             {state.departments.length}개 부서 · {allAgents.length}명 직원 실시간 운영 중
           </p>
-          <DemoTrigger departments={state.departments} />
+          <Link
+            href="/settings"
+            className="border-2 border-zinc-700 px-3 py-1.5 text-xs font-bold text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+          >
+            ⚙ 설정
+          </Link>
         </div>
       </header>
-
-      <IntegrationPanel />
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-bold text-zinc-300">진행 프로젝트</h2>
