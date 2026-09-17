@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "운영본부 | Agent HQ",
+  title: "운영본부 관제실",
   description: "수익화 자동화 관제 대시보드",
 };
 
