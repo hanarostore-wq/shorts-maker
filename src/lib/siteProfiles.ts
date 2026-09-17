@@ -43,18 +43,35 @@ function parseAbcmartSingle($: cheerio.CheerioAPI, url: string): ScrapedSinglePr
   // "나이키 코트 비전 로우 넥스트 네이처 NIKE COURT VISION LO NN - 나이키" → 끝의 " - 브랜드" 제거
   const title = rawTitle.replace(/\s*-\s*[^-]{1,10}$/, "").trim() || rawTitle;
 
-  // 썸네일 갤러리만 가져온다. detail-images를 같이 넣으면 같은 사진이
-  // 다른 경로(모바일/PC 버전 등)로 중복 수집되는 문제가 있어 제외.
+  // 썸네일 갤러리 + 확대 상세컷(밑창/박스 등)을 모두 가져온다.
+  // 같은 사진이 다른 경로(썸네일용 vs 확대용)로 두 번 잡히는 걸 막기 위해
+  // 파일 이름(경로 마지막 부분, 쿼리스트링 제외)을 기준으로 중복을 제거한다.
+  const imageBasename = (imgUrl: string) => {
+    try {
+      const { pathname } = new URL(imgUrl);
+      return pathname.split("/").pop() ?? imgUrl;
+    } catch {
+      return imgUrl;
+    }
+  };
+
   const images: string[] = [];
-  $(".product-detail-box .detail-thumbs-list img").each((_, el) => {
-    const src = $(el).attr("src") ?? $(el).attr("data-src");
-    const resolved = abs(src, url);
-    if (resolved) images.push(resolved);
-  });
+  const seenBasenames = new Set<string>();
+  $(".product-detail-box .detail-thumbs-list img, .product-detail-box .detail-images img").each(
+    (_, el) => {
+      const src = $(el).attr("src") ?? $(el).attr("data-src");
+      const resolved = abs(src, url);
+      if (!resolved) return;
+      const key = imageBasename(resolved);
+      if (seenBasenames.has(key)) return;
+      seenBasenames.add(key);
+      images.push(resolved);
+    },
+  );
   const ogImage = abs(meta("og:image"), url);
   const allImages =
     images.length > 0
-      ? Array.from(new Set(images))
+      ? images
       : (Array.from(new Set([ogImage].filter(Boolean))) as string[]);
 
   // .price-cost 안에 정가/할인가/할인액이 섞여 있어서, 음수(할인액)가 아닌 것 중
