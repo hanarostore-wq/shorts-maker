@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { fetchViaFixedIp } from "@/lib/proxyFetch";
 
 const BASE_URL = "https://api-gateway.coupang.com";
 
@@ -55,7 +56,7 @@ export async function fetchCoupangProducts(): Promise<CoupangProduct[]> {
   const path = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products`;
   const query = `vendorId=${vendorId}&nextToken=&maxPerPage=50`;
 
-  const res = await fetch(`${BASE_URL}${path}?${query}`, {
+  const res = await fetchViaFixedIp(`${BASE_URL}${path}?${query}`, {
     method: "GET",
     headers: {
       Authorization: buildAuthorizationHeader("GET", path, query),
