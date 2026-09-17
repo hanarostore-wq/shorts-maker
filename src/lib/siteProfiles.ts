@@ -43,17 +43,14 @@ function parseAbcmartSingle($: cheerio.CheerioAPI, url: string): ScrapedSinglePr
   // "나이키 코트 비전 로우 넥스트 네이처 NIKE COURT VISION LO NN - 나이키" → 끝의 " - 브랜드" 제거
   const title = rawTitle.replace(/\s*-\s*[^-]{1,10}$/, "").trim() || rawTitle;
 
-  // 상품 상세 영역(.product-detail-box) 안에 있는 썸네일 갤러리 +
-  // 확대 상세컷만 가져온다. 리뷰 사진, 추천상품 캐러셀 등 다른 영역의
-  // 이미지는 이 컨테이너 밖에 있어서 자동으로 제외된다.
+  // 썸네일 갤러리만 가져온다. detail-images를 같이 넣으면 같은 사진이
+  // 다른 경로(모바일/PC 버전 등)로 중복 수집되는 문제가 있어 제외.
   const images: string[] = [];
-  $(".product-detail-box .detail-thumbs-list img, .product-detail-box .detail-images img").each(
-    (_, el) => {
-      const src = $(el).attr("src") ?? $(el).attr("data-src");
-      const resolved = abs(src, url);
-      if (resolved) images.push(resolved);
-    },
-  );
+  $(".product-detail-box .detail-thumbs-list img").each((_, el) => {
+    const src = $(el).attr("src") ?? $(el).attr("data-src");
+    const resolved = abs(src, url);
+    if (resolved) images.push(resolved);
+  });
   const ogImage = abs(meta("og:image"), url);
   const allImages =
     images.length > 0
