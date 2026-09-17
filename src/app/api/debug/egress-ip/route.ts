@@ -13,8 +13,13 @@ export async function GET() {
       fixedIpProxyConfigured: isFixedIpProxyConfigured(),
     });
   } catch (error) {
+    const err = error as Error & { cause?: unknown };
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "조회 실패" },
+      {
+        error: err.message,
+        cause: err.cause ? String(err.cause) : undefined,
+        fixedIpProxyConfigured: isFixedIpProxyConfigured(),
+      },
       { status: 500 },
     );
   }
