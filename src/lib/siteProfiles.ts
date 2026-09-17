@@ -43,14 +43,22 @@ function parseAbcmartSingle($: cheerio.CheerioAPI, url: string): ScrapedSinglePr
   // "나이키 코트 비전 로우 넥스트 네이처 NIKE COURT VISION LO NN - 나이키" → 끝의 " - 브랜드" 제거
   const title = rawTitle.replace(/\s*-\s*[^-]{1,10}$/, "").trim() || rawTitle;
 
+  // 상품 상세 영역(.product-detail-box) 안에 있는 썸네일 갤러리 +
+  // 확대 상세컷만 가져온다. 리뷰 사진, 추천상품 캐러셀 등 다른 영역의
+  // 이미지는 이 컨테이너 밖에 있어서 자동으로 제외된다.
   const images: string[] = [];
-  $(".detail-images img, .detail-thumbs-list img").each((_, el) => {
-    const src = $(el).attr("src") ?? $(el).attr("data-src");
-    const resolved = abs(src, url);
-    if (resolved) images.push(resolved);
-  });
+  $(".product-detail-box .detail-thumbs-list img, .product-detail-box .detail-images img").each(
+    (_, el) => {
+      const src = $(el).attr("src") ?? $(el).attr("data-src");
+      const resolved = abs(src, url);
+      if (resolved) images.push(resolved);
+    },
+  );
   const ogImage = abs(meta("og:image"), url);
-  const allImages = Array.from(new Set([ogImage, ...images].filter(Boolean))) as string[];
+  const allImages =
+    images.length > 0
+      ? Array.from(new Set(images))
+      : (Array.from(new Set([ogImage].filter(Boolean))) as string[]);
 
   // .price-cost 안에 정가/할인가/할인액이 섞여 있어서, 음수(할인액)가 아닌 것 중
   // 가장 작은 값(할인 후 최종가)을 최종 판매가로 판단한다.
