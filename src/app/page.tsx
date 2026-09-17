@@ -64,6 +64,30 @@ export default function Home() {
     ? allAgents.find((a) => a.id === selectedAgent.id) ?? selectedAgent
     : null;
 
+  const handleReorder = (departmentId: string, agentIds: string[]) => {
+    // 화면엔 바로 반영하고, 저장은 뒤에서 조용히 진행한다.
+    setState((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        departments: prev.departments.map((department) => {
+          if (department.id !== departmentId) return department;
+          const byId = new Map(department.agents.map((a) => [a.id, a]));
+          const reordered = agentIds
+            .map((id) => byId.get(id))
+            .filter((a): a is Agent => Boolean(a));
+          return { ...department, agents: reordered };
+        }),
+      };
+    });
+
+    fetch("/api/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ departmentId, agentIds }),
+    }).catch(() => null);
+  };
+
   return (
     <div className="flex flex-1 flex-col gap-6 bg-black px-4 py-6 font-mono sm:px-8">
       <AutoSync />
@@ -103,6 +127,7 @@ export default function Home() {
               key={department.id}
               department={department}
               onAgentClick={setSelectedAgent}
+              onReorder={handleReorder}
             />
           ))}
         </div>

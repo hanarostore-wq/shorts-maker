@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { Agent, Department } from "@/lib/types";
 import { AgentSeat } from "./AgentSeat";
 import { getAgentPlatforms } from "@/lib/agentIntegrations";
@@ -5,12 +8,27 @@ import { getAgentPlatforms } from "@/lib/agentIntegrations";
 export function DepartmentFloor({
   department,
   onAgentClick,
+  onReorder,
 }: {
   department: Department;
   onAgentClick: (agent: Agent) => void;
+  onReorder: (departmentId: string, agentIds: string[]) => void;
 }) {
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const activeCount = department.agents.filter((a) => a.status === "active").length;
   const utilization = Math.round((activeCount / department.agents.length) * 100);
+
+  const handleDrop = (targetId: string) => {
+    if (!draggingId || draggingId === targetId) return;
+    const ids = department.agents.map((a) => a.id);
+    const from = ids.indexOf(draggingId);
+    const to = ids.indexOf(targetId);
+    if (from === -1 || to === -1) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, draggingId);
+    onReorder(department.id, ids);
+    setDraggingId(null);
+  };
 
   return (
     <div className="flex flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-3">
@@ -38,11 +56,20 @@ export function DepartmentFloor({
         {department.agents.map((agent) => {
           const clickable = getAgentPlatforms(agent.id).length > 0;
           return (
-            <AgentSeat
+            <div
               key={agent.id}
-              agent={agent}
-              onClick={clickable ? () => onAgentClick(agent) : undefined}
-            />
+              draggable
+              onDragStart={() => setDraggingId(agent.id)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => handleDrop(agent.id)}
+              onDragEnd={() => setDraggingId(null)}
+              className={`cursor-grab select-none ${draggingId === agent.id ? "opacity-40" : ""}`}
+            >
+              <AgentSeat
+                agent={agent}
+                onClick={clickable ? () => onAgentClick(agent) : undefined}
+              />
+            </div>
           );
         })}
       </div>
