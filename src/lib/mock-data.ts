@@ -2,6 +2,17 @@ import type { Department, Project } from "./types";
 
 export const departments: Department[] = [
   {
+    id: "ops",
+    name: "운영부서",
+    icon: "⚙️",
+    agents: [
+      { id: "o4", name: "Vercel파견직원", task: "Vercel 배포/빌드 전반 관리 - 아직 연동 안 됨", status: "offline" },
+      { id: "o1", name: "정산담당", task: "채널별 수익 집계 - 아직 연동 안 됨", status: "offline" },
+      { id: "o2", name: "보고서작성원", task: "일일 리포트 생성 - 아직 연동 안 됨", status: "offline" },
+      { id: "o3", name: "이상감지원", task: "이상 감지/알림 - 아직 연동 안 됨", status: "offline" },
+    ],
+  },
+  {
     id: "store",
     name: "스토어부서",
     icon: "🛒",
@@ -36,22 +47,12 @@ export const departments: Department[] = [
       { id: "b4", name: "발행담당", task: "발행/스케줄링 - 아직 연동 안 됨", status: "offline" },
     ],
   },
-  {
-    id: "ops",
-    name: "운영부서",
-    icon: "⚙️",
-    agents: [
-      { id: "o1", name: "정산담당", task: "채널별 수익 집계 - 아직 연동 안 됨", status: "offline" },
-      { id: "o2", name: "보고서작성원", task: "일일 리포트 생성 - 아직 연동 안 됨", status: "offline" },
-      { id: "o3", name: "이상감지원", task: "이상 감지/알림 - 아직 연동 안 됨", status: "offline" },
-    ],
-  },
 ];
 
 export const projects: Project[] = [
+  { id: "p0", name: "배포 관제", departmentId: "ops", agentCount: 1, leadAgent: "Vercel파견직원" },
   { id: "p1", name: "스마트스토어 자동화", departmentId: "store", agentCount: 5, leadAgent: "상품소싱이" },
   { id: "p2", name: "쿠팡 자동화", departmentId: "store", agentCount: 4, leadAgent: "가격감시자" },
   { id: "p3", name: "쇼츠 팩토리", departmentId: "shorts", agentCount: 6, leadAgent: "영상감독" },
   { id: "p4", name: "블로그 팩토리", departmentId: "blog", agentCount: 4, leadAgent: "글쓰기작가" },
-  { id: "p5", name: "수익 관제 센터", departmentId: "ops", agentCount: 3, leadAgent: "정산담당" },
 ];

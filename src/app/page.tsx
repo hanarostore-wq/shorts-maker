@@ -57,7 +57,7 @@ export default function Home() {
             <StatCounter label="업무중" value={counts.active} tone="green" />
             <StatCounter label="대기" value={counts.standby} tone="blue" />
             <StatCounter label="휴면" value={counts.idle} tone="gray" />
-            <StatCounter label="오프라인" value={counts.offline} tone="red" />
+            <StatCounter label="퇴근" value={counts.offline} tone="red" />
             <StatCounter label="오늘 완료" value={state.completedToday} tone="green" />
           </div>
         </div>
