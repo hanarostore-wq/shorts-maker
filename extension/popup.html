@@ -30,6 +30,12 @@
       opacity: 0.5;
       cursor: not-allowed;
     }
+    #debugBtn {
+      margin-top: 8px;
+      border-color: #52525b;
+      background: transparent;
+      color: #a1a1aa;
+    }
     #status {
       margin-top: 10px;
       font-size: 12px;
@@ -42,6 +48,7 @@
 <body>
   <h1>🛒 운영본부 · 상품 소싱</h1>
   <button id="scrapeBtn">지금 화면 소싱하기</button>
+  <button id="debugBtn">🔧 페이지 구조 복사 (개발용)</button>
   <div id="status"></div>
   <script src="popup.js"></script>
 </body>
