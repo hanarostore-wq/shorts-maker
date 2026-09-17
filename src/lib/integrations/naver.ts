@@ -53,13 +53,15 @@ async function getAccessToken(): Promise<string> {
 export async function fetchNaverProducts(): Promise<NaverProduct[]> {
   const accessToken = await getAccessToken();
 
-  const res = await fetch(
-    `${BASE_URL}/v1/products/search?page=1&size=50`,
-    {
-      method: "GET",
-      headers: { Authorization: `Bearer ${accessToken}` },
+  // 상품 검색은 GET이 아니라 POST + JSON 바디로 조건을 전달해야 한다.
+  const res = await fetch(`${BASE_URL}/v1/products/search`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify({ page: 1, size: 50 }),
+  });
 
   if (!res.ok) {
     const text = await res.text();
