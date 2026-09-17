@@ -18,13 +18,13 @@ export async function POST(request: Request) {
       const products = await fetchNaverProducts();
       await reportCompletion({
         departmentId: "store",
-        agentId: "s1",
+        agentId: "s6",
         message: `스마트스토어 상품 ${products.length}건 조회 완료`,
       });
       return NextResponse.json({ ok: true, count: products.length, products });
     } catch (error) {
       const message = error instanceof Error ? error.message : "알 수 없는 오류";
-      await reportFailure({ departmentId: "store", agentId: "s1", message });
+      await reportFailure({ departmentId: "store", agentId: "s6", message });
       return NextResponse.json({ error: message }, { status: 502 });
     }
   }
@@ -40,13 +40,13 @@ export async function POST(request: Request) {
       const products = await fetchCoupangProducts();
       await reportCompletion({
         departmentId: "store",
-        agentId: "s3",
+        agentId: "s6",
         message: `쿠팡 상품 ${products.length}건 조회 완료`,
       });
       return NextResponse.json({ ok: true, count: products.length, products });
     } catch (error) {
       const message = error instanceof Error ? error.message : "알 수 없는 오류";
-      await reportFailure({ departmentId: "store", agentId: "s3", message });
+      await reportFailure({ departmentId: "store", agentId: "s6", message });
       return NextResponse.json({ error: message }, { status: 502 });
     }
   }
