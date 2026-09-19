@@ -111,8 +111,12 @@ function parseAbcmartSingle($: cheerio.CheerioAPI, url: string): ScrapedSinglePr
 
   // .price-cost 안에 정가/할인가/할인액이 섞여 있어서, 음수(할인액)가 아닌 것 중
   // 가장 작은 값(할인 후 최종가)을 최종 판매가로 판단한다.
+  // 페이지 전체에서 찾으면 관련상품 목록, 배송비 안내 등 엉뚱한 곳의 작은
+  // 금액(예: 배송비 2,000원)을 상품 가격으로 잘못 집을 수 있으므로, 반드시
+  // 상단 상품 정보 영역(.detail-box-right) 안에서만 찾는다.
+  const priceScope = $(".detail-box-right").length > 0 ? $(".detail-box-right") : $("body");
   const prices: number[] = [];
-  $(".price-cost").each((_, el) => {
+  priceScope.find(".price-cost").each((_, el) => {
     const text = $(el).text().replace(/[^0-9-]/g, "");
     if (!text || text.startsWith("-")) return;
     const value = Number(text);
