@@ -70,9 +70,21 @@ function parseAbcmartSingle($: cheerio.CheerioAPI, url: string): ScrapedSinglePr
   $(".product-detail-box .detail-thumbs-list img, .product-detail-box .detail-images img").each(
     (_, el) => pushImage($(el).attr("src") ?? $(el).attr("data-src")),
   );
-  // 2) 진짜 "상세페이지" — 세로로 긴 배너 이미지 여러 장 (에디터로 작성된 상세설명)
-  $("#product-detail-description-wrapper img").each((_, el) =>
-    pushImage($(el).attr("src") ?? $(el).attr("data-src")),
+  // 2) 진짜 "상세페이지" — 세로로 긴 배너 이미지 여러 장 (에디터로 작성된 상세설명).
+  // 정확한 위치(#product-detail-description-wrapper)를 우선 찾되, 사이트 쪽에서
+  // 클래스/id를 바꾸거나 다른 상품 템플릿을 쓰는 경우를 대비해 "detail"/"desc"/
+  // "editor"가 이름에 들어간 영역 안의 이미지도 폭넓게 함께 잡는다.
+  const detailAreaSelectors = [
+    "#product-detail-description-wrapper img",
+    ".product-detail-box [class*='editor'] img",
+    ".product-detail-box [class*='detail-desc'] img",
+    ".product-detail-box [id*='detail'] img",
+    ".product-detail-box [class*='detail-cont'] img",
+  ].join(", ");
+  $(detailAreaSelectors).each((_, el) =>
+    pushImage(
+      $(el).attr("src") ?? $(el).attr("data-src") ?? $(el).attr("data-original"),
+    ),
   );
 
   const ogImage = abs(meta("og:image"), url);

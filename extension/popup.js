@@ -3,24 +3,38 @@ const statusEl = document.getElementById("status");
 const btn = document.getElementById("scrapeBtn");
 const debugBtn = document.getElementById("debugBtn");
 
-// 확장프로그램은 지금 보고 있는 페이지의 "지금까지 스크롤한 범위"의 HTML만
-// 잘라서 서버로 보내고, 실제 사이트별 분석(어떤 게 이미지/옵션/가격인지)은
+// 상세페이지 사진처럼 스크롤해야 불러와지는(lazy-load) 이미지를 놓치지 않도록,
+// 캡쳐 전에 페이지 끝까지 자동으로 스크롤하면서 사진이 실제로 다 불러와질
+// 시간을 준 다음, 원래 스크롤 위치로 되돌아온다.
+async function autoScrollToLoadImages() {
+  const originalY = window.scrollY;
+  const step = Math.max(window.innerHeight * 0.8, 400);
+  let last = -1;
+
+  while (true) {
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    await new Promise((r) => setTimeout(r, 350));
+    const height = document.documentElement.scrollHeight;
+    if (height === last) break;
+    last = height;
+    window.scrollBy(0, step);
+    await new Promise((r) => setTimeout(r, 150));
+  }
+
+  // 느리게 불러와지는 이미지를 위해 한 번 더 대기
+  await new Promise((r) => setTimeout(r, 500));
+  window.scrollTo(0, originalY);
+  await new Promise((r) => setTimeout(r, 150));
+}
+
+// 확장프로그램은 지금 보고 있는 페이지의 전체 HTML(끝까지 스크롤해서 다
+// 불러온 뒤)을 서버로 보내고, 실제 사이트별 분석(어떤 게 이미지/옵션/가격인지)은
 // 서버에서 처리한다. 이렇게 하면 사이트별 규칙을 바꿀 때 확장프로그램을
 // 다시 설치할 필요가 없다.
-function capturePage() {
-  const scrolledBottom = window.scrollY + window.innerHeight;
+async function capturePage() {
+  await autoScrollToLoadImages();
 
   const clone = document.documentElement.cloneNode(true);
-  const original = Array.from(document.querySelectorAll("body *"));
-  const clones = Array.from(clone.querySelectorAll("body *"));
-
-  for (let i = 0; i < original.length; i++) {
-    const rect = original[i].getBoundingClientRect();
-    const top = rect.top + window.scrollY;
-    if (top > scrolledBottom && clones[i]) {
-      clones[i].remove();
-    }
-  }
 
   return {
     url: location.href,
@@ -30,7 +44,7 @@ function capturePage() {
 
 btn.addEventListener("click", async () => {
   btn.disabled = true;
-  statusEl.textContent = "수집 중...";
+  statusEl.textContent = "페이지 스크롤하며 사진 불러오는 중...";
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -38,6 +52,7 @@ btn.addEventListener("click", async () => {
       target: { tabId: tab.id },
       func: capturePage,
     });
+    statusEl.textContent = "수집 중...";
 
     const res = await fetch(`${API_BASE}/api/sourcing/scrape`, {
       method: "POST",
