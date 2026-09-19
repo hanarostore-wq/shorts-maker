@@ -3,20 +3,29 @@ const statusEl = document.getElementById("status");
 const btn = document.getElementById("scrapeBtn");
 const debugBtn = document.getElementById("debugBtn");
 
-// 상세페이지 사진처럼 스크롤해야 불러와지는(lazy-load) 이미지를 놓치지 않도록,
-// 캡쳐 전에 페이지 끝까지 자동으로 스크롤하면서 사진이 실제로 다 불러와질
-// 시간을 준 다음, 원래 스크롤 위치로 되돌아온다.
-async function autoScrollToLoadImages() {
+// 확장프로그램은 지금 보고 있는 페이지의 전체 HTML(끝까지 스크롤해서 다
+// 불러온 뒤)을 서버로 보내고, 실제 사이트별 분석(어떤 게 이미지/옵션/가격인지)은
+// 서버에서 처리한다. 이렇게 하면 사이트별 규칙을 바꿀 때 확장프로그램을
+// 다시 설치할 필요가 없다.
+//
+// 주의: chrome.scripting.executeScript는 여기 지정한 함수 "하나만" 페이지
+// 안으로 복사해서 실행한다. 이 파일 안의 다른 함수를 호출하면 페이지 쪽에는
+// 그 함수가 없어서 오류가 난다 (실제로 한 번 이 문제로 실패했었음). 그래서
+// 스크롤 로직도 전부 이 함수 안에 그대로 넣어둔다.
+async function capturePage() {
+  // 상세페이지 사진처럼 스크롤해야 불러와지는(lazy-load) 이미지를 놓치지
+  // 않도록, 캡쳐 전에 페이지 끝까지 자동으로 스크롤하면서 사진이 실제로 다
+  // 불러와질 시간을 준 다음, 원래 스크롤 위치로 되돌아온다.
   const originalY = window.scrollY;
   const step = Math.max(window.innerHeight * 0.8, 400);
-  let last = -1;
+  let lastHeight = -1;
 
   while (true) {
     window.scrollTo(0, document.documentElement.scrollHeight);
     await new Promise((r) => setTimeout(r, 350));
     const height = document.documentElement.scrollHeight;
-    if (height === last) break;
-    last = height;
+    if (height === lastHeight) break;
+    lastHeight = height;
     window.scrollBy(0, step);
     await new Promise((r) => setTimeout(r, 150));
   }
@@ -25,14 +34,6 @@ async function autoScrollToLoadImages() {
   await new Promise((r) => setTimeout(r, 500));
   window.scrollTo(0, originalY);
   await new Promise((r) => setTimeout(r, 150));
-}
-
-// 확장프로그램은 지금 보고 있는 페이지의 전체 HTML(끝까지 스크롤해서 다
-// 불러온 뒤)을 서버로 보내고, 실제 사이트별 분석(어떤 게 이미지/옵션/가격인지)은
-// 서버에서 처리한다. 이렇게 하면 사이트별 규칙을 바꿀 때 확장프로그램을
-// 다시 설치할 필요가 없다.
-async function capturePage() {
-  await autoScrollToLoadImages();
 
   const clone = document.documentElement.cloneNode(true);
 
@@ -64,6 +65,11 @@ btn.addEventListener("click", async () => {
       target: { tabId: tab.id },
       func: capturePage,
     });
+
+    if (!result || !result.url || !result.html) {
+      statusEl.textContent = "❌ 페이지에서 내용을 가져오지 못했어요. 페이지를 새로고침한 뒤 다시 시도해주세요.";
+      return;
+    }
     statusEl.textContent = "수집 중...";
 
     const res = await fetch(`${API_BASE}/api/sourcing/scrape`, {
