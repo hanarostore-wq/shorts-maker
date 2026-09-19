@@ -169,6 +169,28 @@ function analyzePageStructure() {
       textLength: el.textContent.trim().length,
     }));
 
+  // 상세페이지 배너는 보통 세로로 아주 긴 이미지다. 클래스/id 이름과
+  // 무관하게, 페이지 안의 모든 이미지 중 "세로로 긴" 것만 따로 찾아서
+  // 실제로 어디(어떤 태그 경로)에 있는지 직접 보여준다.
+  const tallImages = Array.from(document.querySelectorAll("img"))
+    .map((img) => {
+      const rect = img.getBoundingClientRect();
+      const h = img.naturalHeight || rect.height || Number(img.getAttribute("height")) || 0;
+      const w = img.naturalWidth || rect.width || Number(img.getAttribute("width")) || 1;
+      return { img, h, w };
+    })
+    .filter(({ h, w }) => h > 800 || h / w > 2)
+    .slice(0, 10)
+    .map(({ img, h, w }) => {
+      const path = [];
+      let el = img.parentElement;
+      for (let i = 0; i < 5 && el; i++) {
+        path.push(guessSelector(el));
+        el = el.parentElement;
+      }
+      return { src: img.src, height: Math.round(h), width: Math.round(w), parentPath: path };
+    });
+
   return {
     hostname: location.hostname,
     url: location.href,
@@ -179,6 +201,7 @@ function analyzePageStructure() {
     selects,
     optionLike,
     detailLike,
+    tallImages,
   };
 }
 
