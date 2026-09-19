@@ -36,9 +36,21 @@ async function capturePage() {
 
   const clone = document.documentElement.cloneNode(true);
 
+  // 스크립트/스타일/아이콘 등 상품 정보 분석에 필요 없는 부분은 빼서
+  // 용량을 줄인다 (통째로 다 보내면 서버가 처리하기엔 너무 커질 수 있다).
+  clone
+    .querySelectorAll("script, style, noscript, link[rel='stylesheet'], svg")
+    .forEach((el) => el.remove());
+
+  let html = clone.outerHTML;
+  const MAX_LENGTH = 1_500_000;
+  if (html.length > MAX_LENGTH) {
+    html = html.slice(0, MAX_LENGTH);
+  }
+
   return {
     url: location.href,
-    html: clone.outerHTML,
+    html,
   };
 }
 
@@ -59,7 +71,15 @@ btn.addEventListener("click", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(result),
     });
-    const data = await res.json();
+
+    const rawText = await res.text();
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      statusEl.textContent = `❌ 서버 응답 오류 (상태 ${res.status})\n${rawText.slice(0, 150) || "빈 응답 - 페이지 용량이 너무 크거나 서버가 잠시 불안정한 것일 수 있어요. 다시 시도해주세요."}`;
+      return;
+    }
 
     if (!res.ok) {
       statusEl.textContent = `❌ 실패: ${data.error ?? "알 수 없는 오류"}`;
