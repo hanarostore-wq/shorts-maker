@@ -43,7 +43,7 @@ async function capturePage() {
     .forEach((el) => el.remove());
 
   let html = clone.outerHTML;
-  const MAX_LENGTH = 1_500_000;
+  const MAX_LENGTH = 600_000;
   if (html.length > MAX_LENGTH) {
     html = html.slice(0, MAX_LENGTH);
   }
