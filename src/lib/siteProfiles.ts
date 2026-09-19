@@ -148,21 +148,49 @@ function parseAbcmartSingle($: cheerio.CheerioAPI, url: string): ScrapedSinglePr
     },
   );
   // 2) 진짜 "상세페이지" — 세로로 긴 배너 이미지 여러 장 (에디터로 작성된 상세설명).
-  // 정확한 위치(#product-detail-description-wrapper)를 우선 찾되, 사이트 쪽에서
-  // 클래스/id를 바꾸거나 다른 상품 템플릿을 쓰는 경우를 대비해 "detail"/"desc"/
-  // "editor"가 이름에 들어간 영역 안의 이미지도 폭넓게 함께 잡는다.
+  // .product-detail-box 안으로만 한정하면, 사이트가 그 바깥(별도 탭/섹션)에
+  // 상세페이지를 렌더링하는 경우 아예 못 찾으므로, 페이지 전체에서 "상품
+  // 이미지 영역처럼 생긴 곳"을 폭넓게 찾되 무관한 영역(추천상품 등)은 뺀다.
   const detailAreaSelectors = [
     "#product-detail-description-wrapper img",
-    ".product-detail-box [class*='editor'] img",
-    ".product-detail-box [class*='detail-desc'] img",
-    ".product-detail-box [id*='detail'] img",
-    ".product-detail-box [class*='detail-cont'] img",
+    "[class*='editor' i] img",
+    "[class*='detail-desc' i] img",
+    "[class*='detail-cont' i] img",
+    "[class*='detail-info' i] img",
+    "[id*='detail' i] img",
+    "[class*='prd-detail' i] img",
+    "[class*='goods-detail' i] img",
   ].join(", ");
-  $(detailAreaSelectors).each((_, el) =>
-    pushImage(
-      $(el).attr("src") ?? $(el).attr("data-src") ?? $(el).attr("data-original"),
-    ),
-  );
+  $(detailAreaSelectors).each((_, el) => {
+    if (isInIrrelevantArea($, el)) return;
+    const $el = $(el);
+    // 실제 화면 크기(width/height 속성)가 있는데 너무 작으면 아이콘류일
+    // 가능성이 높아서 제외한다. 크기 정보가 아예 없으면(대부분의 lazy-load
+    // 이미지가 그렇다) 일단 후보로 포함한다.
+    const w = Number($el.attr("width") ?? 0);
+    const h = Number($el.attr("height") ?? 0);
+    if (w > 0 && h > 0 && Math.max(w, h) < 100) return;
+
+    let candidate =
+      $el.attr("data-original") ??
+      $el.attr("data-src") ??
+      $el.attr("data-lazy-src") ??
+      $el.attr("data-zoom-image") ??
+      $el.attr("src");
+
+    // srcset이 있으면 그중 가장 큰(고화질) 버전을 우선 사용한다.
+    const srcset = $el.attr("srcset") ?? $el.attr("data-srcset");
+    if (srcset) {
+      const largest = srcset
+        .split(",")
+        .map((part) => part.trim().split(/\s+/))
+        .sort((a, b) => parseFloat(b[1] ?? "1") - parseFloat(a[1] ?? "1"))[0];
+      if (largest?.[0]) candidate = largest[0];
+    }
+
+    if (candidate && /logo|icon|sprite|spinner|loading|placeholder/i.test(candidate)) return;
+    pushImage(candidate);
+  });
 
   const ogImage = abs(meta("og:image"), url);
   const allImages =
