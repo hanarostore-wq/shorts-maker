@@ -16,12 +16,19 @@ async function capturePage() {
   // 일부 쇼핑몰은 "상세정보/상품정보" 같은 탭을 실제로 눌러야만 그 안의
   // 사진이 화면 코드(DOM)에 채워지고, 누르기 전에는 아예 존재하지 않는다.
   // 그런 탭처럼 보이는 걸 찾아서 미리 자동으로 눌러본다 (실패해도 무시).
+  //
+  // 주의: <a href="...">를 잘못 클릭하면 브라우저가 그 링크로 실제 이동하거나
+  // #앵커 위치로 화면이 확 튀어버릴 수 있다(실제로 한 번 이 문제가 있었음).
+  // 그래서 실제 이동이 없는 button/li/role=tab류만 대상으로 하고, 메뉴/헤더/
+  // 푸터 영역과 진짜 링크(<a>)는 절대 건드리지 않는다.
   try {
     const tabLikeTexts = ["상세정보", "상세보기", "상품정보", "상품상세", "상세설명", "제품정보"];
     const candidates = Array.from(
-      document.querySelectorAll('a, button, li, [role="tab"], [class*="tab" i]'),
+      document.querySelectorAll('button, li, [role="tab"], [class*="tab" i]:not(a)'),
     );
     for (const el of candidates) {
+      if (el.closest("header, nav, footer, [class*='menu' i], [class*='gnb' i]")) continue;
+      if (el.tagName === "A" || el.querySelector("a[href]")) continue;
       const text = (el.textContent || "").trim();
       if (tabLikeTexts.some((t) => text === t || text.startsWith(t))) {
         el.click();
@@ -31,6 +38,11 @@ async function capturePage() {
   } catch {
     // 탭 클릭이 실패해도 캡쳐 자체는 계속 진행한다.
   }
+
+  // 탭 클릭 중 혹시라도 스크롤 위치가 바뀌었을 수 있으니, 아래 자동 스크롤을
+  // 시작하기 전에 항상 맨 위로 되돌려 일관된 상태에서 시작한다.
+  window.scrollTo(0, 0);
+  await new Promise((r) => setTimeout(r, 150));
 
   // 상세페이지 사진처럼 스크롤해야 불러와지는(lazy-load) 이미지를 놓치지
   // 않도록, 캡쳐 전에 페이지 끝까지 자동으로 스크롤하면서 사진이 실제로 다
