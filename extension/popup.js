@@ -13,6 +13,25 @@ const debugBtn = document.getElementById("debugBtn");
 // 그 함수가 없어서 오류가 난다 (실제로 한 번 이 문제로 실패했었음). 그래서
 // 스크롤 로직도 전부 이 함수 안에 그대로 넣어둔다.
 async function capturePage() {
+  // 일부 쇼핑몰은 "상세정보/상품정보" 같은 탭을 실제로 눌러야만 그 안의
+  // 사진이 화면 코드(DOM)에 채워지고, 누르기 전에는 아예 존재하지 않는다.
+  // 그런 탭처럼 보이는 걸 찾아서 미리 자동으로 눌러본다 (실패해도 무시).
+  try {
+    const tabLikeTexts = ["상세정보", "상세보기", "상품정보", "상품상세", "상세설명", "제품정보"];
+    const candidates = Array.from(
+      document.querySelectorAll('a, button, li, [role="tab"], [class*="tab" i]'),
+    );
+    for (const el of candidates) {
+      const text = (el.textContent || "").trim();
+      if (tabLikeTexts.some((t) => text === t || text.startsWith(t))) {
+        el.click();
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+  } catch {
+    // 탭 클릭이 실패해도 캡쳐 자체는 계속 진행한다.
+  }
+
   // 상세페이지 사진처럼 스크롤해야 불러와지는(lazy-load) 이미지를 놓치지
   // 않도록, 캡쳐 전에 페이지 끝까지 자동으로 스크롤하면서 사진이 실제로 다
   // 불러와질 시간을 준 다음, 원래 스크롤 위치로 되돌아온다.
