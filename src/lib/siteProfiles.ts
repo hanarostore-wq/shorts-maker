@@ -29,6 +29,70 @@ function abs(url: string | undefined | null, base: string): string | null {
   }
 }
 
+// 추천상품/최근 본 상품/리뷰/메뉴/푸터 영역은 항상 지금 보고 있는 상품과
+// 무관한 다른 상품 정보(엉뚱한 가격·사진)를 담고 있을 수 있으므로,
+// 가격·사진·옵션을 찾을 때 이 영역 안에 있는 요소는 후보에서 제외한다.
+const IRRELEVANT_AREA_PATTERN = /recommend|related|recent|review|banner/i;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isInIrrelevantArea($: cheerio.CheerioAPI, el: any): boolean {
+  const $el = $(el);
+  if ($el.closest("header, nav, footer").length > 0) return true;
+  if ($el.closest('[class*="recommend" i], [id*="recommend" i]').length > 0) return true;
+  if ($el.closest('[class*="related" i], [id*="related" i]').length > 0) return true;
+  if ($el.closest('[class*="recent" i], [id*="recent" i]').length > 0) return true;
+  if ($el.closest('[class*="review" i], [id*="review" i]').length > 0) return true;
+  return IRRELEVANT_AREA_PATTERN.test($el.attr("class") ?? "") ||
+    IRRELEVANT_AREA_PATTERN.test($el.attr("id") ?? "");
+}
+
+// 쇼핑몰이 검색엔진 노출을 위해 넣어두는 표준 상품 정보(JSON-LD Product).
+// 페이지 레이아웃과 무관하게 항상 정확한 가격/이름/사진을 담고 있는 경우가
+// 많아서, 있으면 이걸 최우선으로 쓰고 없을 때만 화면 구조를 직접 분석한다.
+interface StructuredProduct {
+  name: string | null;
+  image: string | null;
+  price: number | null;
+}
+function extractStructuredProduct($: cheerio.CheerioAPI, base: string): StructuredProduct | null {
+  let result: StructuredProduct | null = null;
+
+  const visit = (node: unknown) => {
+    if (result || !node || typeof node !== "object") return;
+    const obj = node as Record<string, unknown>;
+    const type = obj["@type"];
+    const types = Array.isArray(type) ? type : [type];
+    if (types.includes("Product")) {
+      const offers = Array.isArray(obj.offers) ? obj.offers[0] : obj.offers;
+      const offerObj = (offers ?? {}) as Record<string, unknown>;
+      const rawPrice = offerObj.price ?? offerObj.priceSpecification;
+      const priceValue =
+        typeof rawPrice === "object" && rawPrice !== null
+          ? Number((rawPrice as Record<string, unknown>).price)
+          : Number(rawPrice);
+      const rawImage = Array.isArray(obj.image) ? obj.image[0] : obj.image;
+      result = {
+        name: typeof obj.name === "string" ? obj.name : null,
+        image: abs(typeof rawImage === "string" ? rawImage : null, base),
+        price: Number.isFinite(priceValue) && priceValue > 0 ? priceValue : null,
+      };
+      return;
+    }
+    if (Array.isArray(obj["@graph"])) visit(obj["@graph"]);
+    if (Array.isArray(node)) (node as unknown[]).forEach(visit);
+  };
+
+  $('script[type="application/ld+json"]').each((_, el) => {
+    if (result) return;
+    try {
+      visit(JSON.parse($(el).text()));
+    } catch {
+      // 형식이 깨진 JSON-LD는 무시하고 화면 구조 분석으로 넘어간다.
+    }
+  });
+
+  return result;
+}
+
 // 사이트마다 다른 HTML 구조에 맞춰 상세 페이지를 파싱하는 규칙.
 // 새 쇼핑몰을 추가할 땐 hostname 조건을 늘리고 이 패턴을 참고해서 작성한다.
 interface SiteProfile {
@@ -39,7 +103,13 @@ interface SiteProfile {
 function parseAbcmartSingle($: cheerio.CheerioAPI, url: string): ScrapedSingleProduct {
   const meta = (name: string) => $(`meta[property="${name}"]`).attr("content") ?? null;
 
-  const rawTitle = meta("og:title") ?? $("title").first().text().trim() ?? "이름 확인 불가";
+  // 쇼핑몰이 검색엔진용으로 넣어둔 표준 상품 정보(JSON-LD)가 있으면
+  // 화면 구조 분석보다 이걸 우선 신뢰한다 — 레이아웃이 바뀌어도 안 깨지고,
+  // 엉뚱한 영역의 가격을 잘못 집을 위험도 없다.
+  const structured = extractStructuredProduct($, url);
+
+  const rawTitle =
+    structured?.name ?? meta("og:title") ?? $("title").first().text().trim() ?? "이름 확인 불가";
   // "나이키 코트 비전 로우 넥스트 네이처 NIKE COURT VISION LO NN - 나이키" → 끝의 " - 브랜드" 제거
   const title = rawTitle.replace(/\s*-\s*[^-]{1,10}$/, "").trim() || rawTitle;
 
@@ -66,9 +136,16 @@ function parseAbcmartSingle($: cheerio.CheerioAPI, url: string): ScrapedSinglePr
     images.push(resolved);
   };
 
-  // 1) 썸네일 갤러리 + 확대 상세컷(밑창/박스 등)
+  // 구조화 데이터의 대표 이미지가 있으면 가장 먼저 넣어 항상 포함되게 한다.
+  if (structured?.image) pushImage(structured.image);
+
+  // 1) 썸네일 갤러리 + 확대 상세컷(밑창/박스 등) — 추천상품/최근 본 상품
+  // 영역에 같은 구조의 썸네일이 있을 수 있으므로 그런 영역은 제외한다.
   $(".product-detail-box .detail-thumbs-list img, .product-detail-box .detail-images img").each(
-    (_, el) => pushImage($(el).attr("src") ?? $(el).attr("data-src")),
+    (_, el) => {
+      if (isInIrrelevantArea($, el)) return;
+      pushImage($(el).attr("src") ?? $(el).attr("data-src"));
+    },
   );
   // 2) 진짜 "상세페이지" — 세로로 긴 배너 이미지 여러 장 (에디터로 작성된 상세설명).
   // 정확한 위치(#product-detail-description-wrapper)를 우선 찾되, 사이트 쪽에서
@@ -113,16 +190,21 @@ function parseAbcmartSingle($: cheerio.CheerioAPI, url: string): ScrapedSinglePr
   // 가장 작은 값(할인 후 최종가)을 최종 판매가로 판단한다.
   // 페이지 전체에서 찾으면 관련상품 목록, 배송비 안내 등 엉뚱한 곳의 작은
   // 금액(예: 배송비 2,000원)을 상품 가격으로 잘못 집을 수 있으므로, 반드시
-  // 상단 상품 정보 영역(.detail-box-right) 안에서만 찾는다.
+  // 상단 상품 정보 영역(.detail-box-right) 안에서, 그마저도 추천/리뷰류
+  // 영역은 제외하고 찾는다.
   const priceScope = $(".detail-box-right").length > 0 ? $(".detail-box-right") : $("body");
   const prices: number[] = [];
   priceScope.find(".price-cost").each((_, el) => {
+    if (isInIrrelevantArea($, el)) return;
     const text = $(el).text().replace(/[^0-9-]/g, "");
     if (!text || text.startsWith("-")) return;
     const value = Number(text);
     if (Number.isFinite(value) && value > 0) prices.push(value);
   });
-  const price = prices.length > 0 ? `${Math.min(...prices).toLocaleString("ko-KR")}원` : null;
+  const domPrice = prices.length > 0 ? Math.min(...prices) : null;
+  // 구조화 데이터가 있으면 최우선으로 쓰고, 없을 때만 화면에서 찾은 값을 쓴다.
+  const finalPriceValue = structured?.price ?? domPrice;
+  const price = finalPriceValue ? `${finalPriceValue.toLocaleString("ko-KR")}원` : null;
 
   // 사이즈 옵션: ul.size-list 안의 li[data-product-type="option"]에
   // 실제 사이즈(data-product-option-name)와 재고 수량이 들어있다.
