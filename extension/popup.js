@@ -61,7 +61,9 @@ async function captureFrame() {
       alt: (img.alt || "").slice(0, 200),
       areaNames,
     });
-    if (renderedImages.length >= 150) break;
+    // 사진이 아주 많은 페이지(추천상품 등)에서 정작 아래쪽에 있는 상세페이지
+    // 사진이 잘려나가지 않도록 넉넉하게 잡는다.
+    if (renderedImages.length >= 300) break;
   }
 
   // 분석에 필요 없는 부분(스크립트/스타일 등)은 빼서 용량을 줄인다.
