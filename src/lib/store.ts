@@ -280,6 +280,28 @@ export async function removeSourcedProduct(id: string): Promise<boolean> {
   return true;
 }
 
+// 소싱한 상품에서 사진 한 장만 지운다.
+// (어떤 사진이 상세페이지인지 코드로 추측하지 않고 전부 가져오는 대신,
+// 필요 없는 사진은 사람이 직접 지우는 방식)
+export async function removeSourcedProductImage(
+  productId: string,
+  imageUrl: string,
+): Promise<boolean> {
+  const state = await readState();
+  const product = state.sourcedProducts.find((p) => p.id === productId);
+  if (!product) return false;
+
+  const before = (product.images ?? []).length;
+  product.images = (product.images ?? []).filter((img) => img !== imageUrl);
+  if (product.image === imageUrl) {
+    product.image = product.images[0] ?? null;
+  }
+  if (product.images.length === before && product.image !== null) return false;
+
+  await writeState(state);
+  return true;
+}
+
 export async function clearSourcedProducts(): Promise<void> {
   const state = await readState();
   state.sourcedProducts = [];

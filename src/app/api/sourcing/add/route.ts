@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { addSourcedProducts, getSourcedProducts, removeSourcedProduct } from "@/lib/store";
+import {
+  addSourcedProducts,
+  getSourcedProducts,
+  removeSourcedProduct,
+  removeSourcedProductImage,
+} from "@/lib/store";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -68,6 +73,19 @@ export async function DELETE(request: Request) {
 
   if (!id) {
     return NextResponse.json({ error: "id가 필요합니다." }, { status: 400, headers: CORS_HEADERS });
+  }
+
+  // image가 함께 오면 상품 전체가 아니라 그 사진 한 장만 지운다.
+  const image = searchParams.get("image");
+  if (image) {
+    const removedImage = await removeSourcedProductImage(id, image);
+    if (!removedImage) {
+      return NextResponse.json(
+        { error: "해당 사진을 찾을 수 없습니다." },
+        { status: 404, headers: CORS_HEADERS },
+      );
+    }
+    return NextResponse.json({ ok: true }, { headers: CORS_HEADERS });
   }
 
   const removed = await removeSourcedProduct(id);

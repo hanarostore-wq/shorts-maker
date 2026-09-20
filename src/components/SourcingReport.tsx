@@ -24,6 +24,25 @@ export function SourcingReport() {
     setRemovingId(null);
   };
 
+  const handleRemoveImage = async (productId: string, imageUrl: string) => {
+    setProducts(
+      (prev) =>
+        prev?.map((p) =>
+          p.id === productId
+            ? {
+                ...p,
+                image: p.image === imageUrl ? null : p.image,
+                images: (p.images ?? []).filter((img) => img !== imageUrl),
+              }
+            : p,
+        ) ?? prev,
+    );
+    await fetch(
+      `/api/sourcing/add?id=${encodeURIComponent(productId)}&image=${encodeURIComponent(imageUrl)}`,
+      { method: "DELETE" },
+    ).catch(() => null);
+  };
+
   if (!products) {
     return <p className="text-[11px] text-zinc-600">불러오는 중...</p>;
   }
@@ -96,17 +115,30 @@ export function SourcingReport() {
             {isExpanded && (
               <div className="flex flex-col gap-2 border-t border-zinc-800 p-2">
                 {allImages.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
-                    {allImages.map((img, i) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        key={i}
-                        src={img}
-                        alt=""
-                        className="h-20 w-20 border border-zinc-800 object-cover"
-                      />
-                    ))}
-                  </div>
+                  <>
+                    <span className="text-[10px] text-zinc-500">
+                      사진 위 ✕를 눌러 필요 없는 사진을 지우세요
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {allImages.map((img) => (
+                        <div key={img} className="group relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={img}
+                            alt=""
+                            className="h-20 w-20 border border-zinc-800 object-cover"
+                          />
+                          <button
+                            onClick={() => handleRemoveImage(p.id, img)}
+                            className="absolute right-0 top-0 bg-zinc-950/80 px-1 text-[10px] font-bold text-zinc-400 hover:text-rose-400"
+                            title="이 사진 지우기"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 ) : (
                   <span className="text-[10px] text-zinc-600">수집된 사진이 없습니다.</span>
                 )}
