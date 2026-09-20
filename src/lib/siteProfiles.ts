@@ -10,6 +10,20 @@ export interface ScrapedSingleProduct {
   description: string | null;
 }
 
+// 확장프로그램이 프레임(바깥 페이지 + 안쪽 iframe들)마다 보내주는 정보.
+export interface CapturedFrame {
+  url: string;
+  isTopFrame: boolean;
+  html: string;
+  renderedImages?: Array<{
+    src: string;
+    width: number;
+    height: number;
+    alt?: string;
+    areaNames?: string[];
+  }>;
+}
+
 export interface ScrapedListProduct {
   url: string;
   title: string;
@@ -369,4 +383,54 @@ export function parseListProducts(html: string, url: string, maxItems = 60): Scr
   });
 
   return products;
+}
+
+// 상세페이지 사진 모으기.
+//
+// 확장프로그램은 브라우저가 "실제로 화면에 그린" 사진들의 진짜 주소
+// (img.currentSrc)와 실제 크기를 함께 보내준다. HTML만 분석할 때와 달리
+// 지연로딩(lazy-load)된 사진도 정확히 잡히고, 아이콘처럼 작은 건 크기로
+// 걸러낼 수 있다. 상세페이지가 별도의 iframe 안에 들어있는 흔한 경우도
+// 이 방식이면 자연스럽게 함께 수집된다.
+const NON_PRODUCT_AREA = /recommend|related|recent|review|banner|gnb|menu|header|footer|nav/i;
+const NON_PRODUCT_FILENAME = /logo|icon|sprite|spinner|loading|placeholder/i;
+
+export function collectDetailImages(
+  frames: CapturedFrame[],
+  alreadyCollected: string[],
+): string[] {
+  const basename = (imgUrl: string) => {
+    try {
+      return new URL(imgUrl).pathname.split("/").pop() ?? imgUrl;
+    } catch {
+      return imgUrl;
+    }
+  };
+
+  const seen = new Set(alreadyCollected.map(basename));
+  const found: string[] = [];
+
+  for (const frame of frames) {
+    for (const image of frame.renderedImages ?? []) {
+      if (found.length >= 40) break;
+      if (!image.src || NON_PRODUCT_FILENAME.test(image.src)) continue;
+
+      // 바깥 페이지에서는 추천상품/리뷰 같은 영역의 사진을 걸러낸다.
+      // 반대로 안쪽 iframe은 상세페이지 전용인 경우가 대부분이라 그대로 받는다.
+      if (frame.isTopFrame) {
+        const area = (image.areaNames ?? []).join(" ");
+        if (NON_PRODUCT_AREA.test(area)) continue;
+        // 바깥 페이지에선 "상세페이지 배너"로 볼 만한 큰 사진만 추가한다.
+        const isBannerLike = image.height >= 700 || image.height > image.width * 1.5;
+        if (!isBannerLike) continue;
+      }
+
+      const key = basename(image.src);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      found.push(image.src);
+    }
+  }
+
+  return found;
 }

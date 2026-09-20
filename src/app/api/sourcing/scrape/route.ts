@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { parseListProducts, parseSingleProduct } from "@/lib/siteProfiles";
+import {
+  collectDetailImages,
+  parseListProducts,
+  parseSingleProduct,
+  type CapturedFrame,
+} from "@/lib/siteProfiles";
 import { addSourcedProducts } from "@/lib/store";
 
 const CORS_HEADERS = {
@@ -24,7 +29,7 @@ export async function POST(request: Request) {
   // 설명 없이 죽지 않고, 항상 JSON으로 이유를 응답하도록 이 부분도
   // 오류 처리 범위 안에 둔다.
   try {
-    const { url, html } = await request.json();
+    const { url, html, frames } = await request.json();
 
     if (!url || !html || typeof html !== "string") {
       return NextResponse.json(
@@ -32,6 +37,11 @@ export async function POST(request: Request) {
         { status: 400, headers: CORS_HEADERS },
       );
     }
+
+    // 상세페이지는 별도의 iframe 안에 들어있는 경우가 많다. 확장프로그램이
+    // 모든 프레임을 함께 보내주므로, 바깥 페이지에서 못 찾은 상세 사진을
+    // 안쪽 프레임에서 마저 찾는다.
+    const capturedFrames: CapturedFrame[] = Array.isArray(frames) ? frames : [];
     // 목록/상세 여부를 서버에서 판단한다: 상품처럼 보이는 링크가
     // 2개 이상이면 목록 페이지로, 아니면 상세 페이지로 처리한다.
     const listProducts = parseListProducts(html, url);
@@ -50,7 +60,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const product = parseSingleProduct(html, url);
+    const parsed = parseSingleProduct(html, url);
+    const extraImages = collectDetailImages(capturedFrames, parsed.images);
+    const product = { ...parsed, images: [...parsed.images, ...extraImages] };
+
     const { added, updatedCount } = await addSourcedProducts([product]);
     return NextResponse.json(
       {
