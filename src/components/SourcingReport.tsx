@@ -1,12 +1,54 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { MarginCalculator } from "@/components/MarginCalculator";
+import { DEFAULT_GOAL, formatKRW } from "@/lib/margin";
 import type { SourcedProduct } from "@/lib/store";
+
+const GOAL_STORAGE_KEY = "shorts-maker:profit-goal";
+const GOAL_CHANGED_EVENT = "shorts-maker:profit-goal-changed";
+
+// 목표 금액은 이 브라우저에만 저장한다 (서버 상태를 건드릴 만한 값이 아니다).
+// 사생활 보호 모드처럼 저장소를 못 쓰는 환경에서도 화면은 그대로 동작하도록
+// 메모리 값을 먼저 두고 저장은 "되면 좋고" 수준으로만 시도한다.
+let goalCache: number | null = null;
+
+function readGoal(): number {
+  if (goalCache !== null) return goalCache;
+  try {
+    const saved = Number(window.localStorage.getItem(GOAL_STORAGE_KEY));
+    goalCache = Number.isFinite(saved) && saved > 0 ? saved : DEFAULT_GOAL;
+  } catch {
+    goalCache = DEFAULT_GOAL;
+  }
+  return goalCache;
+}
+
+function writeGoal(value: number) {
+  goalCache = Math.max(0, value);
+  try {
+    window.localStorage.setItem(GOAL_STORAGE_KEY, String(goalCache));
+  } catch {
+    // 저장에 실패해도 이번 세션 동안은 메모리 값으로 계속 쓴다.
+  }
+  window.dispatchEvent(new Event(GOAL_CHANGED_EVENT));
+}
+
+function subscribeGoal(onChange: () => void) {
+  // 다른 탭에서 바꾸면 storage, 이 탭에서 바꾸면 커스텀 이벤트로 전달된다.
+  window.addEventListener("storage", onChange);
+  window.addEventListener(GOAL_CHANGED_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(GOAL_CHANGED_EVENT, onChange);
+  };
+}
 
 export function SourcingReport() {
   const [products, setProducts] = useState<SourcedProduct[] | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const goal = useSyncExternalStore(subscribeGoal, readGoal, () => DEFAULT_GOAL);
 
   useEffect(() => {
     fetch("/api/sourcing/add")
@@ -58,7 +100,24 @@ export function SourcingReport() {
 
   return (
     <div className="flex max-h-96 flex-col gap-1.5 overflow-y-auto">
-      <span className="text-[11px] text-zinc-500">총 {products.length}건</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] text-zinc-500">총 {products.length}건</span>
+        <label className="flex items-center gap-1">
+          <span className="text-[10px] text-zinc-500">순이익 목표</span>
+          <input
+            type="number"
+            value={goal}
+            step={100000}
+            min={0}
+            onChange={(e) => writeGoal(Number(e.target.value))}
+            className="w-28 border border-zinc-700 bg-zinc-950 px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none focus:border-zinc-500"
+          />
+          <span className="text-[10px] text-zinc-600">원</span>
+        </label>
+        <span className="text-[10px] text-zinc-600">
+          상품을 펼치면 {formatKRW(goal)}까지 몇 개 팔아야 하는지 계산합니다
+        </span>
+      </div>
       {products.map((p) => {
         const hasValidLink = /^https?:\/\//.test(p.url);
         const allImages = Array.from(new Set([p.image, ...(p.images ?? [])].filter(Boolean))) as string[];
@@ -114,6 +173,7 @@ export function SourcingReport() {
 
             {isExpanded && (
               <div className="flex flex-col gap-2 border-t border-zinc-800 p-2">
+                <MarginCalculator priceText={p.price} goal={goal} />
                 {allImages.length > 0 ? (
                   <>
                     <span className="text-[10px] text-zinc-500">
