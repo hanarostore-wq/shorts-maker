@@ -388,19 +388,13 @@ export function parseListProducts(html: string, url: string, maxItems = 60): Scr
 // 상세페이지 사진 모으기.
 //
 // 확장프로그램은 브라우저가 "실제로 화면에 그린" 사진들의 진짜 주소
-// (img.currentSrc)와 실제 크기를 함께 보내준다. HTML만 분석할 때와 달리
-// 지연로딩(lazy-load)된 사진도 정확히 잡히고, 아이콘처럼 작은 건 크기로
-// 걸러낼 수 있다. 상세페이지가 별도의 iframe 안에 들어있는 흔한 경우도
-// 이 방식이면 자연스럽게 함께 수집된다.
-// 상세페이지 본문이 들어있는 영역. 여기 있는 사진은 크기·모양과 상관없이
-// 무조건 상세페이지 사진으로 인정한다. (실제 ABC마트 확인 결과, 상세 배너가
-// #product-detail-description-wrapper > .editor-wrap 안에 들어있었다.)
-const DETAIL_CONTENT_AREA =
-  /editor-wrap|product-detail-description|detail-description|detail-info-img|productInfo/i;
-// 상세페이지 영역 안에 있더라도 이건 상품 설명이 아니라 광고/추천이다.
-const PROMO_AREA = /detail-info-banner|swiper/i;
-const NON_PRODUCT_AREA = /recommend|related|recent|review|banner|gnb|menu|header|footer|nav/i;
-const NON_PRODUCT_FILENAME = /logo|icon|sprite|spinner|loading|placeholder|no_image/i;
+// (img.currentSrc)와 실제 크기를 함께 보내준다.
+//
+// 어떤 사진이 "진짜 상세페이지 사진"인지 코드로 추측해서 걸러내는 방식은
+// 사이트·상품마다 구조가 달라서 계속 실패했다(정작 필요한 상세 사진이
+// 걸러져 버렸다). 그래서 추측을 하지 않는다: 아이콘·로고처럼 명백한
+// 잡동사니만 빼고 나머지는 전부 가져온다. 무엇을 쓸지는 사람이 보고 정한다.
+const JUNK_FILENAME = /logo|icon|sprite|spinner|loading|placeholder|no_image|blank/i;
 
 export function collectDetailImages(
   frames: CapturedFrame[],
@@ -419,27 +413,8 @@ export function collectDetailImages(
 
   for (const frame of frames) {
     for (const image of frame.renderedImages ?? []) {
-      if (found.length >= 40) break;
-      if (!image.src || NON_PRODUCT_FILENAME.test(image.src)) continue;
-
-      const area = (image.areaNames ?? []).join(" ");
-
-      // 광고/추천 슬라이드는 상세페이지 영역 안에 있더라도 제외한다.
-      if (PROMO_AREA.test(area)) continue;
-
-      // 상세설명 본문 영역(에디터로 작성된 상세페이지) 안의 사진은
-      // 크기·비율을 따지지 않고 무조건 포함한다. 이게 사용자가 말하는
-      // "상세페이지 사진"이다.
-      const isDetailContent = DETAIL_CONTENT_AREA.test(area);
-
-      // 그 외에, 바깥 페이지에서는 추천상품/리뷰 같은 영역을 걸러내고
-      // "상세페이지 배너"로 볼 만한 큰 사진만 추가한다.
-      // 안쪽 iframe은 상세페이지 전용인 경우가 대부분이라 그대로 받는다.
-      if (!isDetailContent && frame.isTopFrame) {
-        if (NON_PRODUCT_AREA.test(area)) continue;
-        const isBannerLike = image.height >= 700 || image.height > image.width * 1.5;
-        if (!isBannerLike) continue;
-      }
+      if (found.length >= 60) break;
+      if (!image.src || JUNK_FILENAME.test(image.src)) continue;
 
       const key = basename(image.src);
       if (seen.has(key)) continue;
