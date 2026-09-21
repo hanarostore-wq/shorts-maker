@@ -54,7 +54,16 @@ async function verifyWithServer(apiBase, key) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ key, deviceId }),
   });
-  const data = await res.json();
+
+  // 서버에 라이선스 기능이 아직 배포되지 않았거나(404) 점검 중이면
+  // JSON이 아니라 HTML이 돌아온다. 그걸 "잘못된 키"로 오해하지 않도록 구분한다.
+  const rawText = await res.text();
+  let data;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    return { ...freeState("server_not_ready"), key };
+  }
 
   if (data.valid) {
     const license = {
