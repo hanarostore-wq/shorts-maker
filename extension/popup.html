@@ -2,21 +2,45 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>상품 소싱</title>
+  <title>소싱 마스터</title>
   <style>
     body {
-      width: 260px;
+      width: 320px;
       font-family: -apple-system, "Malgun Gothic", sans-serif;
       background: #0a0a0a;
       color: #f4f4f5;
       margin: 0;
-      padding: 14px;
+      padding: 12px;
     }
-    h1 {
-      font-size: 13px;
-      margin: 0 0 10px;
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
     }
-    button {
+    h1 { font-size: 13px; margin: 0; }
+    #planBadge {
+      font-size: 10px;
+      font-weight: bold;
+      padding: 2px 6px;
+      border: 1px solid #52525b;
+      color: #a1a1aa;
+    }
+    #planBadge.pro { border-color: #10b981; color: #10b981; }
+    nav { display: flex; gap: 4px; margin-bottom: 10px; }
+    nav button {
+      flex: 1;
+      padding: 6px 0;
+      font-size: 11px;
+      border: 1px solid #3f3f46;
+      background: transparent;
+      color: #a1a1aa;
+      cursor: pointer;
+    }
+    nav button.active { border-color: #10b981; color: #10b981; }
+    section { display: none; }
+    section.active { display: block; }
+    button.primary {
       width: 100%;
       padding: 10px;
       border: 2px solid #10b981;
@@ -26,30 +50,108 @@
       font-size: 13px;
       cursor: pointer;
     }
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    #debugBtn {
-      margin-top: 8px;
-      border-color: #52525b;
+    button.secondary {
+      width: 100%;
+      margin-top: 6px;
+      padding: 8px;
+      border: 1px solid #52525b;
       background: transparent;
       color: #a1a1aa;
+      font-size: 12px;
+      cursor: pointer;
     }
-    #status {
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .status {
       margin-top: 10px;
       font-size: 12px;
       color: #a1a1aa;
       white-space: pre-wrap;
       line-height: 1.4;
     }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    label { display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: #71717a; }
+    input, select {
+      background: #18181b;
+      border: 1px solid #3f3f46;
+      color: #f4f4f5;
+      padding: 5px;
+      font-size: 12px;
+      font-family: inherit;
+    }
+    .result {
+      margin-top: 8px;
+      padding: 8px;
+      border: 1px solid #27272a;
+      background: #18181b;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .profit { font-weight: bold; }
+    .good { color: #10b981; }
+    .bad { color: #f43f5e; }
+    .upsell {
+      margin-top: 8px;
+      padding: 8px;
+      border: 1px solid #10b981;
+      background: rgba(16, 185, 129, 0.08);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+    a { color: #10b981; }
+    .hint { font-size: 10px; color: #52525b; margin-top: 6px; line-height: 1.5; }
   </style>
 </head>
 <body>
-  <h1>🛒 운영본부 · 상품 소싱</h1>
-  <button id="scrapeBtn">지금 화면 소싱하기</button>
-  <button id="debugBtn">🔧 페이지 구조 복사 (개발용)</button>
-  <div id="status"></div>
+  <header>
+    <h1>🛒 소싱 마스터</h1>
+    <span id="planBadge">무료</span>
+  </header>
+
+  <nav>
+    <button id="tabScrape" class="active">소싱</button>
+    <button id="tabMargin">마진 계산</button>
+    <button id="tabLicense">라이선스</button>
+  </nav>
+
+  <section id="paneScrape" class="active">
+    <button id="scrapeBtn" class="primary">지금 화면 소싱하기</button>
+    <button id="csvBtn" class="secondary">📄 CSV로 내보내기 (프로)</button>
+    <button id="debugBtn" class="secondary">🔧 페이지 구조 복사 (개발용)</button>
+    <div id="status" class="status"></div>
+    <div id="upsell" class="upsell" style="display: none"></div>
+  </section>
+
+  <section id="paneMargin">
+    <div class="grid">
+      <label>매입가<input type="number" id="mCost" value="0" min="0" /></label>
+      <label>판매가<input type="number" id="mSell" value="0" min="0" /></label>
+      <label>택배비<input type="number" id="mShip" value="3000" min="0" /></label>
+      <label>부대비용<input type="number" id="mExtra" value="0" min="0" /></label>
+      <label>채널<select id="mChannel"></select></label>
+      <label>수수료 %<input type="number" id="mFee" value="5.85" step="0.1" min="0" /></label>
+      <label>목표 마진 %<input type="number" id="mTarget" value="20" step="1" min="0" /></label>
+      <label>순이익 목표<input type="number" id="mGoal" value="1000000" step="100000" min="0" /></label>
+    </div>
+    <div id="mResult" class="result"></div>
+    <button id="mApplyBtn" class="secondary">목표 마진 판매가 적용</button>
+    <p class="hint">소싱 탭에서 상품을 수집하면 매입가가 자동으로 채워집니다.</p>
+  </section>
+
+  <section id="paneLicense">
+    <label>라이선스 키
+      <input type="text" id="licenseKey" placeholder="SM-PRO-XXXX-XXXX-XXXX" />
+    </label>
+    <button id="activateBtn" class="primary" style="margin-top: 8px">등록하기</button>
+    <button id="deactivateBtn" class="secondary">이 기기에서 해제</button>
+    <div id="licenseStatus" class="status"></div>
+    <p class="hint">
+      키가 없으신가요? <a id="buyLink" href="#" target="_blank">프로 구매하기</a><br />
+      결제 후 이메일로 받은 키를 그대로 붙여넣으면 됩니다.
+    </p>
+  </section>
+
+  <script src="margin.js"></script>
+  <script src="license.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

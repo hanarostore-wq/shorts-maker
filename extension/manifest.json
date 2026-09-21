@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "운영본부 상품 소싱기",
-  "version": "2.2.0",
-  "description": "지금 보고 있는 쇼핑몰 페이지에서 상품 정보를 바로 수집해 운영본부 관제실로 보냅니다.",
-  "permissions": ["activeTab", "scripting"],
+  "name": "소싱 마스터 PRO - 상품 소싱 + 마진 계산",
+  "version": "3.0.0",
+  "description": "쇼핑몰 화면에서 상품 정보를 바로 수집하고, 수수료·택배비까지 계산해 팔면 얼마 남는지 즉시 알려줍니다.",
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://shorts-maker-omega.vercel.app/*"],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "상품 소싱하기"
+    "default_title": "소싱 마스터"
   }
 }

@@ -6,6 +6,13 @@ import {
   type CapturedFrame,
 } from "@/lib/siteProfiles";
 import { addSourcedProducts } from "@/lib/store";
+import {
+  consumeDailyQuota,
+  isEnforcementEnabled,
+  resolveEntitlement,
+  PLAN_FEATURES,
+  type Entitlement,
+} from "@/lib/license";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -29,7 +36,7 @@ export async function POST(request: Request) {
   // 설명 없이 죽지 않고, 항상 JSON으로 이유를 응답하도록 이 부분도
   // 오류 처리 범위 안에 둔다.
   try {
-    const { url, html, frames } = await request.json();
+    const { url, html, frames, licenseKey, deviceId } = await request.json();
 
     if (!url || !html || typeof html !== "string") {
       return NextResponse.json(
@@ -37,6 +44,12 @@ export async function POST(request: Request) {
         { status: 400, headers: CORS_HEADERS },
       );
     }
+
+    // 유료 기능/한도 확인. 강제 적용을 켜지 않은 동안에는 전부 프로로 취급한다
+    // (혼자 쓰던 기존 사용 방식이 그대로 유지되도록).
+    const entitlement: Entitlement = isEnforcementEnabled()
+      ? await resolveEntitlement(licenseKey, String(deviceId ?? "unknown"))
+      : { plan: "lifetime", features: PLAN_FEATURES.lifetime, reason: null };
 
     // 상세페이지는 별도의 iframe 안에 들어있는 경우가 많다. 확장프로그램이
     // 모든 프레임을 함께 보내주므로, 바깥 페이지에서 못 찾은 상세 사진을
@@ -47,6 +60,17 @@ export async function POST(request: Request) {
     const listProducts = parseListProducts(html, url);
 
     if (listProducts.length >= 2) {
+      if (!entitlement.features.bulkList) {
+        return NextResponse.json(
+          {
+            error:
+              "목록 페이지를 통째로 수집하는 기능은 프로 전용입니다. 상품 상세 페이지에서는 무료로 사용할 수 있어요.",
+            upgrade: true,
+            plan: entitlement.plan,
+          },
+          { status: 402, headers: CORS_HEADERS },
+        );
+      }
       const { added, updatedCount } = await addSourcedProducts(listProducts);
       return NextResponse.json(
         {
@@ -57,6 +81,23 @@ export async function POST(request: Request) {
           updatedCount,
         },
         { headers: CORS_HEADERS },
+      );
+    }
+
+    const quota = await consumeDailyQuota(
+      String(deviceId ?? "unknown"),
+      entitlement.features.dailyScrapeLimit,
+    );
+    if (!quota.allowed) {
+      return NextResponse.json(
+        {
+          error: `무료 이용은 하루 ${quota.limit}건까지입니다. 프로로 업그레이드하면 무제한으로 쓸 수 있어요.`,
+          upgrade: true,
+          plan: entitlement.plan,
+          used: quota.used,
+          limit: quota.limit,
+        },
+        { status: 402, headers: CORS_HEADERS },
       );
     }
 
@@ -72,6 +113,8 @@ export async function POST(request: Request) {
         product,
         addedCount: added.length,
         updatedCount,
+        plan: entitlement.plan,
+        quota: { used: quota.used, limit: quota.limit },
       },
       { headers: CORS_HEADERS },
     );
