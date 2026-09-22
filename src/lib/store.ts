@@ -65,6 +65,12 @@ function healState(state: State): State {
   for (const department of state.departments) {
     const fresh = initialDepartments.find((d) => d.id === department.id);
     if (!fresh) continue;
+    const existingIds = new Set(department.agents.map((agent) => agent.id));
+    for (const freshAgent of fresh.agents) {
+      if (!existingIds.has(freshAgent.id)) {
+        department.agents.push(structuredClone(freshAgent));
+      }
+    }
     for (const agent of department.agents) {
       const isAnomaly = agent.task.startsWith("⚠");
       const isIntegrated = getAgentPlatforms(agent.id).length > 0;
