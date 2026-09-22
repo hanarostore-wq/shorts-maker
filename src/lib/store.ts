@@ -83,6 +83,18 @@ function healState(state: State): State {
       }
     }
   }
+  const sharedStorageAgent = state.departments
+    .find((department) => department.id === "ops")
+    ?.agents.find((agent) => agent.id === "o5");
+  if (sharedStorageAgent) {
+    if (isSharedStorageConfigured()) {
+      sharedStorageAgent.status = "idle";
+      sharedStorageAgent.task = "Upstash Redis 공유 상태 정상";
+    } else {
+      sharedStorageAgent.status = "offline";
+      sharedStorageAgent.task = "⚠ 공유저장소 미연결 - Redis 환경변수 확인 필요";
+    }
+  }
   return state;
 }
 
