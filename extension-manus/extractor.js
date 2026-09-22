@@ -74,6 +74,13 @@
       const srcset=img.getAttribute('srcset')||img.getAttribute('data-srcset')||'';
       if(srcset){const largest=srcset.split(',').map(x=>x.trim().split(/\s+/)).sort((a,b)=>parseFloat(b[1]||'1')-parseFloat(a[1]||'1'))[0];if(largest?.[0])imageList(largest[0],'srcset')}
     }
+    if(!images.some((image)=>image.role==='detail')){
+      const detailImages=[...doc.querySelectorAll('main img,[id*="detail" i] img,[class*="detail" i] img,[class*="description" i] img')];
+      for(const img of detailImages){
+        if(!inProduct(img)||/logo|icon|sprite|spinner|loading|placeholder|banner/i.test(img.currentSrc||img.src||''))continue;
+        imageList(img.getAttribute('data-original')||img.getAttribute('data-src')||img.currentSrc||img.src,'detail_fallback','detail');
+      }
+    }
     if(!name)name=clean(doc.querySelector('h1')?.textContent||doc.title);
     const specs={};for(const x of (Array.isArray(product?.additionalProperty)?product.additionalProperty:[]))if(x.name&&x.value)specs[clean(x.name)]=clean(x.value);
     for(const row of doc.querySelectorAll('[class*="spec" i] tr,[class*="information" i] tr,[id*="spec" i] tr')){const cells=row.querySelectorAll('th,td');if(cells.length===2&&inProduct(row))specs[clean(cells[0].textContent)]=clean(cells[1].textContent)}

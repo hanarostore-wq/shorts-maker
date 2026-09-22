@@ -20,23 +20,36 @@ async function activeTab() {
 }
 
 async function inspectDirect(tabId, action) {
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    files: ["urls.js", "extractor.js", "content.js"],
-  });
-  const response = await chrome.tabs.sendMessage(tabId, { type: action });
-  if (!response?.ok) throw new Error(response?.error || "현재 쇼핑몰 화면을 읽지 못했습니다.");
-  return response.data;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ["urls.js", "extractor.js", "content.js"],
+    });
+  } catch (error) {
+    throw new Error(`상세페이지 주입 오류: ${error.message}`);
+  }
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, { type: action });
+    if (!response?.ok) throw new Error(response?.error || "페이지 분석기가 응답하지 않았습니다.");
+    return response.data;
+  } catch (error) {
+    throw new Error(`상세페이지 분석 오류: ${error.message}`);
+  }
 }
 
 async function saveDirect(product) {
-  const response = await fetch("https://shorts-maker-omega.vercel.app/api/sourcing/import", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ product }),
-  });
+  let response;
+  try {
+    response = await fetch("https://shorts-maker-omega.vercel.app/api/sourcing/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ product }),
+    });
+  } catch (error) {
+    throw new Error(`머니OS 저장 연결 오류: ${error.message}`);
+  }
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `머니OS 저장 오류 ${response.status}`);
+  if (!response.ok) throw new Error(`머니OS 저장 API 오류 ${response.status}: ${data.error || "서버가 저장을 거부했습니다."}`);
   return data;
 }
 
@@ -45,7 +58,7 @@ async function waitForTab(tabId) {
     const timer = setTimeout(() => { chrome.tabs.onUpdated.removeListener(listener); reject(new Error("상품 페이지 로딩 시간이 초과됐습니다.")); }, 30000);
     const listener = (id, change) => { if (id === tabId && change.status === "complete") { clearTimeout(timer); chrome.tabs.onUpdated.removeListener(listener); resolve(); } };
     chrome.tabs.onUpdated.addListener(listener);
-    chrome.tabs.get(tabId).then((tab) => { if (tab.status === "complete") { clearTimeout(timer); chrome.tabs.onUpdated.removeListener(listener); resolve(); } }).catch(reject);
+    chrome.tabs.get(tabId).then((tab) => { if (tab.status === "complete") { clearTimeout(timer); chrome.tabs.onUpdated.removeListener(listener); resolve(); } }).catch((error) => reject(new Error(`상품 페이지 상태 확인 오류: ${error.message}`)));
   });
 }
 
@@ -60,6 +73,8 @@ async function collectDirect(urls) {
       const saved = await saveDirect(product);
       done += 1;
       say(`상품 ${done}/${unique.length}건 · 이미지 ${saved.imageCount ?? product.images?.length ?? 0}장 · 옵션 ${saved.optionGroupCount ?? 0}그룹 · 조합 ${saved.variantCount ?? 0}개`);
+    } catch (error) {
+      throw new Error(`상품 ${done + 1}/${unique.length}건 처리 오류 (${url}): ${error.message}`);
     } finally { await chrome.tabs.remove(tab.id).catch(() => {}); }
   }
   return done;
@@ -88,10 +103,10 @@ $("send").addEventListener("click", async () => {
   $("send").disabled = true;
   try {
     const product = { ...captured, name: $("name").value.trim(), cost: Number($("cost").value), options: $("options").value.trim() };
-    if (!product.name || !(product.cost > 0)) throw new Error("상품명과 현재 매입가를 확인해 주세요.");
+    if (!product.name) throw new Error("상품명을 확인하지 못했습니다.");
     const saved = await saveDirect(product);
     const mode = saved.addedCount ? "신규 저장" : "기존 상품 갱신";
-    say(`${mode} 완료 · 이미지 ${saved.imageCount ?? product.images?.length ?? 0}장 · 상세 ${saved.detailImageCount ?? 0}장 · 옵션 ${saved.optionGroupCount ?? 0}그룹 · 조합 ${saved.variantCount ?? 0}개`);
+    say(`${mode} 완료 · 가격 ${product.cost > 0 ? `${product.cost}원` : "미확인"} · 이미지 ${saved.imageCount ?? product.images?.length ?? 0}장 · 상세 ${saved.detailImageCount ?? 0}장 · 옵션 ${saved.optionGroupCount ?? 0}그룹 · 조합 ${saved.variantCount ?? 0}개`);
     $("capture").hidden = true;
   } catch (error) { say(error.message, true); }
   finally { $("send").disabled = false; }
