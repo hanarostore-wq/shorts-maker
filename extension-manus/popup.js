@@ -20,11 +20,13 @@ async function activeTab() {
 }
 
 async function inspectDirect(tabId, action) {
-  const results = await chrome.scripting.executeScript({
+  await chrome.scripting.executeScript({
     target: { tabId },
     files: ["urls.js", "extractor.js"],
+  });
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
     func: (requestedAction) => {
-      const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
       const visible = (element) => !!(element && element.getClientRects().length && getComputedStyle(element).visibility !== "hidden");
       const blocked = (text) => /verify you are human|checking your browser|비정상적인 접근|자동입력 방지|로봇이 아닙니다/i.test(text);
       if (location.protocol !== "https:") throw new Error("HTTPS 쇼핑몰에서 실행해 주세요.");
