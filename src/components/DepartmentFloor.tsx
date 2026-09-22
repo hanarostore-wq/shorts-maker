@@ -31,7 +31,7 @@ export function DepartmentFloor({
   };
 
   return (
-    <div className="flex flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-3">
+    <div className="flex min-h-[236px] flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-3">
       <div className="flex items-center justify-between border-b-2 border-zinc-800 pb-2">
         <div className="flex items-center gap-2">
           <span className="text-lg">{department.icon}</span>
