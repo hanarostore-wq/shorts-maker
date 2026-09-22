@@ -128,6 +128,7 @@ export async function getState(): Promise<State> {
   const storeDepartment = state.departments.find((department) => department.id === "store");
   const approvalAgent = storeDepartment?.agents.find((agent) => agent.id === "s7");
   const taskAgent = storeDepartment?.agents.find((agent) => agent.id === "s8");
+  const policyAgent = storeDepartment?.agents.find((agent) => agent.id === "s9");
 
   if (approvalAgent) {
     approvalAgent.status = pendingApprovals.length > 0 ? "active" : "offline";
@@ -145,6 +146,11 @@ export async function getState(): Promise<State> {
       : queued > 0
         ? `에이전트 작업 ${queued}건 대기 중`
         : "실행 중인 지시 없음";
+  }
+
+  if (policyAgent) {
+    policyAgent.status = "offline";
+    policyAgent.task = "변경 작업 없음";
   }
 
   await writeState(state);
