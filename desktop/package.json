@@ -1,0 +1,14 @@
+{
+  "name": "unyoung-browser",
+  "version": "0.1.0",
+  "private": true,
+  "description": "운영본부 관제실이 내장된 업무용 브라우저",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:local": "CONTROL_URL=http://localhost:3000 electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.4.3"
+  }
+}
