@@ -19,20 +19,8 @@ const setStatus = (text) => {
 // 상세페이지 사진은 별도의 iframe 안에 들어있는 경우가 많아서, 바깥 페이지만
 // 봐서는 절대 찾을 수 없다. 그래서 모든 프레임에서 각각 실행한다.
 async function captureFrame() {
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-  // 스크롤해야 불러와지는(lazy-load) 사진을 실제로 다 불러오게 만든다.
-  const startY = window.scrollY;
-  let lastHeight = -1;
-  for (let i = 0; i < 30; i++) {
-    window.scrollTo(0, document.documentElement.scrollHeight);
-    await sleep(300);
-    const height = document.documentElement.scrollHeight;
-    if (height === lastHeight) break;
-    lastHeight = height;
-  }
-  await sleep(400);
-  window.scrollTo(0, startY);
+  // 수동 소싱은 사용자가 현재 화면에 띄워 둔 콘텐츠만 수집한다.
+  // 자동 스크롤·lazy-load 유도·무한 펼치기는 절대 실행하지 않는다.
 
   // 화면에 실제로 그려진 사진들의 "진짜 주소"를 따로 모아둔다.
   // img.currentSrc는 브라우저가 실제로 불러온 주소라서, lazy-load 때문에

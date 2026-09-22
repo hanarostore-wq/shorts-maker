@@ -7,6 +7,9 @@ export function SourcingReport() {
   const [products, setProducts] = useState<SourcedProduct[] | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [autoUrl, setAutoUrl] = useState("");
+  const [autoSending, setAutoSending] = useState(false);
+  const [autoNotice, setAutoNotice] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/sourcing/add")
@@ -43,13 +46,73 @@ export function SourcingReport() {
     ).catch(() => null);
   };
 
+  const startAutoSourcing = async () => {
+    const url = autoUrl.trim();
+    if (!/^https?:\/\//.test(url)) {
+      setAutoNotice("쇼핑몰 주소를 http:// 또는 https://로 입력해 주세요.");
+      return;
+    }
+    setAutoSending(true);
+    setAutoNotice(null);
+    try {
+      const res = await fetch("/api/agent/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          departmentId: "store",
+          agentId: "s1",
+          instruction: `쇼핑몰 전체 상품 자동 소싱: ${url}`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAutoNotice(data.error ?? "자동 소싱 작업을 등록하지 못했습니다.");
+        return;
+      }
+      setAutoNotice("자동 소싱 작업을 등록했습니다. Electron 워커가 실행합니다.");
+    } catch {
+      setAutoNotice("자동 소싱 작업 등록에 실패했습니다.");
+    } finally {
+      setAutoSending(false);
+    }
+  };
+
+  const autoBox = (
+    <div className="flex flex-col gap-2 border border-emerald-900 bg-zinc-900 p-2">
+      <span className="text-[11px] font-bold text-emerald-400">자동 소싱</span>
+      <div className="flex flex-wrap gap-2">
+        <input
+          value={autoUrl}
+          onChange={(event) => setAutoUrl(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !autoSending) startAutoSourcing();
+          }}
+          placeholder="쇼핑몰 주소를 입력하세요"
+          className="min-w-0 flex-1 border border-zinc-700 bg-black px-2 py-1 text-[11px] text-zinc-200 outline-none focus:border-emerald-600"
+        />
+        <button
+          onClick={startAutoSourcing}
+          disabled={autoSending}
+          className="border border-emerald-600 px-3 py-1 text-[11px] font-bold text-emerald-400 disabled:opacity-50"
+        >
+          {autoSending ? "등록 중..." : "자동 소싱"}
+        </button>
+      </div>
+      <span className="text-[10px] leading-relaxed text-zinc-600">
+        주소를 입력하면 Electron 워커가 해당 쇼핑몰의 상품을 자동으로 수집합니다.
+      </span>
+      {autoNotice && <span className="text-[10px] text-amber-300">{autoNotice}</span>}
+    </div>
+  );
+
   if (!products) {
-    return <p className="text-[11px] text-zinc-600">불러오는 중...</p>;
+    return <div className="flex flex-col gap-2">{autoBox}<p className="text-[11px] text-zinc-600">상품 목록 불러오는 중...</p></div>;
   }
 
   if (products.length === 0) {
     return (
       <div className="flex flex-col gap-2">
+        {autoBox}
         <p className="text-[11px] text-zinc-500">
           수동: 확장프로그램에서 지금 화면 소싱하기 · 자동: Electron 워커가 작업 큐를 실행합니다.
         </p>
@@ -63,6 +126,7 @@ export function SourcingReport() {
 
   return (
     <div className="flex max-h-96 flex-col gap-1.5 overflow-y-auto">
+      {autoBox}
       <>
         <span className="text-[11px] text-zinc-500">
           총 {products.length}건 · 수동 확장프로그램 / 자동 Electron 워커 공통 결과
