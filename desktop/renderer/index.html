@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <!-- 셸 UI는 로컬 파일만 쓴다. 외부 스크립트를 못 불러오게 막아둔다. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self';"
+    />
+    <title>운영본부 브라우저</title>
+    <style>
+      /* 관제실(Next.js)의 검정 + 모노스페이스 톤에 맞춘다. */
+      :root {
+        --bg: #000000;
+        --chrome: #09090b;
+        --border: #27272a;
+        --text: #fafafa;
+        --muted: #71717a;
+        --accent: #22c55e;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body {
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        overflow: hidden;
+        user-select: none;
+      }
+      /* main.js의 CHROME_HEIGHT(106)와 반드시 같아야 한다. */
+      #chrome { height: 106px; background: var(--chrome); border-bottom: 1px solid var(--border); }
+
+      #tabbar { display: flex; align-items: stretch; height: 44px; gap: 2px; padding: 6px 8px 0; overflow-x: auto; }
+      #tabbar::-webkit-scrollbar { height: 0; }
+      .tab {
+        display: flex; align-items: center; gap: 8px;
+        min-width: 120px; max-width: 220px; padding: 0 10px;
+        border: 1px solid var(--border); border-bottom: none;
+        border-radius: 6px 6px 0 0;
+        background: transparent; color: var(--muted);
+        cursor: pointer; white-space: nowrap;
+      }
+      .tab.active { background: var(--bg); color: var(--text); border-color: #3f3f46; }
+      .tab .label { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+      .tab .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
+      .tab .x { color: var(--muted); padding: 0 2px; border-radius: 3px; flex: none; }
+      .tab .x:hover { background: #3f3f46; color: var(--text); }
+      #newtab {
+        flex: none; width: 32px; border: none; background: transparent;
+        color: var(--muted); font-size: 16px; cursor: pointer;
+      }
+      #newtab:hover { color: var(--text); }
+
+      #addressbar { display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 10px; }
+      .nav {
+        width: 28px; height: 26px; border: 1px solid var(--border); border-radius: 4px;
+        background: transparent; color: var(--muted); cursor: pointer;
+      }
+      .nav:hover:not(:disabled) { color: var(--text); border-color: #52525b; }
+      .nav:disabled { opacity: 0.3; cursor: default; }
+      #url {
+        flex: 1; height: 26px; padding: 0 10px;
+        border: 1px solid var(--border); border-radius: 4px;
+        background: var(--bg); color: var(--text);
+        font-family: inherit; font-size: 12px;
+        user-select: text;
+      }
+      #url:focus { outline: none; border-color: #52525b; }
+      #home {
+        height: 26px; padding: 0 10px; flex: none;
+        border: 1px solid var(--border); border-radius: 4px;
+        background: transparent; color: var(--muted);
+        font-family: inherit; font-size: 11px; cursor: pointer;
+      }
+      #home:hover { color: var(--accent); border-color: var(--accent); }
+
+      /* 에이전트 워커가 지금 무엇을 하고 있는지 한 줄로 보여준다. */
+      #agentbar {
+        display: flex; align-items: center; gap: 6px;
+        height: 22px; padding: 0 12px;
+        border-top: 1px solid var(--border);
+        color: var(--muted); font-size: 11px;
+        white-space: nowrap; overflow: hidden;
+      }
+      #agentdot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex: none; }
+      #agentmsg { overflow: hidden; text-overflow: ellipsis; }
+    </style>
+  </head>
+  <body>
+    <div id="chrome">
+      <div id="tabbar"></div>
+      <div id="addressbar">
+        <button class="nav" id="back" title="뒤로">‹</button>
+        <button class="nav" id="forward" title="앞으로">›</button>
+        <button class="nav" id="reload" title="새로고침">⟳</button>
+        <input id="url" placeholder="주소 또는 검색어" spellcheck="false" />
+        <button id="home" title="관제실로">🏢 관제실</button>
+      </div>
+      <div id="agentbar">
+        <span id="agentdot"></span>
+        <span id="agentmsg">에이전트 대기 중</span>
+      </div>
+    </div>
+    <script src="renderer.js"></script>
+  </body>
+</html>

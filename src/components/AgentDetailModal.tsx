@@ -1,19 +1,26 @@
 "use client";
 
 import type { Agent } from "@/lib/types";
-import { getAgentPlatforms, getAgentReport } from "@/lib/agentIntegrations";
+import type { Department } from "@/lib/types";
+import { getAgentPlatforms, getAgentReport, getAgentTool } from "@/lib/agentIntegrations";
 import { IntegrationPanel } from "./IntegrationPanel";
 import { SourcingReport } from "./SourcingReport";
+import { ApprovalInbox } from "./ApprovalInbox";
+import { TaskConsole } from "./TaskConsole";
+import { PolicyPanel } from "./PolicyPanel";
 
 export function AgentDetailModal({
   agent,
+  departments,
   onClose,
 }: {
   agent: Agent;
+  departments: Department[];
   onClose: () => void;
 }) {
   const platforms = getAgentPlatforms(agent.id);
   const report = getAgentReport(agent.id);
+  const tool = getAgentTool(agent.id);
 
   return (
     <div
@@ -35,9 +42,12 @@ export function AgentDetailModal({
         </div>
         <p className="text-[11px] text-zinc-500">{agent.task}</p>
 
+        {tool === "approvals" && <ApprovalInbox />}
+        {tool === "tasks" && <TaskConsole departments={departments} />}
+        {tool === "policy" && <PolicyPanel />}
         {report === "sourcing" && <SourcingReport />}
         {platforms.length > 0 && <IntegrationPanel platforms={platforms} />}
-        {report === null && platforms.length === 0 && (
+        {tool === null && report === null && platforms.length === 0 && (
           <p className="text-[11px] text-zinc-600">
             이 직원은 아직 실제 연동이 없습니다.
           </p>

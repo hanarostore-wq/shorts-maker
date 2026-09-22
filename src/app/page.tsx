@@ -7,9 +7,6 @@ import { ProjectGrid } from "@/components/ProjectGrid";
 import { ActivityLog } from "@/components/ActivityLog";
 import { AutoSync } from "@/components/AutoSync";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
-import { ApprovalInbox } from "@/components/ApprovalInbox";
-import { TaskConsole } from "@/components/TaskConsole";
-import { PolicyPanel } from "@/components/PolicyPanel";
 import type { Agent, Department, Project } from "@/lib/types";
 import type { LogEntry } from "@/lib/store";
 
@@ -136,17 +133,6 @@ export default function Home() {
       </header>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-bold text-zinc-300">에이전트 운영 · 자동화</h2>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="flex flex-col gap-4">
-            <ApprovalInbox />
-            <TaskConsole departments={state.departments} />
-          </div>
-          <PolicyPanel />
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-3">
         <h2 className="text-sm font-bold text-zinc-300">진행 프로젝트</h2>
         <ProjectGrid projects={state.projects} />
       </section>
@@ -171,7 +157,11 @@ export default function Home() {
       </section>
 
       {liveSelectedAgent && (
-        <AgentDetailModal agent={liveSelectedAgent} onClose={() => setSelectedAgent(null)} />
+        <AgentDetailModal
+          agent={liveSelectedAgent}
+          departments={state.departments}
+          onClose={() => setSelectedAgent(null)}
+        />
       )}
     </div>
   );

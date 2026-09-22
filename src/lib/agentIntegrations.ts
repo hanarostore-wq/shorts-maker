@@ -11,6 +11,14 @@ export const AGENT_REPORTS: Record<string, "sourcing"> = {
   s1: "sourcing",
 };
 
+export type AgentTool = "approvals" | "tasks" | "policy";
+
+export const AGENT_TOOLS: Record<string, AgentTool> = {
+  s7: "approvals",
+  s8: "tasks",
+  s9: "policy",
+};
+
 export function getAgentPlatforms(agentId: string): Platform[] {
   return AGENT_PLATFORMS[agentId] ?? [];
 }
@@ -19,6 +27,14 @@ export function getAgentReport(agentId: string): "sourcing" | null {
   return AGENT_REPORTS[agentId] ?? null;
 }
 
+export function getAgentTool(agentId: string): AgentTool | null {
+  return AGENT_TOOLS[agentId] ?? null;
+}
+
 export function isAgentClickable(agentId: string): boolean {
-  return getAgentPlatforms(agentId).length > 0 || getAgentReport(agentId) !== null;
+  return (
+    getAgentPlatforms(agentId).length > 0 ||
+    getAgentReport(agentId) !== null ||
+    getAgentTool(agentId) !== null
+  );
 }
