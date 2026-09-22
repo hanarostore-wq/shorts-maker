@@ -31,6 +31,7 @@ interface State {
   log: LogEntry[];
   completedToday: number;
   sourcedProducts: SourcedProduct[];
+  failureByKey: Record<string, string>;
 }
 
 const STATE_KEY = "shorts-maker:state";
@@ -52,6 +53,7 @@ function defaultState(): State {
     log: [],
     completedToday: 0,
     sourcedProducts: [],
+    failureByKey: {},
   };
 }
 
@@ -59,6 +61,7 @@ function defaultState(): State {
 // 영원히 남아있지 않도록, 매번 상태를 읽을 때 원래 모습으로 되돌린다.
 function healState(state: State): State {
   if (!state.sourcedProducts) state.sourcedProducts = [];
+  if (!state.failureByKey) state.failureByKey = {};
   for (const department of state.departments) {
     const fresh = initialDepartments.find((d) => d.id === department.id);
     if (!fresh) continue;
@@ -105,6 +108,7 @@ export async function reportCompletion(input: {
   departmentId: string;
   agentId: string;
   message: string;
+  incidentKey?: string;
 }): Promise<LogEntry | null> {
   const state = await readState();
   const department = state.departments.find((d) => d.id === input.departmentId);
@@ -114,6 +118,7 @@ export async function reportCompletion(input: {
 
   agent.status = "active";
   agent.task = input.message;
+  if (input.incidentKey) delete state.failureByKey[input.incidentKey];
 
   const entry: LogEntry = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -135,6 +140,7 @@ export async function reportFailure(input: {
   departmentId: string;
   agentId: string;
   message: string;
+  incidentKey?: string;
 }): Promise<LogEntry | null> {
   const state = await readState();
   const department = state.departments.find((d) => d.id === input.departmentId);
@@ -144,6 +150,15 @@ export async function reportFailure(input: {
 
   agent.status = "offline";
   agent.task = `⚠ ${input.message}`;
+
+  // 같은 플랫폼에서 같은 오류가 반복되면 상태만 갱신하고
+  // 작업 로그에는 최초 발생 1회만 남긴다.
+  const failureKey = input.incidentKey ?? `${input.departmentId}:${input.agentId}`;
+  if (state.failureByKey[failureKey] === input.message) {
+    await writeState(state);
+    return null;
+  }
+  state.failureByKey[failureKey] = input.message;
 
   const entry: LogEntry = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
