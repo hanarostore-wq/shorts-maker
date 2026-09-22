@@ -41,10 +41,17 @@ async function readAndSave(tabId) {
 }
 
 async function collectUrls(urls) {
+  const uniqueUrls = [...new Set(urls)];
   let done = 0;
-  for (const url of [...new Set(urls)]) {
+  await chrome.storage.local.set({ sourceJob: { running: true, total: uniqueUrls.length, done: 0, message: `상품 0/${uniqueUrls.length}건 소싱 시작` } });
+  for (const url of uniqueUrls) {
     const tab = await chrome.tabs.create({ url, active: false });
-    try { await waitForTab(tab.id); await readAndSave(tab.id); done++; }
+    try {
+      await waitForTab(tab.id);
+      const saved = await readAndSave(tab.id);
+      done++;
+      await chrome.storage.local.set({ sourceJob: { running: done < uniqueUrls.length, total: uniqueUrls.length, done, message: `상품 ${done}/${uniqueUrls.length}건 · 이미지 ${saved.imageCount ?? 0}장 · 옵션 ${saved.optionGroupCount ?? 0}그룹 · 조합 ${saved.variantCount ?? 0}개` } });
+    }
     finally { await chrome.tabs.remove(tab.id).catch(() => {}); }
   }
   return done;

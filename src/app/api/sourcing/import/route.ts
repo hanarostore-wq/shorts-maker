@@ -54,7 +54,16 @@ export async function POST(request: Request) {
       description: product.description ? String(product.description) : null,
     }]);
 
-    return NextResponse.json({ ok: true, ...result }, { headers: CORS_HEADERS });
+    return NextResponse.json({
+      ok: true,
+      addedCount: result.added.length,
+      updatedCount: result.updatedCount,
+      imageCount: images.length,
+      detailImageCount: detailImages.length,
+      optionGroupCount: optionGroups.length,
+      variantCount: Array.isArray(product.variants) ? product.variants.length : 0,
+      product: result.added[0] ?? null,
+    }, { headers: CORS_HEADERS });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "상품 저장에 실패했습니다." },

@@ -43,8 +43,9 @@ $("send").addEventListener("click", async () => {
   try {
     const product = { ...captured, name: $("name").value.trim(), cost: Number($("cost").value), options: $("options").value.trim() };
     if (!product.name || !(product.cost > 0)) throw new Error("상품명과 현재 매입가를 확인해 주세요.");
-    await send({ type: "saveProduct", product });
-    say("상품·옵션·이미지를 소싱관리로 저장했습니다.");
+    const saved = await send({ type: "saveProduct", product });
+    const mode = saved.addedCount ? "신규 저장" : "기존 상품 갱신";
+    say(`${mode} 완료 · 이미지 ${saved.imageCount ?? product.images?.length ?? 0}장 · 상세 ${saved.detailImageCount ?? 0}장 · 옵션 ${saved.optionGroupCount ?? 0}그룹 · 조합 ${saved.variantCount ?? 0}개`);
     $("capture").hidden = true;
   } catch (error) { say(error.message, true); }
   finally { $("send").disabled = false; }
@@ -76,5 +77,11 @@ $("resume").addEventListener("click", async () => {
   catch (error) { say(error.message, true); }
 });
 
-chrome.storage.local.get("autoJob").then((state) => { if (state.autoJob) say(state.autoJob.message, state.autoJob.status === "failed"); });
-chrome.storage.onChanged.addListener((changes) => { if (changes.autoJob) say(changes.autoJob.newValue.message, changes.autoJob.newValue.status === "failed"); });
+chrome.storage.local.get(["autoJob", "sourceJob"]).then((state) => {
+  const job = state.sourceJob || state.autoJob;
+  if (job) say(job.message, job.status === "failed");
+});
+chrome.storage.onChanged.addListener((changes) => {
+  const job = changes.sourceJob?.newValue || changes.autoJob?.newValue;
+  if (job) say(job.message, job.status === "failed");
+});
