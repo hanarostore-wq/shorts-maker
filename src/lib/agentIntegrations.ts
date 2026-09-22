@@ -27,10 +27,6 @@ export function getAgentPlatforms(agentId: string): Platform[] {
   return AGENT_PLATFORMS[agentId] ?? [];
 }
 
-export function getAgentReport(_agentId: string): null {
-  return null;
-}
-
 export function getAgentTool(agentId: string): AgentTool | null {
   return AGENT_TOOLS[agentId] ?? null;
 }
@@ -38,7 +34,6 @@ export function getAgentTool(agentId: string): AgentTool | null {
 export function isAgentClickable(agentId: string): boolean {
   return (
     getAgentPlatforms(agentId).length > 0 ||
-    getAgentReport(agentId) !== null ||
     getAgentTool(agentId) !== null
   );
 }
