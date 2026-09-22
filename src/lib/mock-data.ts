@@ -10,7 +10,7 @@ export const departments: Department[] = [
       { id: "o1", name: "정산담당", task: "채널별 수익 집계 - 아직 연동 안 됨", status: "offline" },
       { id: "o2", name: "보고서작성원", task: "일일 리포트 생성 - 아직 연동 안 됨", status: "offline" },
       { id: "o3", name: "이상감지원", task: "이상 감지/알림 - 아직 연동 안 됨", status: "offline" },
-      { id: "o5", name: "공유저장소", task: "Upstash Redis 공유 상태 관리", status: "idle" },
+      { id: "o5", name: "공유저장소", task: "Upstash Redis 공유 상태 관리", status: "active" },
     ],
   },
   {
@@ -24,9 +24,9 @@ export const departments: Department[] = [
       { id: "s4", name: "주문관리자", task: "주문/재고 동기화 - 아직 연동 안 됨", status: "offline" },
       { id: "s5", name: "고객응대원", task: "고객문의 정리 - 아직 연동 안 됨", status: "offline" },
       { id: "s6", name: "서버관리원", task: "스토어 API 연동 관리 (클릭해서 조회)", status: "idle" },
-      { id: "s7", name: "승인관리", task: "승인 대기 작업 관리 (클릭해서 처리)", status: "idle" },
-      { id: "s8", name: "업무지시", task: "에이전트 업무 지시 및 작업 상태 관리 (클릭해서 처리)", status: "idle" },
-      { id: "s9", name: "승인정책", task: "자동 승인 정책 및 일일 상한 관리 (클릭해서 처리)", status: "idle" },
+      { id: "s7", name: "승인관리", task: "승인 대기 없음", status: "offline" },
+      { id: "s8", name: "업무지시", task: "실행 중인 지시 없음", status: "offline" },
+      { id: "s9", name: "승인정책", task: "변경 작업 없음", status: "offline" },
     ],
   },
   {

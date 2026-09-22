@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { departments as initialDepartments, projects } from "./mock-data";
 import { getAgentPlatforms } from "./agentIntegrations";
+import { listApprovals, listTasks } from "./agent/store";
 import type { Department, Project } from "./types";
 
 export interface LogEntry {
@@ -88,7 +89,7 @@ function healState(state: State): State {
     ?.agents.find((agent) => agent.id === "o5");
   if (sharedStorageAgent) {
     if (isSharedStorageConfigured()) {
-      sharedStorageAgent.status = "idle";
+      sharedStorageAgent.status = "active";
       sharedStorageAgent.task = "Upstash Redis 공유 상태 정상";
     } else {
       sharedStorageAgent.status = "offline";
@@ -119,7 +120,35 @@ async function writeState(state: State): Promise<void> {
 }
 
 export async function getState(): Promise<State> {
-  return readState();
+  const state = await readState();
+  const [pendingApprovals, tasks] = await Promise.all([
+    listApprovals({ state: "pending" }),
+    listTasks(),
+  ]);
+  const storeDepartment = state.departments.find((department) => department.id === "store");
+  const approvalAgent = storeDepartment?.agents.find((agent) => agent.id === "s7");
+  const taskAgent = storeDepartment?.agents.find((agent) => agent.id === "s8");
+
+  if (approvalAgent) {
+    approvalAgent.status = pendingApprovals.length > 0 ? "active" : "offline";
+    approvalAgent.task = pendingApprovals.length > 0
+      ? `승인 대기 ${pendingApprovals.length}건 처리 중`
+      : "승인 대기 없음";
+  }
+
+  if (taskAgent) {
+    const running = tasks.filter((task) => task.status === "running").length;
+    const queued = tasks.filter((task) => task.status === "queued").length;
+    taskAgent.status = running > 0 ? "active" : queued > 0 ? "standby" : "offline";
+    taskAgent.task = running > 0
+      ? `에이전트 작업 ${running}건 실행 중`
+      : queued > 0
+        ? `에이전트 작업 ${queued}건 대기 중`
+        : "실행 중인 지시 없음";
+  }
+
+  await writeState(state);
+  return state;
 }
 
 export async function reportCompletion(input: {
