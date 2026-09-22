@@ -6,6 +6,7 @@ import type { SourcedProduct } from "@/lib/store";
 export function SourcingManagementPanel() {
   const [products, setProducts] = useState<SourcedProduct[] | null>(null);
   const [selected, setSelected] = useState<SourcedProduct | null>(null);
+  const [workerStatus, setWorkerStatus] = useState("상태 확인 중");
 
   const load = () => {
     fetch("/api/sourcing/add", { cache: "no-store" })
@@ -16,7 +17,15 @@ export function SourcingManagementPanel() {
 
   useEffect(() => {
     load();
-    const timer = setInterval(load, 5000);
+    const loadStatus = () => fetch("/api/agent/tasks", { cache: "no-store" }).then((res) => res.json()).then((data) => {
+      const tasks = (data.tasks ?? []).filter((task: { agentId?: string }) => task.agentId === "s1");
+      const current = tasks.find((task: { status?: string }) => ["running", "queued", "waiting_approval"].includes(task.status ?? "")) ?? tasks[0];
+      if (!current) return setWorkerStatus("대기 중 · 아직 소싱 작업 없음");
+      const labels: Record<string, string> = { queued: "자동 소싱 대기", running: "자동 소싱 작업 중", waiting_approval: "승인 대기", done: "최근 소싱 완료", failed: "최근 소싱 실패" };
+      setWorkerStatus(labels[current.status] ?? `상태 ${current.status}`);
+    }).catch(() => setWorkerStatus("상태 확인 실패"));
+    loadStatus();
+    const timer = setInterval(() => { load(); loadStatus(); }, 5000);
     return () => clearInterval(timer);
   }, []);
 
@@ -35,6 +44,10 @@ export function SourcingManagementPanel() {
         <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
           <span className="text-sm font-bold text-zinc-300">소싱 상품 관리</span>
           <span className="text-[10px] text-zinc-500">총 {products.length}건 · 상품을 클릭하세요</span>
+        </div>
+        <div className="flex items-center justify-between border border-emerald-900/60 bg-emerald-950/20 px-2 py-1.5 text-[10px]">
+          <span className="font-bold text-emerald-400">소싱관리 상태</span>
+          <span className="text-zinc-300">{workerStatus} · 저장 상품 {products.length}건</span>
         </div>
         <div className="grid max-h-96 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
           {products.map((product) => (

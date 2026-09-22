@@ -90,6 +90,17 @@
     }
     const breadcrumb=[...doc.querySelectorAll('[itemtype*="BreadcrumbList"] [itemprop="name"],nav[aria-label="breadcrumb"] a,.breadcrumb a,.breadcrumbs a')].map(e=>clean(e.textContent)).filter(Boolean).join(' > ');
     const description=clean(product?.description||doc.querySelector('[itemprop="description"]')?.textContent||meta('og:description'));
+    const pageText=doc.body?.innerText||'';
+    if(!cost){
+      const priceMatch=pageText.match(/(?:^|\s)(\d{1,3}(?:,\d{3})+|\d{4,7})\s*원/);
+      if(priceMatch)cost=price(priceMatch[1]);
+    }
+    if(!merged.some(g=>/사이즈|size/i.test(g.name))){
+      const sizeArea=pageText.match(/사이즈[\s\S]{0,700}?(?=추가 옵션|사은품|관련용품|총 결제금액|$)/i)?.[0]||'';
+      const sizeValues=[...sizeArea.matchAll(/(?:^|\s)(2[0-9]{2}|3[0-1][0-9])(?:\s|$)/gm)].map((match)=>match[1]);
+      const uniqueSizes=[...new Set(sizeValues)];
+      if(uniqueSizes.length)merged.push({name:'사이즈',values:uniqueSizes.map((label)=>({label,value:label,availability:'available',stock_quantity:null,source:'visible_text'})),source:'visible_text'});
+    }
     // A single offer without size/color evidence is retained as a single item only
     // when the structured Product declares its own SKU and stock availability.
     const single=!!product?.sku&&!merged.length&&!variants.length&&!product?.hasVariant&&availability(offer.availability)!=='unknown';

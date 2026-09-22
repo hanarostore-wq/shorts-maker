@@ -308,13 +308,28 @@ export async function addSourcedProducts(
 ): Promise<{ added: SourcedProduct[]; updatedCount: number }> {
   const state = await readState();
   const now = new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" });
+  const canonicalUrl = (value: string) => {
+    try {
+      const url = new URL(value);
+      ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid", "NaPm"].forEach((key) => url.searchParams.delete(key));
+      url.hash = "";
+      if (["m.abcmart.a-rt.com", "abcmart.a-rt.com"].includes(url.hostname)) {
+        const productNo = url.searchParams.get("prdtNo");
+        if (productNo) return `https://abcmart.a-rt.com/product/new?prdtNo=${productNo}`;
+      }
+      return url.href;
+    } catch {
+      return value.trim();
+    }
+  };
 
-  const byUrl = new Map(state.sourcedProducts.map((p) => [p.url, p]));
+  const byUrl = new Map(state.sourcedProducts.map((p) => [canonicalUrl(p.url), p]));
   const added: SourcedProduct[] = [];
   let updatedCount = 0;
 
   for (const product of products) {
-    const existing = byUrl.get(product.url);
+    const normalizedUrl = canonicalUrl(product.url);
+    const existing = byUrl.get(normalizedUrl);
     if (existing) {
       // 같은 상품을 다시 소싱하면 최신 정보로 덮어쓴다 (사이트 규칙이
       // 개선됐을 때 예전 부실한 데이터가 그대로 남아있지 않도록).
@@ -335,7 +350,7 @@ export async function addSourcedProducts(
     }
     const entry: SourcedProduct = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      url: product.url,
+      url: normalizedUrl,
       title: product.title,
       price: product.price,
       image: product.image,
@@ -350,7 +365,7 @@ export async function addSourcedProducts(
       revision: 1,
     };
     state.sourcedProducts.unshift(entry);
-    byUrl.set(product.url, entry);
+    byUrl.set(normalizedUrl, entry);
     added.push(entry);
   }
 
@@ -393,8 +408,21 @@ export async function getSourcedProducts(): Promise<SourcedProduct[]> {
 
 export async function removeSourcedProduct(id: string): Promise<boolean> {
   const state = await readState();
+  const target = state.sourcedProducts.find((p) => p.id === id);
+  if (!target) return false;
+  const canonicalUrl = (value: string) => {
+    try {
+      const url = new URL(value);
+      ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid", "NaPm"].forEach((key) => url.searchParams.delete(key));
+      url.hash = "";
+      return url.href;
+    } catch {
+      return value.trim();
+    }
+  };
   const before = state.sourcedProducts.length;
-  state.sourcedProducts = state.sourcedProducts.filter((p) => p.id !== id);
+  const targetUrl = canonicalUrl(target.url);
+  state.sourcedProducts = state.sourcedProducts.filter((p) => p.id !== id && canonicalUrl(p.url) !== targetUrl);
   if (state.sourcedProducts.length === before) return false;
   await writeState(state);
   return true;
