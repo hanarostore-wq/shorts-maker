@@ -132,15 +132,25 @@ async function refreshSettings() {
   applyStatus(await window.shell.getSettings());
 }
 
-document.getElementById("gear").onclick = async () => {
-  panel.classList.toggle("open");
-  if (panel.classList.contains("open")) {
+/** 패널을 열고 닫는다. 여는 동안은 탭 화면을 내려야 패널이 보인다. */
+async function setPanelOpen(open) {
+  panel.classList.toggle("open", open);
+  await window.shell.setOverlay(open);
+  if (open) {
     say("");
     await refreshSettings();
   }
-};
+}
 
-document.getElementById("close").onclick = () => panel.classList.remove("open");
+document.getElementById("gear").onclick = () =>
+  setPanelOpen(!panel.classList.contains("open"));
+
+document.getElementById("close").onclick = () => setPanelOpen(false);
+
+// Esc로도 닫을 수 있게 한다.
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && panel.classList.contains("open")) setPanelOpen(false);
+});
 
 document.getElementById("save").onclick = async () => {
   const key = keyInput.value.trim();

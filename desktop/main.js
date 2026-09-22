@@ -25,6 +25,11 @@ const tabs = [];
 let activeTabId = null;
 let nextTabId = 1;
 
+// 설정 패널이 열려 있는 동안은 탭 화면을 창에서 내린다.
+// 탭은 네이티브 뷰라 크롬 아래를 전부 덮기 때문에, 내리지 않으면 패널이
+// 그 뒤에 가려 보이지 않는다.
+let overlayOpen = false;
+
 function isControlUrl(url) {
   try {
     return new URL(url).origin === new URL(CONTROL_URL).origin;
@@ -128,10 +133,28 @@ function activateTab(id) {
   for (const other of tabs) {
     if (other.id !== id) win.contentView.removeChildView(other.view);
   }
-  win.contentView.addChildView(tab.view);
   activeTabId = id;
-  layoutActiveTab();
+  // 설정이 열려 있으면 화면에 올리지 않는다. 닫을 때 올라온다.
+  if (!overlayOpen) {
+    win.contentView.addChildView(tab.view);
+    layoutActiveTab();
+  }
   sendTabState();
+}
+
+/** 설정 패널이 열리고 닫힐 때 탭 화면을 내렸다 올린다. */
+function setOverlay(open) {
+  overlayOpen = Boolean(open);
+  if (!win) return;
+  const tab = tabs.find((t) => t.id === activeTabId);
+  if (!tab) return;
+
+  if (overlayOpen) {
+    win.contentView.removeChildView(tab.view);
+  } else {
+    win.contentView.addChildView(tab.view);
+    layoutActiveTab();
+  }
 }
 
 function closeTab(id) {
@@ -249,6 +272,8 @@ ipcMain.handle("app:info", () => ({
 }));
 
 // --- 설정 ---
+
+ipcMain.handle("ui:overlay", (_e, open) => setOverlay(open));
 
 ipcMain.handle("settings:get", () => settings.describe(DEFAULT_CONTROL_URL));
 

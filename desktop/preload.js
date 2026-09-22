@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("shell", {
     ipcRenderer.on("tabs:state", listener);
     return () => ipcRenderer.removeListener("tabs:state", listener);
   },
+  setOverlay: (open) => ipcRenderer.invoke("ui:overlay", open),
   getSettings: () => ipcRenderer.invoke("settings:get"),
   setApiKey: (key) => ipcRenderer.invoke("settings:setKey", key),
   setControlUrl: (url) => ipcRenderer.invoke("settings:setControlUrl", url),
