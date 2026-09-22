@@ -22,8 +22,23 @@ export async function POST(request: Request) {
       );
     }
 
-    const images = Array.isArray(product.images)
-      ? product.images.map((item: unknown) => typeof item === "string" ? item : (item as { url?: string })?.url).filter((item: unknown): item is string => typeof item === "string")
+    const imageItems = Array.isArray(product.images) ? product.images : [];
+    const images = imageItems
+      .map((item: unknown) => typeof item === "string" ? item : (item as { url?: string })?.url)
+      .filter((item: unknown): item is string => typeof item === "string");
+    const detailImages = imageItems
+      .filter((item: unknown) => typeof item !== "string" && (item as { role?: string })?.role === "detail")
+      .map((item: unknown) => (item as { url?: string })?.url)
+      .filter((item: unknown): item is string => typeof item === "string");
+    const optionGroups = Array.isArray(product.option_groups)
+      ? product.option_groups.map((group: { name?: string; values?: Array<{ label?: string; availability?: string; stock_quantity?: number | null }> }) => ({
+          name: String(group.name || "옵션"),
+          values: (group.values ?? []).map((value) => ({
+            label: String(value.label || ""),
+            availability: value.availability,
+            stock_quantity: value.stock_quantity,
+          })).filter((value) => value.label),
+        })).filter((group: { values: unknown[] }) => group.values.length > 0)
       : [];
     const result = await addSourcedProducts([{
       url: String(product.url),
@@ -32,6 +47,10 @@ export async function POST(request: Request) {
       image: images[0] ?? null,
       images,
       options: product.options ? [String(product.options)] : [],
+      optionGroups,
+      variants: Array.isArray(product.variants) ? product.variants : [],
+      detailImages,
+      specs: product.specs && typeof product.specs === "object" ? product.specs : {},
       description: product.description ? String(product.description) : null,
     }]);
 

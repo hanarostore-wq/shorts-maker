@@ -21,6 +21,18 @@ export interface SourcedProduct {
   image: string | null;
   images?: string[];
   options?: string[];
+  optionGroups?: Array<{
+    name: string;
+    values: Array<{ label: string; availability?: string; stock_quantity?: number | null }>;
+  }>;
+  variants?: Array<{
+    attributes: Record<string, string>;
+    price?: number | null;
+    availability?: string;
+    stock_quantity?: number | null;
+  }>;
+  detailImages?: string[];
+  specs?: Record<string, string>;
   description?: string | null;
   scrapedAt: string;
   revision: number;
@@ -287,6 +299,10 @@ export async function addSourcedProducts(
     image: string | null;
     images?: string[];
     options?: string[];
+    optionGroups?: SourcedProduct["optionGroups"];
+    variants?: SourcedProduct["variants"];
+    detailImages?: string[];
+    specs?: Record<string, string>;
     description?: string | null;
   }>,
 ): Promise<{ added: SourcedProduct[]; updatedCount: number }> {
@@ -307,6 +323,10 @@ export async function addSourcedProducts(
       existing.image = product.image;
       existing.images = product.images;
       existing.options = product.options;
+      existing.optionGroups = product.optionGroups;
+      existing.variants = product.variants;
+      existing.detailImages = product.detailImages;
+      existing.specs = product.specs;
       existing.description = product.description;
       existing.scrapedAt = now;
       existing.revision = (existing.revision ?? 1) + 1;
@@ -321,6 +341,10 @@ export async function addSourcedProducts(
       image: product.image,
       images: product.images,
       options: product.options,
+      optionGroups: product.optionGroups,
+      variants: product.variants,
+      detailImages: product.detailImages,
+      specs: product.specs,
       description: product.description,
       scrapedAt: now,
       revision: 1,
