@@ -1,7 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { departments as initialDepartments, projects } from "./mock-data";
 import { getAgentPlatforms } from "./agentIntegrations";
-import { listApprovals, listTasks } from "./agent/store";
+import { getPolicy, listApprovals, listTasks } from "./agent/store";
 import type { Department, Project } from "./types";
 
 export interface LogEntry {
@@ -121,9 +121,10 @@ async function writeState(state: State): Promise<void> {
 
 export async function getState(): Promise<State> {
   const state = await readState();
-  const [pendingApprovals, tasks] = await Promise.all([
+  const [pendingApprovals, tasks, policy] = await Promise.all([
     listApprovals({ state: "pending" }),
     listTasks(),
+    getPolicy(),
   ]);
   const storeDepartment = state.departments.find((department) => department.id === "store");
   const approvalAgent = storeDepartment?.agents.find((agent) => agent.id === "s7");
@@ -149,8 +150,11 @@ export async function getState(): Promise<State> {
   }
 
   if (policyAgent) {
-    policyAgent.status = "offline";
-    policyAgent.task = "변경 작업 없음";
+    const enabledCount = Object.values(policy).filter((rule) => rule.autoApprove).length;
+    policyAgent.status = enabledCount > 0 ? "active" : "offline";
+    policyAgent.task = enabledCount > 0
+      ? `자동 승인 정책 ${enabledCount}종 감시 중`
+      : "자동 승인 정책 없음";
   }
 
   await writeState(state);
