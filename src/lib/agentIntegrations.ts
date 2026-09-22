@@ -11,9 +11,10 @@ export const AGENT_REPORTS: Record<string, "sourcing"> = {
   s1: "sourcing",
 };
 
-export type AgentTool = "approvals" | "tasks" | "policy";
+export type AgentTool = "approvals" | "tasks" | "policy" | "storage";
 
 export const AGENT_TOOLS: Record<string, AgentTool> = {
+  o5: "storage",
   s7: "approvals",
   s8: "tasks",
   s9: "policy",

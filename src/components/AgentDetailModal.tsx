@@ -8,6 +8,7 @@ import { SourcingReport } from "./SourcingReport";
 import { ApprovalInbox } from "./ApprovalInbox";
 import { TaskConsole } from "./TaskConsole";
 import { PolicyPanel } from "./PolicyPanel";
+import { SharedStoragePanel } from "./SharedStoragePanel";
 
 export function AgentDetailModal({
   agent,
@@ -45,6 +46,7 @@ export function AgentDetailModal({
         {tool === "approvals" && <ApprovalInbox />}
         {tool === "tasks" && <TaskConsole departments={departments} />}
         {tool === "policy" && <PolicyPanel />}
+        {tool === "storage" && <SharedStoragePanel />}
         {report === "sourcing" && <SourcingReport />}
         {platforms.length > 0 && <IntegrationPanel platforms={platforms} />}
         {tool === null && report === null && platforms.length === 0 && (
