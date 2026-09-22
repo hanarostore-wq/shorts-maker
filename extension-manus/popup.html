@@ -1,25 +1,33 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
   <title>머니OS 상품소싱</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { width: 320px; margin: 0; padding: 16px; background: #18191b; color: #f5f5f5; font-family: Arial, sans-serif; }
-    h1 { margin: 0 0 6px; font-size: 16px; }
-    p { margin: 0 0 14px; color: #a1a1aa; font-size: 11px; line-height: 1.5; }
-    button { width: 100%; border: 0; border-radius: 8px; padding: 11px 10px; background: #ff5647; color: white; font-weight: 700; cursor: pointer; }
-    button:disabled { opacity: .55; cursor: wait; }
-    #status { min-height: 34px; margin-top: 12px; white-space: pre-wrap; color: #a7f3d0; font-size: 11px; line-height: 1.45; }
-    .rule { margin-top: 12px; padding-top: 10px; border-top: 1px solid #303236; color: #71717a; font-size: 10px; line-height: 1.5; }
-  </style>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <h1>머니OS 상품소싱</h1>
-  <p>현재 화면에 보이는 상품만 수집합니다.</p>
-  <button id="scrapeBtn">지금 화면 소싱하기</button>
-  <div id="status">준비됨</div>
-  <div class="rule">상세페이지는 현재 상품 1개<br>목록페이지는 현재 표시된 상품만<br>자동 스크롤·무한 펼치기 없음</div>
+  <header><b>머니OS 상품소싱</b><span>Manus</span></header>
+  <section>
+    <h3>수동 소싱</h3>
+    <button id="read">현재 상세페이지 상품 읽기</button>
+    <div id="capture" hidden>
+      <label>상품명<input id="name"></label>
+      <label>현재 매입가<input id="cost" type="number" min="1"></label>
+      <label>옵션<input id="options"></label>
+      <p id="capture-summary" class="muted"></p>
+      <button id="send">상품·옵션·이미지 저장</button>
+    </div>
+    <button id="discover" class="secondary">현재 목록 화면 상품 모두 소싱</button>
+    <p id="link-count" class="muted"></p>
+    <p class="muted">상세페이지는 현재 상품 1개, 목록은 현재 화면에 보이는 상품만 수집합니다. 자동 스크롤·무한 펼치기 없음.</p>
+  </section>
+  <section>
+    <h3>자동 소싱</h3>
+    <button id="allow-sites" class="secondary">쇼핑몰 접근 권한 연결</button>
+    <button id="resume" class="secondary">대기 중인 자동 소싱 실행</button>
+    <p class="muted">상품소싱이 모달에서 등록한 쇼핑몰 주소 작업을 확인해 자동으로 실행합니다.</p>
+  </section>
+  <div id="message" role="status"></div>
   <script src="popup.js"></script>
 </body>
 </html>

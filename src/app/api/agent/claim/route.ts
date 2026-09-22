@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { claimNextTask, setTaskStatus } from "@/lib/agent/store";
 
 /** 데스크톱 워커가 다음 작업을 하나 꺼내간다. */
-export async function POST() {
-  const task = await claimNextTask();
+export async function POST(request: Request) {
+  const body = await request.json().catch(() => ({}));
+  const task = await claimNextTask(body?.agentId);
   return NextResponse.json({ task });
 }
 

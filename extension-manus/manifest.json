@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "머니OS 상품소싱 · Manus",
-  "version": "1.0.0",
-  "description": "현재 쇼핑몰 화면의 상품만 머니OS 소싱관리로 전송합니다.",
-  "permissions": ["activeTab", "scripting"],
+  "name": "머니OS 상품소싱 · Manus 고급판",
+  "version": "2.0.0",
+  "description": "고급 상품 추출기로 현재 화면과 자동 작업의 상품 정보를 머니OS 소싱관리로 전송합니다.",
+  "permissions": ["storage", "activeTab", "scripting", "alarms", "tabs"],
   "host_permissions": ["https://shorts-maker-omega.vercel.app/*"],
+  "optional_host_permissions": ["https://*/*"],
   "icons": {
     "16": "assets/icon-16.png",
     "48": "assets/icon-48.png",
