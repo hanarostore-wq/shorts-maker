@@ -152,3 +152,23 @@ export interface ApprovalDecision {
   decision: "auto" | "manual";
   reason: string;
 }
+
+/**
+ * 사람이 승인해 준 동작을 워커가 한 번 실행할 수 있게 해 주는 표.
+ *
+ * 승인하면 작업이 다시 큐에 올라가고 워커가 이어받는데, 그때 관문을 또
+ * 만나면 영원히 못 지나간다. 그래서 승인 시 이 표를 한 장 발행하고,
+ * 같은 작업의 같은 종류 동작이 관문에 오면 한 번만 통과시킨다.
+ *
+ * 한 장은 한 번만 쓰인다. 승인 한 번으로 같은 동작이 반복 실행되지 않는다.
+ */
+export interface ApprovalGrant {
+  id: string;
+  taskId: string;
+  kind: ActionKind;
+  approvalId: string;
+  grantedBy: string;
+  grantedAt: string;
+  /** 오래된 표가 남아 나중에 엉뚱하게 쓰이지 않도록 유효기한을 둔다. */
+  expiresAt: string;
+}

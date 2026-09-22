@@ -2,6 +2,7 @@ import { Redis } from "@upstash/redis";
 import type {
   AgentAction,
   AgentTask,
+  ApprovalGrant,
   ApprovalRequest,
   DailyUsage,
   PolicyConfig,
@@ -26,7 +27,14 @@ interface AgentState {
   approvals: ApprovalRequest[];
   policy: PolicyConfig | null;
   usage: DailyUsage;
+  /** 사람이 승인해 준 동작을 워커가 한 번 실행할 수 있게 하는 표들. */
+  grants: ApprovalGrant[];
 }
+
+// 승인 표의 유효기간. 담당자가 승인한 뒤 워커가 이어받기까지는 보통 몇 초면
+// 되지만, 앱이 꺼져 있었을 수도 있어 넉넉히 둔다. 그래도 하루 지난 표가
+// 남아 엉뚱한 때 쓰이는 일은 막는다.
+const GRANT_TTL_MS = 30 * 60 * 1000;
 
 function getRedis(): Redis | null {
   const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
@@ -39,7 +47,7 @@ function getRedis(): Redis | null {
 let memoryState: AgentState | null = null;
 
 function defaultState(): AgentState {
-  return { tasks: [], approvals: [], policy: null, usage: emptyUsage() };
+  return { tasks: [], approvals: [], policy: null, usage: emptyUsage(), grants: [] };
 }
 
 async function readState(): Promise<AgentState> {
@@ -56,6 +64,8 @@ async function readState(): Promise<AgentState> {
     approvals: stored.approvals ?? [],
     policy: stored.policy ?? null,
     usage: rollUsage(stored.usage),
+    // 기한이 지난 표는 읽을 때마다 버린다.
+    grants: (stored.grants ?? []).filter((g) => Date.parse(g.expiresAt) > Date.now()),
   };
 }
 
@@ -177,8 +187,31 @@ export async function gateAction(
   const policy = mergePolicy(state.policy);
   const usage = rollUsage(state.usage);
 
-  const verdict = evaluateAction(action, policy, usage);
   const task = state.tasks.find((t) => t.id === taskId);
+
+  // 사람이 이미 승인해 준 동작이면 표를 한 장 쓰고 통과시킨다.
+  // 표는 쓰는 즉시 사라지므로 승인 한 번으로 같은 동작이 반복되지 않는다.
+  const grantIndex = state.grants.findIndex(
+    (g) =>
+      g.taskId === taskId &&
+      g.kind === action.kind &&
+      Date.parse(g.expiresAt) > Date.now(),
+  );
+  if (grantIndex !== -1) {
+    const [grant] = state.grants.splice(grantIndex, 1);
+    task?.steps.push({
+      at: nowIso(),
+      kind: action.kind,
+      summary: action.summary,
+      decision: "manual",
+      ok: true,
+    });
+    if (task) task.updatedAt = nowIso();
+    await writeState(state);
+    return { allowed: true, reason: `${grant.grantedBy} 승인으로 통과` };
+  }
+
+  const verdict = evaluateAction(action, policy, usage);
 
   if (verdict.decision === "auto") {
     state.usage = recordUsage(usage, action);
@@ -238,7 +271,9 @@ export async function decideApproval(input: {
 
   const task = state.tasks.find((t) => t.id === approval.taskId);
   if (task) {
-    task.status = input.approve ? "running" : "cancelled";
+    // 승인하면 다시 큐에 올려 워커가 이어받게 한다. 실제 실행은 브라우저에서
+    // 일어나므로 이 서버가 대신 해 줄 수 없다.
+    task.status = input.approve ? "queued" : "cancelled";
     task.updatedAt = nowIso();
     task.steps.push({
       at: nowIso(),
@@ -253,6 +288,18 @@ export async function decideApproval(input: {
   // 하루 총액을 놓치는 상황을 막기 위해서다.
   if (input.approve) {
     state.usage = recordUsage(rollUsage(state.usage), approval.action);
+
+    // 워커가 이어받아 관문을 다시 만났을 때 한 번만 통과할 수 있게 표를
+    // 발행한다. 이게 없으면 승인해도 같은 자리에서 또 막혀 영영 못 지나간다.
+    state.grants.push({
+      id: newId(),
+      taskId: approval.taskId,
+      kind: approval.action.kind,
+      approvalId: approval.id,
+      grantedBy: input.decidedBy,
+      grantedAt: nowIso(),
+      expiresAt: new Date(Date.now() + GRANT_TTL_MS).toISOString(),
+    });
   }
 
   await writeState(state);

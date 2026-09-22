@@ -1,5 +1,7 @@
-import { COUPANG_PATHS } from "./endpoints";
-import { coupangRequest, getCoupangCredentials, isCoupangConfigured } from "./coupangAuth";
+import crypto from "crypto";
+import { fetchViaFixedIp } from "@/lib/proxyFetch";
+
+const BASE_URL = "https://api-gateway.coupang.com";
 
 interface CoupangProduct {
   sellerProductId: number;
@@ -7,15 +9,87 @@ interface CoupangProduct {
   statusName: string;
 }
 
+// HTML 응답이 오면 <title>만 뽑아 간단히 요약한다 (로그에 원문 HTML을 그대로 안 남기기 위함).
+function summarize(rawText: string): string {
+  const titleMatch = rawText.match(/<title>(.*?)<\/title>/i);
+  if (titleMatch) return titleMatch[1].trim();
+  return rawText.replace(/\s+/g, " ").slice(0, 120);
+}
+
+function getCredentials() {
+  const accessKey = process.env.COUPANG_ACCESS_KEY;
+  const secretKey = process.env.COUPANG_SECRET_KEY;
+  const vendorId = process.env.COUPANG_VENDOR_ID;
+  if (!accessKey || !secretKey || !vendorId) {
+    throw new Error(
+      "COUPANG_ACCESS_KEY / COUPANG_SECRET_KEY / COUPANG_VENDOR_ID 환경변수가 설정되지 않았습니다.",
+    );
+  }
+  return { accessKey, secretKey, vendorId };
+}
+
+// 쿠팡 Open API는 HMAC-SHA256으로 서명한 Authorization 헤더(CEA algorithm)를 요구한다.
+// signed-date는 반드시 yyMMdd'T'HHmmss'Z' (연도 2자리, UTC) 형식이어야 한다.
+function getSignedDate(): string {
+  const now = new Date();
+  const yy = String(now.getUTCFullYear()).slice(-2);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const MM = pad(now.getUTCMonth() + 1);
+  const dd = pad(now.getUTCDate());
+  const HH = pad(now.getUTCHours());
+  const mm = pad(now.getUTCMinutes());
+  const ss = pad(now.getUTCSeconds());
+  return `${yy}${MM}${dd}T${HH}${mm}${ss}Z`;
+}
+
+function buildAuthorizationHeader(method: string, path: string, query: string) {
+  const { accessKey, secretKey } = getCredentials();
+  const datetime = getSignedDate();
+
+  const message = `${datetime}${method}${path}${query}`;
+  const signature = crypto
+    .createHmac("sha256", secretKey)
+    .update(message)
+    .digest("hex");
+
+  return (
+    `CEA algorithm=HmacSHA256, access-key=${accessKey}, ` +
+    `signed-date=${datetime}, signature=${signature}`
+  );
+}
+
 export async function fetchCoupangProducts(): Promise<CoupangProduct[]> {
-  const { vendorId } = getCoupangCredentials();
-  const data = await coupangRequest<{ data?: CoupangProduct[] }>({
+  const { vendorId } = getCredentials();
+  const path = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products`;
+  const query = `vendorId=${vendorId}&nextToken=&maxPerPage=50`;
+
+  const res = await fetchViaFixedIp(`${BASE_URL}${path}?${query}`, {
     method: "GET",
-    path: COUPANG_PATHS.sellerProducts,
-    query: `vendorId=${vendorId}&nextToken=&maxPerPage=50`,
-    label: "쿠팡 상품 조회",
+    headers: {
+      Authorization: buildAuthorizationHeader("GET", path, query),
+      "Content-Type": "application/json",
+    },
   });
+
+  const rawText = await res.text();
+
+  if (!res.ok) {
+    throw new Error(`쿠팡 상품 조회 실패 (${res.status}): ${summarize(rawText)}`);
+  }
+
+  let data: { data?: CoupangProduct[] };
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    throw new Error(`쿠팡 접근 거부됨 (status ${res.status}): ${summarize(rawText)}`);
+  }
   return data.data ?? [];
 }
 
-export { isCoupangConfigured };
+export function isCoupangConfigured(): boolean {
+  return Boolean(
+    process.env.COUPANG_ACCESS_KEY &&
+      process.env.COUPANG_SECRET_KEY &&
+      process.env.COUPANG_VENDOR_ID,
+  );
+}

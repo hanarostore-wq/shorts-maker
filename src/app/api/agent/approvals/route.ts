@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { decideApproval, listApprovals } from "@/lib/agent/store";
 import type { ApprovalRequest } from "@/lib/agent/types";
-import { executeGatedAction } from "@/lib/integrations/executeAction";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -39,31 +38,11 @@ export async function POST(request: Request) {
     );
   }
 
-  // 승인은 했는데 아무것도 실행되지 않으면 반쪽이다. 승인된 동작을 바로
-  // 실행하고 그 결과까지 함께 돌려준다.
-  if (result.approval.state !== "approved") {
-    return NextResponse.json({ ok: true, approval: result.approval });
-  }
-
-  try {
-    const executed = await executeGatedAction(result.approval.action);
-    return NextResponse.json({
-      ok: true,
-      approval: result.approval,
-      // null이면 이 서버가 직접 실행할 수 있는 종류가 아니라는 뜻이다
-      // (예: 브라우저로 수행하는 수집 — 데스크톱 워커가 이어서 처리한다).
-      executed: executed ?? null,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "알 수 없는 오류";
-    // 승인 자체는 이미 기록됐다. 실행이 실패했다는 사실을 분명히 알린다.
-    return NextResponse.json(
-      {
-        ok: true,
-        approval: result.approval,
-        executed: { ok: false, message: `승인됐지만 실행에 실패했습니다: ${message}` },
-      },
-      { status: 502 },
-    );
-  }
+  // 실제 실행은 데스크톱 워커가 브라우저에서 한다. 승인하면 그 작업이 다시
+  // 큐에 올라가고, 워커가 이어받아 승인받은 동작을 수행한다.
+  return NextResponse.json({
+    ok: true,
+    approval: result.approval,
+    resumed: result.approval.state === "approved",
+  });
 }
