@@ -17,4 +17,9 @@ contextBridge.exposeInMainWorld("shell", {
     ipcRenderer.on("tabs:state", listener);
     return () => ipcRenderer.removeListener("tabs:state", listener);
   },
+  onAgentLog: (handler) => {
+    const listener = (_event, message) => handler(message);
+    ipcRenderer.on("agent:log", listener);
+    return () => ipcRenderer.removeListener("agent:log", listener);
+  },
 });

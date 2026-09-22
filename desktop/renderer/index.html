@@ -28,8 +28,8 @@
         overflow: hidden;
         user-select: none;
       }
-      /* main.js의 CHROME_HEIGHT(84)와 반드시 같아야 한다. */
-      #chrome { height: 84px; background: var(--chrome); border-bottom: 1px solid var(--border); }
+      /* main.js의 CHROME_HEIGHT(106)와 반드시 같아야 한다. */
+      #chrome { height: 106px; background: var(--chrome); border-bottom: 1px solid var(--border); }
 
       #tabbar { display: flex; align-items: stretch; height: 44px; gap: 2px; padding: 6px 8px 0; overflow-x: auto; }
       #tabbar::-webkit-scrollbar { height: 0; }
@@ -74,6 +74,17 @@
         font-family: inherit; font-size: 11px; cursor: pointer;
       }
       #home:hover { color: var(--accent); border-color: var(--accent); }
+
+      /* 에이전트 워커가 지금 무엇을 하고 있는지 한 줄로 보여준다. */
+      #agentbar {
+        display: flex; align-items: center; gap: 6px;
+        height: 22px; padding: 0 12px;
+        border-top: 1px solid var(--border);
+        color: var(--muted); font-size: 11px;
+        white-space: nowrap; overflow: hidden;
+      }
+      #agentdot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex: none; }
+      #agentmsg { overflow: hidden; text-overflow: ellipsis; }
     </style>
   </head>
   <body>
@@ -85,6 +96,10 @@
         <button class="nav" id="reload" title="새로고침">⟳</button>
         <input id="url" placeholder="주소 또는 검색어" spellcheck="false" />
         <button id="home" title="관제실로">🏢 관제실</button>
+      </div>
+      <div id="agentbar">
+        <span id="agentdot"></span>
+        <span id="agentmsg">에이전트 대기 중</span>
       </div>
     </div>
     <script src="renderer.js"></script>

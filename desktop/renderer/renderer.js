@@ -97,4 +97,11 @@ homeBtn.onclick = () => {
   if (home) window.shell.activate(home.id);
 };
 
+// 에이전트 워커가 보내오는 진행 상황을 상태줄에 흘려보낸다.
+const agentMsg = document.getElementById("agentmsg");
+window.shell.onAgentLog((message) => {
+  agentMsg.textContent = message;
+  agentMsg.title = message;
+});
+
 window.shell.list();

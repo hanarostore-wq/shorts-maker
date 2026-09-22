@@ -1,5 +1,6 @@
 const { app, BrowserWindow, WebContentsView, ipcMain, session, shell } = require("electron");
 const path = require("node:path");
+const { startAgentRuntime, stopAgentRuntime } = require("./agent/runtime");
 
 // 관제실 주소. 배포본을 그대로 쓰되, 로컬 개발 중엔 CONTROL_URL로 바꿔 띄운다.
 const CONTROL_URL = process.env.CONTROL_URL || "https://shorts-maker-omega.vercel.app";
@@ -9,7 +10,7 @@ const CONTROL_URL = process.env.CONTROL_URL || "https://shorts-maker-omega.verce
 // 일한다. 자격증명을 코드나 환경변수로 들고 있지 않는다.
 const PARTITION = "persist:unyoung";
 
-const CHROME_HEIGHT = 84; // 탭 바 + 주소창 높이 (renderer/index.html과 맞춰야 함)
+const CHROME_HEIGHT = 106; // 탭 바 + 주소창 + 에이전트 상태줄 (renderer/index.html과 맞춰야 함)
 
 /** @type {BrowserWindow | null} */
 let win = null;
@@ -164,6 +165,17 @@ app.whenReady().then(() => {
   const home = createTab(CONTROL_URL, { pinned: true });
   activateTab(home.id);
 
+  // 관제실에서 내려온 작업을 실제로 수행하는 워커. 담당자가 로그인해 둔
+  // 세션을 그대로 쓰도록 탭과 같은 파티션을 넘긴다.
+  startAgentRuntime({
+    controlUrl: CONTROL_URL,
+    partition: PARTITION,
+    log: (message) => {
+      console.log(`[agent] ${message}`);
+      if (win && !win.isDestroyed()) win.webContents.send("agent:log", message);
+    },
+  });
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -172,6 +184,8 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+
+app.on("before-quit", stopAgentRuntime);
 
 // --- 셸(renderer)이 부르는 기능들 ---
 
