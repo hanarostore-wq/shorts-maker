@@ -157,6 +157,22 @@ export async function getState(): Promise<State> {
         : "실행 중인 지시 없음";
   }
 
+  const sourcingAgent = storeDepartment?.agents.find((agent) => agent.id === "s1");
+  if (sourcingAgent) {
+    const sourcingTasks = tasks.filter((task) => task.agentId === "s1");
+    const running = sourcingTasks.filter((task) => task.status === "running").length;
+    const queued = sourcingTasks.filter((task) => task.status === "queued").length;
+    const latest = sourcingTasks[0];
+    sourcingAgent.status = running > 0 ? "active" : queued > 0 ? "standby" : "offline";
+    sourcingAgent.task = running > 0
+      ? `자동 소싱 ${running}건 작업 중`
+      : queued > 0
+        ? `자동 소싱 ${queued}건 대기 중`
+        : latest?.status === "done"
+          ? "최근 자동 소싱 완료"
+          : "확장프로그램 수동·자동 상품소싱 대기";
+  }
+
   if (policyAgent) {
     const enabledCount = Object.values(policy).filter((rule) => rule.autoApprove).length;
     policyAgent.status = enabledCount > 0 ? "active" : "offline";

@@ -2,13 +2,14 @@
 
 import type { Agent } from "@/lib/types";
 import type { Department } from "@/lib/types";
-import { getAgentPlatforms, getAgentReport, getAgentTool } from "@/lib/agentIntegrations";
+import { getAgentPlatforms, getAgentTool } from "@/lib/agentIntegrations";
 import { IntegrationPanel } from "./IntegrationPanel";
-import { SourcingReport } from "./SourcingReport";
 import { ApprovalInbox } from "./ApprovalInbox";
 import { TaskConsole } from "./TaskConsole";
 import { PolicyPanel } from "./PolicyPanel";
 import { SharedStoragePanel } from "./SharedStoragePanel";
+import { SourcingWorkerPanel } from "./SourcingWorkerPanel";
+import { SourcingManagementPanel } from "./SourcingManagementPanel";
 
 export function AgentDetailModal({
   agent,
@@ -20,7 +21,6 @@ export function AgentDetailModal({
   onClose: () => void;
 }) {
   const platforms = getAgentPlatforms(agent.id);
-  const report = getAgentReport(agent.id);
   const tool = getAgentTool(agent.id);
 
   return (
@@ -47,9 +47,10 @@ export function AgentDetailModal({
         {tool === "tasks" && <TaskConsole departments={departments} />}
         {tool === "policy" && <PolicyPanel />}
         {tool === "storage" && <SharedStoragePanel />}
-        {report === "sourcing" && <SourcingReport />}
+        {tool === "sourcingWorker" && <SourcingWorkerPanel />}
+        {tool === "sourcingManagement" && <SourcingManagementPanel />}
         {platforms.length > 0 && <IntegrationPanel platforms={platforms} />}
-        {tool === null && report === null && platforms.length === 0 && (
+        {tool === null && platforms.length === 0 && (
           <p className="text-[11px] text-zinc-600">
             이 직원은 아직 실제 연동이 없습니다.
           </p>
