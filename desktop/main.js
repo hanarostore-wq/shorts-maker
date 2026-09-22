@@ -170,6 +170,15 @@ app.whenReady().then(() => {
   startAgentRuntime({
     controlUrl: CONTROL_URL,
     partition: PARTITION,
+    // 지시에 주소가 적혀 있으면 거기서, 없으면 담당자가 지금 보고 있는
+    // 화면에서 이어서 시작한다. 관제실 탭은 업무 화면이 아니므로 뺀다.
+    getStartUrl: (instruction) => {
+      const inUrl = String(instruction || "").match(/https?:\/\/[^\s,]+/);
+      if (inUrl) return inUrl[0];
+      const active = tabs.find((t) => t.id === activeTabId);
+      const url = active?.view.webContents.getURL() ?? "";
+      return url && !isControlUrl(url) ? url : null;
+    },
     log: (message) => {
       console.log(`[agent] ${message}`);
       if (win && !win.isDestroyed()) win.webContents.send("agent:log", message);

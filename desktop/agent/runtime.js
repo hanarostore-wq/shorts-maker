@@ -1,6 +1,7 @@
 const { WebContentsView, session } = require("electron");
 const { CAPTURE_SOURCE } = require("./capture");
 const { planTask, siteOf } = require("./planner");
+const { runBrowserAgent } = require("./browserAgent");
 
 // 관제실에서 작업을 하나씩 꺼내와 실제 브라우저로 수행하는 워커.
 //
@@ -109,15 +110,72 @@ async function passGate(controlUrl, taskId, action) {
   return data;
 }
 
-async function runTask(controlUrl, partition, task, log) {
-  const plan = planTask(task.instruction);
-  if (!plan.ok) {
+/**
+ * AI가 화면을 직접 읽고 판단해서 수행한다.
+ *
+ * 우리가 사이트 구조를 미리 알 필요가 없는 경로다. 지시에 주소가 있으면
+ * 거기서 시작하고, 없으면 담당자가 지금 보고 있는 화면에서 이어서 한다.
+ */
+async function runWithBrain(controlUrl, partition, task, log, startUrl) {
+  const view = createWorkerView(partition);
+
+  try {
+    if (startUrl) {
+      await loadPage(view, startUrl);
+    }
+
+    const result = await runBrowserAgent({
+      view,
+      goal: task.instruction,
+      controlUrl,
+      taskId: task.id,
+      log: (message) => log(`작업 ${task.id}: ${message}`),
+    });
+
+    // 승인 대기로 막힌 건 실패가 아니다 — 사람이 승인하면 이어서 하면 된다.
+    const status =
+      result.status === "done"
+        ? "done"
+        : result.status === "blocked"
+          ? "waiting_approval"
+          : result.status === "needs_human"
+            ? "waiting_approval"
+            : "failed";
+
+    await callApi(controlUrl, "/api/agent/claim", "PATCH", {
+      taskId: task.id,
+      status,
+      error: status === "done" ? null : result.message,
+    });
+    log(`작업 ${task.id}: ${result.message}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     await callApi(controlUrl, "/api/agent/claim", "PATCH", {
       taskId: task.id,
       status: "failed",
-      error: plan.reason,
+      error: message,
     });
-    log(`작업 ${task.id}: ${plan.reason}`);
+    log(`작업 ${task.id} 실패: ${message}`);
+  } finally {
+    view.webContents.close();
+  }
+}
+
+async function runTask(controlUrl, partition, task, log, startUrl) {
+  // AI 판단이 기본 경로다. 키가 없으면 주소가 적힌 수집 지시만 처리한다.
+  if (process.env.ANTHROPIC_API_KEY) {
+    return runWithBrain(controlUrl, partition, task, log, startUrl);
+  }
+
+  const plan = planTask(task.instruction);
+  if (!plan.ok) {
+    const reason = `${plan.reason} (ANTHROPIC_API_KEY를 설정하면 AI가 화면을 직접 보고 처리합니다.)`;
+    await callApi(controlUrl, "/api/agent/claim", "PATCH", {
+      taskId: task.id,
+      status: "failed",
+      error: reason,
+    });
+    log(`작업 ${task.id}: ${reason}`);
     return;
   }
 
@@ -184,13 +242,15 @@ async function runTask(controlUrl, partition, task, log) {
   }
 }
 
-async function tick(controlUrl, partition, log) {
+async function tick(controlUrl, partition, log, getStartUrl) {
   if (running) return;
   running = true;
   try {
     const { ok, data } = await callApi(controlUrl, "/api/agent/claim", "POST");
     if (!ok || !data.task) return;
-    await runTask(controlUrl, partition, data.task, log);
+    // 지시에 주소가 없으면 담당자가 지금 보고 있는 화면에서 이어서 한다.
+    const startUrl = getStartUrl ? getStartUrl(data.task.instruction) : null;
+    await runTask(controlUrl, partition, data.task, log, startUrl);
   } catch (error) {
     // 관제실에 연결하지 못하는 상황(네트워크 끊김 등)은 흔하므로
     // 다음 주기에 조용히 재시도한다.
@@ -200,11 +260,12 @@ async function tick(controlUrl, partition, log) {
   }
 }
 
-function startAgentRuntime({ controlUrl, partition, log = console.log }) {
+function startAgentRuntime({ controlUrl, partition, log = console.log, getStartUrl }) {
   if (timer) return;
-  log(`에이전트 워커 시작 — ${controlUrl}`);
+  const mode = process.env.ANTHROPIC_API_KEY ? "AI 화면 판단" : "주소 기반 수집만";
+  log(`에이전트 워커 시작 — ${controlUrl} (${mode})`);
   timer = setInterval(() => {
-    tick(controlUrl, partition, log);
+    tick(controlUrl, partition, log, getStartUrl);
   }, POLL_INTERVAL_MS);
 }
 

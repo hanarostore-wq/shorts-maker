@@ -10,5 +10,8 @@
   },
   "devDependencies": {
     "electron": "^44.4.3"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.127.0"
   }
 }
