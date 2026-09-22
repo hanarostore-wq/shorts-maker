@@ -85,3 +85,10 @@ chrome.storage.onChanged.addListener((changes) => {
   const job = changes.sourceJob?.newValue || changes.autoJob?.newValue;
   if (job) say(job.message, job.status === "failed");
 });
+
+fetch("https://shorts-maker-omega.vercel.app/api/sourcing/add", { cache: "no-store" })
+  .then((response) => response.json())
+  .then((data) => {
+    if (Array.isArray(data.products)) say(`머니OS 저장소 연결 정상 · 저장 상품 ${data.products.length}건`);
+  })
+  .catch(() => say("머니OS 저장소 연결 실패 · 확장프로그램을 다시 설치해 주세요", true));

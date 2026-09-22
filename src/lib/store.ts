@@ -170,6 +170,7 @@ export async function getState(): Promise<State> {
   }
 
   const sourcingAgent = storeDepartment?.agents.find((agent) => agent.id === "s1");
+  const sourcingManagementAgent = storeDepartment?.agents.find((agent) => agent.id === "s11");
   if (sourcingAgent) {
     const sourcingTasks = tasks.filter((task) => task.agentId === "s1");
     const running = sourcingTasks.filter((task) => task.status === "running").length;
@@ -183,6 +184,14 @@ export async function getState(): Promise<State> {
         : latest?.status === "done"
           ? "최근 자동 소싱 완료"
           : "확장프로그램 수동·자동 상품소싱 대기";
+  }
+
+  if (sourcingManagementAgent) {
+    const sourcedCount = state.sourcedProducts.length;
+    sourcingManagementAgent.status = sourcedCount > 0 ? "active" : "offline";
+    sourcingManagementAgent.task = sourcedCount > 0
+      ? `소싱 상품 ${sourcedCount}건 관리 중`
+      : "소싱 상품 대기 · 저장된 상품 없음";
   }
 
   if (policyAgent) {
