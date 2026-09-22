@@ -10,6 +10,7 @@ import { AgentDetailModal } from "@/components/AgentDetailModal";
 import { ApprovalInbox } from "@/components/ApprovalInbox";
 import { TaskConsole } from "@/components/TaskConsole";
 import { PolicyPanel } from "@/components/PolicyPanel";
+import { OrderPanel } from "@/components/OrderPanel";
 import type { Agent, Department, Project } from "@/lib/types";
 import type { LogEntry } from "@/lib/store";
 
@@ -134,6 +135,7 @@ export default function Home() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="flex flex-col gap-4">
             <ApprovalInbox />
+            <OrderPanel />
             <TaskConsole departments={state.departments} />
           </div>
           <PolicyPanel />
