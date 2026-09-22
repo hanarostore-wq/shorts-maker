@@ -148,11 +148,10 @@ const TOOLS = [
   },
 ];
 
-function createClient() {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+function createClient(apiKey) {
   if (!apiKey) {
     throw new Error(
-      "ANTHROPIC_API_KEY가 설정되지 않았습니다. AI가 화면을 읽고 판단하려면 필요합니다.",
+      "API 키가 없습니다. 앱 위쪽 ⚙ 설정에서 Anthropic API 키를 넣어주세요.",
     );
   }
   return new Anthropic({ apiKey });

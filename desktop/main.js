@@ -1,9 +1,11 @@
 const { app, BrowserWindow, WebContentsView, ipcMain, session, shell } = require("electron");
 const path = require("node:path");
 const { startAgentRuntime, stopAgentRuntime } = require("./agent/runtime");
+const settings = require("./settings");
 
 // 관제실 주소. 배포본을 그대로 쓰되, 로컬 개발 중엔 CONTROL_URL로 바꿔 띄운다.
-const CONTROL_URL = process.env.CONTROL_URL || "https://shorts-maker-omega.vercel.app";
+const DEFAULT_CONTROL_URL = "https://shorts-maker-omega.vercel.app";
+let CONTROL_URL = DEFAULT_CONTROL_URL;
 
 // 로그인 세션이 앱을 껐다 켜도 유지되도록 영속 파티션을 쓴다. 이게 이
 // 브라우저의 핵심이다 — 에이전트는 담당자가 이미 로그인해 둔 세션 위에서
@@ -159,6 +161,9 @@ function toUrl(input) {
 }
 
 app.whenReady().then(() => {
+  // 저장해 둔 관제실 주소가 있으면 그걸 쓴다.
+  CONTROL_URL = settings.getControlUrl(DEFAULT_CONTROL_URL);
+
   createWindow();
 
   // 관제실을 첫 번째 고정 탭으로 심는다. 앱을 켜면 항상 여기서 시작한다.
@@ -179,6 +184,8 @@ app.whenReady().then(() => {
       const url = active?.view.webContents.getURL() ?? "";
       return url && !isControlUrl(url) ? url : null;
     },
+    // 키는 매번 새로 읽는다. 앱을 껐다 켜지 않아도 설정한 즉시 반영된다.
+    getApiKey: () => settings.getApiKey(),
     log: (message) => {
       console.log(`[agent] ${message}`);
       if (win && !win.isDestroyed()) win.webContents.send("agent:log", message);
@@ -240,3 +247,21 @@ ipcMain.handle("app:info", () => ({
   controlUrl: CONTROL_URL,
   isControlTabPinned: tabs.some((t) => t.pinned && isControlUrl(t.view.webContents.getURL())),
 }));
+
+// --- 설정 ---
+
+ipcMain.handle("settings:get", () => settings.describe(DEFAULT_CONTROL_URL));
+
+ipcMain.handle("settings:setKey", (_e, key) => {
+  const result = settings.setApiKey(key);
+  return { ...result, ...settings.describe(DEFAULT_CONTROL_URL) };
+});
+
+ipcMain.handle("settings:setControlUrl", (_e, url) => {
+  settings.setControlUrl(url);
+  CONTROL_URL = settings.getControlUrl(DEFAULT_CONTROL_URL);
+  // 관제실 탭을 새 주소로 다시 띄운다.
+  const home = tabs.find((t) => t.pinned);
+  if (home) home.view.webContents.loadURL(CONTROL_URL).catch(() => null);
+  return settings.describe(DEFAULT_CONTROL_URL);
+});

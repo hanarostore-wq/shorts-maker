@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld("shell", {
     ipcRenderer.on("tabs:state", listener);
     return () => ipcRenderer.removeListener("tabs:state", listener);
   },
+  getSettings: () => ipcRenderer.invoke("settings:get"),
+  setApiKey: (key) => ipcRenderer.invoke("settings:setKey", key),
+  setControlUrl: (url) => ipcRenderer.invoke("settings:setControlUrl", url),
   onAgentLog: (handler) => {
     const listener = (_event, message) => handler(message);
     ipcRenderer.on("agent:log", listener);

@@ -1,0 +1,39 @@
+name: 운영본부 브라우저 설치파일 빌드
+
+# 담당자가 바로 설치해 쓸 수 있는 Windows 설치파일을 만든다.
+# 실행 후 Actions 화면 아래 "Artifacts"에서 내려받는다.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - ".github/workflows/build-desktop.yml"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 의존성 설치
+        working-directory: desktop
+        run: npm ci
+
+      - name: 설치파일 만들기
+        working-directory: desktop
+        run: npm run dist:win
+
+      - name: 설치파일 올리기
+        uses: actions/upload-artifact@v4
+        with:
+          name: unyoung-browser-windows
+          path: desktop/dist/*.exe
+          if-no-files-found: error
+          retention-days: 30

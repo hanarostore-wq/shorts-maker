@@ -84,9 +84,9 @@ function siteOf(url) {
  *
  * @returns {{ status: "done"|"needs_human"|"blocked"|"failed", message: string }}
  */
-async function runBrowserAgent({ view, goal, controlUrl, taskId, log, client: injected }) {
+async function runBrowserAgent({ view, goal, controlUrl, taskId, log, apiKey, client: injected }) {
   // client를 넘기면 그걸 쓴다. 모델 없이 관찰·실행·관문만 시험할 때 쓰인다.
-  const client = injected ?? createClient();
+  const client = injected ?? createClient(apiKey);
   const wc = view.webContents;
 
   const messages = [

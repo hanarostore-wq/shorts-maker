@@ -99,9 +99,70 @@ homeBtn.onclick = () => {
 
 // 에이전트 워커가 보내오는 진행 상황을 상태줄에 흘려보낸다.
 const agentMsg = document.getElementById("agentmsg");
+const agentDot = document.getElementById("agentdot");
 window.shell.onAgentLog((message) => {
   agentMsg.textContent = message;
   agentMsg.title = message;
 });
 
+// --- 설정 ---
+
+const panel = document.getElementById("settings");
+const keyInput = document.getElementById("apikey");
+const urlInputSetting = document.getElementById("controlurl");
+const note = document.getElementById("note");
+
+function say(text, tone) {
+  note.textContent = text;
+  note.style.color = tone === "bad" ? "#f87171" : tone === "good" ? "#4ade80" : "#a1a1aa";
+}
+
+/** 키가 있으면 상태줄 점을 초록으로, 없으면 회색으로 둔다. */
+function applyStatus(s) {
+  agentDot.className = s.hasKey ? "" : "off";
+  if (!s.hasKey) {
+    agentMsg.textContent = "API 키 없음 — ⚙ 설정에서 넣어주세요";
+  }
+  urlInputSetting.value = s.controlUrl ?? "";
+  // 저장된 키는 절대 화면으로 가져오지 않는다. 있는지 여부만 보여준다.
+  keyInput.placeholder = s.hasKey ? "저장된 키 있음 (바꾸려면 새로 입력)" : "sk-ant-...";
+}
+
+async function refreshSettings() {
+  applyStatus(await window.shell.getSettings());
+}
+
+document.getElementById("gear").onclick = async () => {
+  panel.classList.toggle("open");
+  if (panel.classList.contains("open")) {
+    say("");
+    await refreshSettings();
+  }
+};
+
+document.getElementById("close").onclick = () => panel.classList.remove("open");
+
+document.getElementById("save").onclick = async () => {
+  const key = keyInput.value.trim();
+  if (key) {
+    const result = await window.shell.setApiKey(key);
+    if (!result.ok) {
+      say(result.error ?? "키를 저장하지 못했습니다.", "bad");
+      return;
+    }
+    keyInput.value = "";
+  }
+  const after = await window.shell.setControlUrl(urlInputSetting.value.trim());
+  applyStatus(after);
+  say("저장했습니다.", "good");
+};
+
+document.getElementById("clearkey").onclick = async () => {
+  const after = await window.shell.setApiKey("");
+  applyStatus(after);
+  keyInput.value = "";
+  say("키를 지웠습니다.", "good");
+};
+
+refreshSettings();
 window.shell.list();

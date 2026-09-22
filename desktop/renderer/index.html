@@ -73,7 +73,13 @@
         background: transparent; color: var(--muted);
         font-family: inherit; font-size: 11px; cursor: pointer;
       }
-      #home:hover { color: var(--accent); border-color: var(--accent); }
+      #home:hover, #gear:hover { color: var(--accent); border-color: var(--accent); }
+      #gear {
+        height: 26px; width: 30px; flex: none;
+        border: 1px solid var(--border); border-radius: 4px;
+        background: transparent; color: var(--muted);
+        font-family: inherit; font-size: 12px; cursor: pointer;
+      }
 
       /* 에이전트 워커가 지금 무엇을 하고 있는지 한 줄로 보여준다. */
       #agentbar {
@@ -85,6 +91,36 @@
       }
       #agentdot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex: none; }
       #agentmsg { overflow: hidden; text-overflow: ellipsis; }
+      #agentdot.off { background: #a1a1aa; }
+
+      /* 설정 패널. 평소엔 숨어 있다가 ⚙를 누르면 크롬 아래로 펼쳐진다. */
+      #settings {
+        position: absolute; top: 106px; right: 12px; z-index: 10;
+        width: 440px; padding: 14px;
+        background: var(--chrome); border: 1px solid #3f3f46; border-radius: 6px;
+        box-shadow: 0 8px 24px rgba(0,0,0,.6);
+        display: none;
+      }
+      #settings.open { display: block; }
+      #settings h2 { font-size: 12px; color: var(--text); margin-bottom: 10px; }
+      #settings label { display: block; font-size: 11px; color: var(--muted); margin: 10px 0 4px; }
+      #settings input {
+        width: 100%; height: 28px; padding: 0 8px;
+        border: 1px solid var(--border); border-radius: 4px;
+        background: var(--bg); color: var(--text);
+        font-family: inherit; font-size: 11px; user-select: text;
+      }
+      #settings input:focus { outline: none; border-color: var(--accent); }
+      #settings .row { display: flex; gap: 6px; margin-top: 12px; }
+      #settings button {
+        height: 28px; padding: 0 12px;
+        border: 1px solid var(--accent); border-radius: 4px;
+        background: transparent; color: var(--accent);
+        font-family: inherit; font-size: 11px; cursor: pointer;
+      }
+      #settings button.ghost { border-color: var(--border); color: var(--muted); }
+      #settings .hint { font-size: 10px; color: var(--muted); line-height: 1.6; margin-top: 8px; }
+      #settings .note { font-size: 11px; margin-top: 10px; min-height: 16px; }
     </style>
   </head>
   <body>
@@ -96,11 +132,29 @@
         <button class="nav" id="reload" title="새로고침">⟳</button>
         <input id="url" placeholder="주소 또는 검색어" spellcheck="false" />
         <button id="home" title="관제실로">🏢 관제실</button>
+        <button id="gear" title="설정">⚙</button>
       </div>
       <div id="agentbar">
         <span id="agentdot"></span>
         <span id="agentmsg">에이전트 대기 중</span>
       </div>
+    </div>
+    <div id="settings">
+      <h2>설정</h2>
+      <label for="apikey">Anthropic API 키 — AI가 화면을 보고 판단하려면 필요합니다</label>
+      <input id="apikey" type="password" placeholder="sk-ant-..." spellcheck="false" />
+      <label for="controlurl">관제실 주소</label>
+      <input id="controlurl" type="text" spellcheck="false" />
+      <div class="row">
+        <button id="save">저장</button>
+        <button id="clearkey" class="ghost">키 삭제</button>
+        <button id="close" class="ghost">닫기</button>
+      </div>
+      <div class="note" id="note"></div>
+      <p class="hint">
+        키는 이 PC에만 암호화되어 저장됩니다. 다른 PC로 옮겨도 풀리지 않습니다.<br />
+        키는 console.anthropic.com 에서 발급받습니다.
+      </p>
     </div>
     <script src="renderer.js"></script>
   </body>

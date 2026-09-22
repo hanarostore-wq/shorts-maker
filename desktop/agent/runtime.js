@@ -116,7 +116,7 @@ async function passGate(controlUrl, taskId, action) {
  * 우리가 사이트 구조를 미리 알 필요가 없는 경로다. 지시에 주소가 있으면
  * 거기서 시작하고, 없으면 담당자가 지금 보고 있는 화면에서 이어서 한다.
  */
-async function runWithBrain(controlUrl, partition, task, log, startUrl) {
+async function runWithBrain(controlUrl, partition, task, log, startUrl, apiKey) {
   const view = createWorkerView(partition);
 
   try {
@@ -129,6 +129,7 @@ async function runWithBrain(controlUrl, partition, task, log, startUrl) {
       goal: task.instruction,
       controlUrl,
       taskId: task.id,
+      apiKey,
       log: (message) => log(`작업 ${task.id}: ${message}`),
     });
 
@@ -161,15 +162,15 @@ async function runWithBrain(controlUrl, partition, task, log, startUrl) {
   }
 }
 
-async function runTask(controlUrl, partition, task, log, startUrl) {
+async function runTask(controlUrl, partition, task, log, startUrl, apiKey) {
   // AI 판단이 기본 경로다. 키가 없으면 주소가 적힌 수집 지시만 처리한다.
-  if (process.env.ANTHROPIC_API_KEY) {
-    return runWithBrain(controlUrl, partition, task, log, startUrl);
+  if (apiKey) {
+    return runWithBrain(controlUrl, partition, task, log, startUrl, apiKey);
   }
 
   const plan = planTask(task.instruction);
   if (!plan.ok) {
-    const reason = `${plan.reason} (ANTHROPIC_API_KEY를 설정하면 AI가 화면을 직접 보고 처리합니다.)`;
+    const reason = `${plan.reason} (앱 위쪽 ⚙ 설정에서 API 키를 넣으면 AI가 화면을 직접 보고 처리합니다.)`;
     await callApi(controlUrl, "/api/agent/claim", "PATCH", {
       taskId: task.id,
       status: "failed",
@@ -242,7 +243,7 @@ async function runTask(controlUrl, partition, task, log, startUrl) {
   }
 }
 
-async function tick(controlUrl, partition, log, getStartUrl) {
+async function tick(controlUrl, partition, log, getStartUrl, getApiKey) {
   if (running) return;
   running = true;
   try {
@@ -250,7 +251,7 @@ async function tick(controlUrl, partition, log, getStartUrl) {
     if (!ok || !data.task) return;
     // 지시에 주소가 없으면 담당자가 지금 보고 있는 화면에서 이어서 한다.
     const startUrl = getStartUrl ? getStartUrl(data.task.instruction) : null;
-    await runTask(controlUrl, partition, data.task, log, startUrl);
+    await runTask(controlUrl, partition, data.task, log, startUrl, getApiKey ? getApiKey() : null);
   } catch (error) {
     // 관제실에 연결하지 못하는 상황(네트워크 끊김 등)은 흔하므로
     // 다음 주기에 조용히 재시도한다.
@@ -260,12 +261,11 @@ async function tick(controlUrl, partition, log, getStartUrl) {
   }
 }
 
-function startAgentRuntime({ controlUrl, partition, log = console.log, getStartUrl }) {
+function startAgentRuntime({ controlUrl, partition, log = console.log, getStartUrl, getApiKey }) {
   if (timer) return;
-  const mode = process.env.ANTHROPIC_API_KEY ? "AI 화면 판단" : "주소 기반 수집만";
-  log(`에이전트 워커 시작 — ${controlUrl} (${mode})`);
+  log(`에이전트 워커 시작 — ${controlUrl}`);
   timer = setInterval(() => {
-    tick(controlUrl, partition, log, getStartUrl);
+    tick(controlUrl, partition, log, getStartUrl, getApiKey);
   }, POLL_INTERVAL_MS);
 }
 
