@@ -49,16 +49,24 @@ export function SourcingReport() {
 
   if (products.length === 0) {
     return (
-      <p className="text-[11px] text-zinc-600">
+      <div className="flex flex-col gap-2">
+        <p className="text-[11px] text-zinc-500">
+          수동: 확장프로그램에서 지금 화면 소싱하기 · 자동: Electron 워커가 작업 큐를 실행합니다.
+        </p>
+        <p className="text-[11px] text-zinc-600">
         아직 소싱한 상품이 없습니다. 확장프로그램으로 쇼핑몰 페이지에서
         &quot;지금 화면 소싱하기&quot;를 눌러보세요.
-      </p>
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="flex max-h-96 flex-col gap-1.5 overflow-y-auto">
-      <span className="text-[11px] text-zinc-500">총 {products.length}건</span>
+      <>
+        <span className="text-[11px] text-zinc-500">
+          총 {products.length}건 · 수동 확장프로그램 / 자동 Electron 워커 공통 결과
+        </span>
       {products.map((p) => {
         const hasValidLink = /^https?:\/\//.test(p.url);
         const allImages = Array.from(new Set([p.image, ...(p.images ?? [])].filter(Boolean))) as string[];
@@ -168,6 +176,7 @@ export function SourcingReport() {
           </div>
         );
       })}
+      </>
     </div>
   );
 }

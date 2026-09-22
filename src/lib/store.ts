@@ -78,6 +78,9 @@ function healState(state: State): State {
         agent.status = "offline";
         agent.task = "쿠팡 API 연동 관리 (클릭해서 조회)";
       }
+      if (agent.id === "s1" && agent.task.includes("아직 연동 안 됨")) {
+        agent.task = "확장프로그램 수동·자동 상품소싱 대기";
+      }
       const isAnomaly = agent.task.startsWith("⚠");
       const isIntegrated = getAgentPlatforms(agent.id).length > 0;
       if (isAnomaly && !isIntegrated) {

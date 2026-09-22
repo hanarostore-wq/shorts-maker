@@ -18,7 +18,7 @@ export const departments: Department[] = [
     name: "스토어부서",
     icon: "🛒",
     agents: [
-      { id: "s1", name: "상품소싱이", task: "신상품 후보 스캔 - 아직 연동 안 됨", status: "offline" },
+      { id: "s1", name: "상품소싱이", task: "확장프로그램 수동·자동 상품소싱 대기", status: "offline" },
       { id: "s2", name: "상세페이지작가", task: "상세페이지 작성 - 아직 연동 안 됨", status: "offline" },
       { id: "s3", name: "가격감시자", task: "경쟁가 모니터링 - 아직 연동 안 됨", status: "offline" },
       { id: "s4", name: "주문관리자", task: "주문/재고 동기화 - 아직 연동 안 됨", status: "offline" },
