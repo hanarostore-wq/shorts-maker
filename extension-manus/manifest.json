@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "머니OS 상품소싱 · Manus 고급판",
-  "version": "2.0.0",
+  "name": "머니OS 상품소싱 · Manus 직접연결판",
+  "version": "2.0.1",
   "description": "고급 상품 추출기로 현재 화면과 자동 작업의 상품 정보를 머니OS 소싱관리로 전송합니다.",
   "permissions": ["storage", "activeTab", "scripting", "alarms", "tabs"],
   "host_permissions": ["https://shorts-maker-omega.vercel.app/*"],

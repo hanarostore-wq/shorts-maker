@@ -22,33 +22,11 @@ async function activeTab() {
 async function inspectDirect(tabId, action) {
   await chrome.scripting.executeScript({
     target: { tabId },
-    files: ["urls.js", "extractor.js"],
+    files: ["urls.js", "extractor.js", "content.js"],
   });
-  const results = await chrome.scripting.executeScript({
-    target: { tabId },
-    func: (requestedAction) => {
-      const visible = (element) => !!(element && element.getClientRects().length && getComputedStyle(element).visibility !== "hidden");
-      const blocked = (text) => /verify you are human|checking your browser|비정상적인 접근|자동입력 방지|로봇이 아닙니다/i.test(text);
-      if (location.protocol !== "https:") throw new Error("HTTPS 쇼핑몰에서 실행해 주세요.");
-      if (blocked(document.body?.innerText?.slice(0, 8000) || "")) throw new Error("사이트 확인 화면이 나타나 소싱을 중단했습니다.");
-      if (requestedAction === "capture") return { ...NojobExtractor.extract(document, location), url: NojobURL.source(location.href) };
-      const links = [];
-      for (const anchor of document.querySelectorAll("a[href]")) {
-        if (!visible(anchor)) continue;
-        try {
-          const url = new URL(anchor.href);
-          if (url.origin !== location.origin || anchor.closest("header,nav,footer")) continue;
-          const likely = url.searchParams.has("prdtNo") || /\/(?:products?|goods|item|shop_view|detail)[\/._-]?/i.test(url.pathname) || [...url.searchParams.keys()].some((key) => /^(goodsNo|product_no|itemId|goods_code)$/i.test(key));
-          if (likely) links.push(NojobURL.source(url.href));
-        } catch {}
-      }
-      return [...new Set(links)];
-    },
-    args: [action],
-  });
-  const result = results[0]?.result;
-  if (!result) throw new Error("현재 쇼핑몰 화면을 읽지 못했습니다.");
-  return result;
+  const response = await chrome.tabs.sendMessage(tabId, { type: action });
+  if (!response?.ok) throw new Error(response?.error || "현재 쇼핑몰 화면을 읽지 못했습니다.");
+  return response.data;
 }
 
 async function saveDirect(product) {
