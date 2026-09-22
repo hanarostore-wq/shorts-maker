@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { StatCounter } from "@/components/StatCounter";
 import { DepartmentFloor } from "@/components/DepartmentFloor";
-import { ProjectGrid } from "@/components/ProjectGrid";
 import { ActivityLog } from "@/components/ActivityLog";
 import { AutoSync } from "@/components/AutoSync";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
@@ -131,12 +130,6 @@ export default function Home() {
           직원을 클릭하면 연동 상태를 조회할 수 있습니다
         </p>
       </header>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-bold text-zinc-300">진행 프로젝트</h2>
-        <ProjectGrid projects={state.projects} />
-      </section>
-
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-bold text-zinc-300">부서 관제 · 전체 층</h2>

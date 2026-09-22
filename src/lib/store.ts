@@ -73,6 +73,11 @@ function healState(state: State): State {
       }
     }
     for (const agent of department.agents) {
+      if (agent.id === "s6" && agent.name === "서버관리원") {
+        agent.name = "쿠팡파견";
+        agent.status = "offline";
+        agent.task = "쿠팡 API 연동 관리 (클릭해서 조회)";
+      }
       const isAnomaly = agent.task.startsWith("⚠");
       const isIntegrated = getAgentPlatforms(agent.id).length > 0;
       if (isAnomaly && !isIntegrated) {

@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       const products = await fetchNaverProducts();
       await reportCompletion({
         departmentId: "store",
-        agentId: "s6",
+        agentId: "s10",
         message: `스마트스토어 상품 ${products.length}건 조회 완료`,
         incidentKey: "naver",
       });
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       const message = error instanceof Error ? error.message : "알 수 없는 오류";
       await reportFailure({
         departmentId: "store",
-        agentId: "s6",
+        agentId: "s10",
         message,
         incidentKey: "naver",
       });

@@ -23,10 +23,11 @@ export const departments: Department[] = [
       { id: "s3", name: "가격감시자", task: "경쟁가 모니터링 - 아직 연동 안 됨", status: "offline" },
       { id: "s4", name: "주문관리자", task: "주문/재고 동기화 - 아직 연동 안 됨", status: "offline" },
       { id: "s5", name: "고객응대원", task: "고객문의 정리 - 아직 연동 안 됨", status: "offline" },
-      { id: "s6", name: "서버관리원", task: "스토어 API 연동 관리 (클릭해서 조회)", status: "idle" },
+      { id: "s6", name: "쿠팡파견", task: "쿠팡 API 연동 관리 (클릭해서 조회)", status: "offline" },
       { id: "s7", name: "승인관리", task: "승인 대기 없음", status: "offline" },
       { id: "s8", name: "업무지시", task: "실행 중인 지시 없음", status: "offline" },
       { id: "s9", name: "승인정책", task: "변경 작업 없음", status: "offline" },
+      { id: "s10", name: "네이버파견", task: "네이버 API 연동 관리 (클릭해서 조회)", status: "offline" },
     ],
   },
   {

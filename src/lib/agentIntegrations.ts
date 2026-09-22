@@ -1,7 +1,8 @@
 export type Platform = "naver" | "coupang" | "vercel";
 
 export const AGENT_PLATFORMS: Record<string, Platform[]> = {
-  s6: ["naver", "coupang"],
+  s6: ["coupang"],
+  s10: ["naver"],
   o4: ["vercel"],
 };
 
