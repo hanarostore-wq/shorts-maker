@@ -18,6 +18,18 @@ const roleText: Record<string, string> = {
   c10: "최종 통제·긴급정지",
 };
 
+function liveSma(values: number[], period: number) {
+  return values.length >= period ? values.slice(-period).reduce((sum, value) => sum + value, 0) / period : null;
+}
+
+function liveRsi(values: number[], period = 14) {
+  if (values.length <= period) return null;
+  const changes = values.slice(1).map((value, index) => value - values[index]).slice(-period);
+  const gains = changes.filter((value) => value > 0).reduce((sum, value) => sum + value, 0) / period;
+  const losses = changes.filter((value) => value < 0).reduce((sum, value) => sum + Math.abs(value), 0) / period;
+  return losses === 0 ? 100 : 100 - 100 / (1 + gains / losses);
+}
+
 export function CoinTradingPanel({ agent }: { agent: Agent }) {
   const [market, setMarket] = useState("KRW-BTC");
   const [data, setData] = useState<MarketData | null>(null);
@@ -39,18 +51,28 @@ export function CoinTradingPanel({ agent }: { agent: Agent }) {
 
   useEffect(() => {
     const initial = window.setTimeout(() => void load(), 0);
-    const timer = window.setInterval(() => void load(), 10000);
+    const timer = window.setInterval(() => void load(), 60000);
     return () => { window.clearTimeout(initial); window.clearInterval(timer); };
   }, [load]);
 
   useEffect(() => {
     const socket = new WebSocket("wss://api.upbit.com/websocket/v1");
-    socket.onopen = () => socket.send(JSON.stringify([{ ticket: "moneyos-orderbook" }, { type: "orderbook", codes: [market], format: "DEFAULT" }]));
+    socket.onopen = () => socket.send(JSON.stringify([{ ticket: "moneyos-realtime" }, { type: "orderbook", codes: [market], format: "DEFAULT" }, { type: "ticker", codes: [market], format: "DEFAULT" }]));
     socket.onmessage = async (event) => {
       try {
         const text = typeof event.data === "string" ? event.data : new TextDecoder().decode(await event.data.arrayBuffer());
         const tick = JSON.parse(text);
-        setLiveOrderbook({ totalAskSize: tick.total_ask_size, totalBidSize: tick.total_bid_size, units: tick.orderbook_units?.slice(0, 8) || [] });
+        if (tick.type === "orderbook") {
+          setLiveOrderbook({ totalAskSize: tick.total_ask_size, totalBidSize: tick.total_bid_size, units: tick.orderbook_units?.slice(0, 8) || [] });
+        } else if (tick.type === "ticker") {
+          setData((previous) => {
+            if (!previous?.candles?.length) return previous;
+            const closes = previous.candles.map((candle, index) => index === 0 ? Number(tick.trade_price) : Number(candle.trade_price)).reverse();
+            const sma5 = liveSma(closes, 5);
+            const sma20 = liveSma(closes, 20);
+            return { ...previous, price: Number(tick.trade_price), candles: previous.candles.map((candle, index) => index === 0 ? { ...candle, trade_price: Number(tick.trade_price) } : candle), indicators: { ...previous.indicators, sma5, sma20, rsi14: liveRsi(closes), signal: previous.indicators?.signal } };
+          });
+        }
       } catch { setMessage("호가창 WebSocket 데이터 해석 오류: 업비트 응답 형식을 확인하세요"); }
     };
     socket.onerror = () => setMessage("호가창 WebSocket 연결 오류: 공개 실시간 호가 스트림을 연결하지 못했습니다");
@@ -85,7 +107,7 @@ export function CoinTradingPanel({ agent }: { agent: Agent }) {
       </div>
       {data?.ok ? <>
         <div className="grid grid-cols-2 gap-2 border border-zinc-800 p-2 text-zinc-300"><div>현재가 {data.price?.toLocaleString()}원</div><div>RSI14 {data.indicators?.rsi14?.toFixed(2) ?? "-"}</div><div>SMA5 {data.indicators?.sma5?.toFixed(2) ?? "-"}</div><div>SMA20 {data.indicators?.sma20?.toFixed(2) ?? "-"}</div><div className={data.indicators?.signal === "golden_cross" ? "text-emerald-400" : data.indicators?.signal === "dead_cross" ? "text-red-400" : "text-zinc-500"}>{data.indicators?.signal === "golden_cross" ? "골든크로스" : data.indicators?.signal === "dead_cross" ? "데드크로스" : "교차 없음"}</div></div>
-        <div className="border border-zinc-800 p-2"><div className="mb-1 text-zinc-500">1분봉 차트 · 종가</div><svg viewBox="0 0 300 80" className="h-20 w-full" preserveAspectRatio="none"><polyline fill="none" stroke="#10b981" strokeWidth="1.5" points={(data.candles || []).slice().reverse().map((candle, index, values) => `${(index / Math.max(values.length - 1, 1)) * 300},${80 - ((Number(candle.trade_price) - Math.min(...values.map((v) => Number(v.trade_price)))) / Math.max(Math.max(...values.map((v) => Number(v.trade_price))) - Math.min(...values.map((v) => Number(v.trade_price))), 1)) * 70}`).join(" ")} /></svg></div>
+        <div className="border border-zinc-800 p-2"><div className="mb-1 text-zinc-500">1분봉 차트 · 실시간 진행 중</div><svg viewBox="0 0 300 80" className="h-20 w-full" preserveAspectRatio="none"><polyline fill="none" stroke="#10b981" strokeWidth="1.5" points={(data.candles || []).slice().reverse().map((candle, index, values) => `${(index / Math.max(values.length - 1, 1)) * 300},${80 - ((Number(candle.trade_price) - Math.min(...values.map((v) => Number(v.trade_price)))) / Math.max(Math.max(...values.map((v) => Number(v.trade_price))) - Math.min(...values.map((v) => Number(v.trade_price))), 1)) * 70}`).join(" ")} /></svg></div>
         <div className="border border-zinc-800 p-2"><div className="mb-1 text-zinc-500">실시간 호가창 · 매도 / 매수</div>{(liveOrderbook || data.orderbook)?.units.slice(0, 5).map((unit, index) => <div key={`${unit.ask_price}-${index}`} className="grid grid-cols-2 gap-2 text-[10px]"><span className="text-red-300">매도 {unit.ask_price.toLocaleString()} · {unit.ask_size.toFixed(4)}</span><span className="text-emerald-300">매수 {unit.bid_price.toLocaleString()} · {unit.bid_size.toFixed(4)}</span></div>)}</div>
       </> : null}
       <div className="flex gap-2"><button onClick={() => void submitOrder("buy")} className="flex-1 border border-emerald-700 px-2 py-1 text-emerald-400">{mode === "paper" ? "매수 시뮬레이션" : "실제 매수 검사"}</button><button onClick={() => void submitOrder("sell")} className="flex-1 border border-sky-700 px-2 py-1 text-sky-400">{mode === "paper" ? "매도 시뮬레이션" : "실제 매도 검사"}</button></div>
