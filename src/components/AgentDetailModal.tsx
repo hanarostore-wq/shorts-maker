@@ -55,7 +55,7 @@ export function AgentDetailModal({
         {tool === "coinTrading" && agent.id !== "c8" && <CoinTradingPanel agent={agent} />}
         {agent.id === "c8" && <>
           <CoinTradingPanel agent={agent} showSimulation={false} />
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-2 gap-3">
             <CoinSimulationPanel />
             <UpbitConnectionPanel />
           </div>
