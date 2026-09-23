@@ -49,12 +49,14 @@ interface State {
 
 const STATE_KEY = "shorts-maker:state";
 
-function getRedis(): Redis | null {
+export function getSharedRedis(): Redis | null {
   const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) return null;
   return new Redis({ url, token });
 }
+
+const getRedis = getSharedRedis;
 
 // Redis 저장소가 없으면(로컬 개발 등) 메모리로 대체 동작한다.
 let memoryState: State | null = null;

@@ -13,7 +13,8 @@ export type AgentTool =
   | "storage"
   | "sourcingWorker"
   | "sourcingManagement"
-  | "coinTrading";
+  | "coinTrading"
+  | "stockTrading";
 
 export const AGENT_TOOLS: Record<string, AgentTool> = {
   o5: "storage",
@@ -32,6 +33,16 @@ export const AGENT_TOOLS: Record<string, AgentTool> = {
   c8: "coinTrading",
   c9: "coinTrading",
   c10: "coinTrading",
+  t1: "stockTrading",
+  t2: "stockTrading",
+  t3: "stockTrading",
+  t4: "stockTrading",
+  t5: "stockTrading",
+  t6: "stockTrading",
+  t7: "stockTrading",
+  t8: "stockTrading",
+  t9: "stockTrading",
+  t10: "stockTrading",
 };
 
 export function getAgentPlatforms(agentId: string): Platform[] {

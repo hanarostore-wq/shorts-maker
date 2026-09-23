@@ -49,6 +49,23 @@ export const departments: Department[] = [
     ],
   },
   {
+    id: "stock",
+    name: "주식매매부서",
+    icon: "📈",
+    agents: [
+      { id: "t1", name: "전략연구AI", task: "GPT·로컬AI 국내주식 단타 전략 연구 대기", status: "offline" },
+      { id: "t2", name: "JEV판단원", task: "나무플러그 실시간 현물 신호 판단 대기", status: "offline" },
+      { id: "t3", name: "Python계산원", task: "지표·수수료·손익 계산 대기", status: "offline" },
+      { id: "t4", name: "호가감시원", task: "주식 호가·스프레드 감시 대기", status: "offline" },
+      { id: "t5", name: "포지션관리원", task: "주식 보유·미체결 주문 관리 대기", status: "offline" },
+      { id: "t6", name: "리스크관리원", task: "주식 단타 주문 차단 규칙 대기", status: "offline" },
+      { id: "t7", name: "모의매매원", task: "실제 주문 없는 체결 시뮬레이션 대기", status: "offline" },
+      { id: "t8", name: "나무플러그파견", task: "나무플러그 시세·주문 API 연결 대기", status: "offline" },
+      { id: "t9", name: "승인관리", task: "실거래 전환 승인 대기", status: "offline" },
+      { id: "t10", name: "블랙", task: "주식매매 최종 통제·긴급정지", status: "offline" },
+    ],
+  },
+  {
     id: "shorts",
     name: "쇼츠부서",
     icon: "🎬",

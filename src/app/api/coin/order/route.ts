@@ -1,14 +1,16 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { evaluateCoinOrder, type CoinMode, type CoinSide } from "@/lib/coinRisk";
+import { loadUpbitCredentials } from "@/lib/coinCredentials";
 
 const UPBIT_API = "https://api.upbit.com";
 const LIVE_CONFIRMATION = "BLACK_LIVE_TRADING_ENABLE";
 
 function base64url(value: string) { return Buffer.from(value).toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_"); }
-function signUpbit(query: URLSearchParams) {
-  const accessKey = process.env.UPBIT_ACCESS_KEY;
-  const secretKey = process.env.UPBIT_SECRET_KEY;
+async function signUpbit(query: URLSearchParams) {
+  const saved = await loadUpbitCredentials();
+  const accessKey = process.env.UPBIT_ACCESS_KEY || saved?.accessKey;
+  const secretKey = process.env.UPBIT_SECRET_KEY || saved?.secretKey;
   if (!accessKey || !secretKey) throw new Error("업비트 거래 API 인증 오류: UPBIT_ACCESS_KEY 또는 UPBIT_SECRET_KEY가 서버 환경변수에 없습니다");
   const queryHash = createHash("sha512").update(query.toString()).digest("hex");
   const header = base64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
@@ -18,7 +20,7 @@ function signUpbit(query: URLSearchParams) {
 }
 
 async function upbit(path: string, query: URLSearchParams) {
-  const response = await fetch(`${UPBIT_API}${path}?${query.toString()}`, { headers: { Authorization: signUpbit(query) }, cache: "no-store" });
+  const response = await fetch(`${UPBIT_API}${path}?${query.toString()}`, { headers: { Authorization: await signUpbit(query) }, cache: "no-store" });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`업비트 거래 API 오류 ${response.status}: ${data?.error?.message || "응답을 확인하지 못했습니다"}`);
   return data;

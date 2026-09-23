@@ -13,6 +13,7 @@ import { SourcingManagementPanel } from "./SourcingManagementPanel";
 import { CoinTradingPanel } from "./CoinTradingPanel";
 import { UpbitConnectionPanel } from "./UpbitConnectionPanel";
 import { CoinSimulationPanel } from "./CoinSimulationPanel";
+import { StockTradingPanel } from "./StockTradingPanel";
 
 export function AgentDetailModal({
   agent,
@@ -32,7 +33,7 @@ export function AgentDetailModal({
       onClick={onClose}
     >
       <div
-        className={`flex w-full ${agent.id === "c8" ? "max-w-6xl" : "max-w-lg"} flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-4`}
+        className={`flex w-full ${agent.id === "c8" || agent.id === "t8" ? "max-w-6xl" : "max-w-lg"} flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-4`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b-2 border-zinc-800 pb-2">
@@ -60,6 +61,7 @@ export function AgentDetailModal({
             <UpbitConnectionPanel />
           </div>
         </>}
+        {tool === "stockTrading" && <StockTradingPanel agent={agent} />}
         {platforms.length > 0 && <IntegrationPanel platforms={platforms} />}
         {tool === null && platforms.length === 0 && (
           <p className="text-[11px] text-zinc-600">
