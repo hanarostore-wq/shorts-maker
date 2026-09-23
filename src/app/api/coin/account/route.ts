@@ -1,6 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { loadUpbitCredentials } from "@/lib/coinCredentials";
+import { fetchViaFixedIp } from "@/lib/proxyFetch";
 
 const b64 = (value: string) => Buffer.from(value).toString("base64url");
 async function auth() {
@@ -16,12 +17,12 @@ async function auth() {
 
 export async function GET() {
   try {
-    const response = await fetch("https://api.upbit.com/v1/accounts", { headers: { Authorization: await auth() }, cache: "no-store" });
+    const response = await fetchViaFixedIp("https://api.upbit.com/v1/accounts", { headers: { Authorization: await auth() }, cache: "no-store" });
     const accounts = await response.json();
     if (!response.ok || !Array.isArray(accounts)) throw new Error(`업비트 잔고 API 오류 ${response.status}: ${accounts?.error?.message || "잔고를 받지 못했습니다"}`);
     const assets = accounts.filter((account) => account.currency !== "KRW" && Number(account.balance) + Number(account.locked) > 0);
     const markets = assets.map((account) => `KRW-${account.currency}`).join(",");
-    const tickerResponse = markets ? await fetch(`https://api.upbit.com/v1/ticker?markets=${markets}`, { cache: "no-store" }) : null;
+    const tickerResponse = markets ? await fetchViaFixedIp(`https://api.upbit.com/v1/ticker?markets=${markets}`, { cache: "no-store" }) : null;
     const tickers = tickerResponse ? await tickerResponse.json() : [];
     const priceByMarket = new Map((Array.isArray(tickers) ? tickers : []).map((ticker) => [ticker.market, Number(ticker.trade_price)]));
     const cash = accounts.filter((account) => account.currency === "KRW").reduce((sum, account) => sum + Number(account.balance) + Number(account.locked), 0);

@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { loadUpbitCredentials } from "@/lib/coinCredentials";
 import { saveUpbitDailyReport } from "@/lib/upbitReport";
+import { fetchViaFixedIp } from "@/lib/proxyFetch";
 
 function b64(value: string) { return Buffer.from(value).toString("base64url"); }
 async function auth(query: URLSearchParams) {
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
   if (cronSecret && supplied !== cronSecret) return NextResponse.json({ ok: false, error: "일일 리포트 권한 오류: CRON_SECRET이 일치하지 않습니다" }, { status: 401 });
   try {
     const query = new URLSearchParams({ state: "done", limit: "100" });
-    const response = await fetch(`https://api.upbit.com/v1/orders?${query}`, { headers: { Authorization: await auth(query) }, cache: "no-store" });
+    const response = await fetchViaFixedIp(`https://api.upbit.com/v1/orders?${query}`, { headers: { Authorization: await auth(query) }, cache: "no-store" });
     const orders = await response.json();
     if (!response.ok || !Array.isArray(orders)) return NextResponse.json({ ok: false, error: `업비트 체결내역 API 오류 ${response.status}: ${orders?.error?.message || "체결내역을 받지 못했습니다"}` }, { status: 502 });
     const filled = orders.filter((order) => order.state === "done");

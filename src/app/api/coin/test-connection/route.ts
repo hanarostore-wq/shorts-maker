@@ -2,6 +2,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { markAgentConnected } from "@/lib/store";
 import { saveUpbitCredentials } from "@/lib/coinCredentials";
+import { fetchViaFixedIp } from "@/lib/proxyFetch";
 
 function base64url(value: string) { return Buffer.from(value).toString("base64url"); }
 
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
     const header = base64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
     const payload = base64url(JSON.stringify({ access_key: accessKey, nonce: randomUUID() }));
     const signature = createHmac("sha256", secretKey).update(`${header}.${payload}`).digest("base64url");
-    const response = await fetch("https://api.upbit.com/v1/accounts", { headers: { Authorization: `Bearer ${header}.${payload}.${signature}` }, cache: "no-store" });
+    const response = await fetchViaFixedIp("https://api.upbit.com/v1/accounts", { headers: { Authorization: `Bearer ${header}.${payload}.${signature}` }, cache: "no-store" });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !Array.isArray(data)) return NextResponse.json({ ok: false, stage: "upbit_auth", error: `업비트 API 인증 오류 ${response.status}: ${data?.error?.message || "키 권한 또는 서명을 확인하세요"}` }, { status: 502 });
     await saveUpbitCredentials({ accessKey, secretKey });

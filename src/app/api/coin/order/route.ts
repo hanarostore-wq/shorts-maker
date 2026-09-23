@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { evaluateCoinOrder, type CoinMode, type CoinSide } from "@/lib/coinRisk";
 import { loadUpbitCredentials } from "@/lib/coinCredentials";
+import { fetchViaFixedIp } from "@/lib/proxyFetch";
 
 const UPBIT_API = "https://api.upbit.com";
 const LIVE_CONFIRMATION = "BLACK_LIVE_TRADING_ENABLE";
@@ -20,7 +21,7 @@ async function signUpbit(query: URLSearchParams) {
 }
 
 async function upbit(path: string, query: URLSearchParams) {
-  const response = await fetch(`${UPBIT_API}${path}?${query.toString()}`, { headers: { Authorization: await signUpbit(query) }, cache: "no-store" });
+  const response = await fetchViaFixedIp(`${UPBIT_API}${path}?${query.toString()}`, { headers: { Authorization: await signUpbit(query) }, cache: "no-store" });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`업비트 거래 API 오류 ${response.status}: ${data?.error?.message || "응답을 확인하지 못했습니다"}`);
   return data;

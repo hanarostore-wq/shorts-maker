@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchViaFixedIp } from "@/lib/proxyFetch";
 
 function sma(values: number[], period: number) {
   if (values.length < period) return null;
@@ -27,8 +28,8 @@ export async function GET(request: Request) {
   }
   try {
     const [candleResponse, orderbookResponse] = await Promise.all([
-      fetch(`https://api.upbit.com/v1/candles/minutes/1?market=${market}&count=200`, { cache: "no-store" }),
-      fetch(`https://api.upbit.com/v1/orderbook?markets=${market}`, { cache: "no-store" }),
+      fetchViaFixedIp(`https://api.upbit.com/v1/candles/minutes/1?market=${market}&count=200`, { cache: "no-store" }),
+      fetchViaFixedIp(`https://api.upbit.com/v1/orderbook?markets=${market}`, { cache: "no-store" }),
     ]);
     const data = await candleResponse.json();
     const orderbook = await orderbookResponse.json();
