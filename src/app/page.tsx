@@ -108,7 +108,7 @@ export default function Home() {
           ⚠ 공유저장소 미연결 · Redis 환경변수를 확인하세요
         </div>
       )}
-      <header className="flex flex-col gap-4 border-b-2 border-zinc-700 pb-4">
+      <header className="flex flex-col gap-4 pb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-lg">🏢</span>
@@ -125,14 +125,9 @@ export default function Home() {
             <StatCounter label="오늘 완료" value={state.completedToday} tone="green" />
           </div>
         </div>
-        <p className="text-xs text-zinc-500">
-          {state.departments.length}개 부서 · {allAgents.length}명 직원 실시간 운영 중 ·
-          직원을 클릭하면 연동 상태를 조회할 수 있습니다
-        </p>
       </header>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-bold text-zinc-300">부서 관제 · 전체 층</h2>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {state.departments.map((department) => (
             <DepartmentFloor

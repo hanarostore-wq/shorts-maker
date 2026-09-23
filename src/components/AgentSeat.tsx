@@ -93,7 +93,7 @@ export function AgentSeat({
         </span>
       </div>
       <span className="agent-task-marquee w-full min-w-0 overflow-hidden px-0.5 text-[8px] leading-[10px] text-white" title={agent.task}>
-        <span className="agent-task-marquee-text">{agent.task}</span>
+        <span className="agent-task-marquee-text"><span>{agent.task}</span><span aria-hidden="true">{agent.task}</span></span>
       </span>
     </div>
   );
