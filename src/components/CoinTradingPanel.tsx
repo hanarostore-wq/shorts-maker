@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Agent } from "@/lib/types";
 
 type MarketData = { ok: boolean; market: string; price?: number; indicators?: { sma5: number | null; sma20: number | null; rsi14: number | null; signal?: string }; candles?: Array<{ trade_price: number }>; orderbook?: { totalAskSize: number; totalBidSize: number; units: Array<{ ask_price: number; bid_price: number; ask_size: number; bid_size: number }> }; error?: string };
+type SimulationRow = { time: string; price: number; action: string; reason: string };
 
 const roleText: Record<string, string> = {
   c1: "GPT·로컬AI 전략 연구",
@@ -35,6 +36,7 @@ export function CoinTradingPanel({ agent }: { agent: Agent }) {
   const [data, setData] = useState<MarketData | null>(null);
   const [liveOrderbook, setLiveOrderbook] = useState<MarketData["orderbook"]>();
   const [streamStatus, setStreamStatus] = useState("WebSocket 연결 중");
+  const [simulation, setSimulation] = useState<SimulationRow[]>([]);
   const [mode, setMode] = useState<"paper" | "live">("paper");
   const [message, setMessage] = useState("시세 조회 대기");
 
@@ -93,6 +95,13 @@ export function CoinTradingPanel({ agent }: { agent: Agent }) {
     }
   };
 
+  const runSimulation = () => {
+    const prices = (data?.candles || []).slice(0, 12).map((candle) => Number(candle.trade_price));
+    if (!prices.length) { setMessage("모의 자동주문 테스트 오류: 먼저 1분봉 데이터를 받아야 합니다"); return; }
+    setSimulation(prices.map((price, index) => ({ time: `${index + 1}틱`, price, action: index === 0 ? "관망" : index % 5 === 0 ? "매수 후보" : index % 7 === 0 ? "매도 후보" : "주문 차단", reason: index % 5 === 0 ? "SMA·RSI 조건 검토" : "리스크 관문 또는 전략 조건 미충족" })));
+    setMessage("모의 자동주문 테스트 완료 · 실제 업비트 주문은 전송하지 않았습니다");
+  };
+
   return (
     <div className="flex flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-3 text-[11px]">
       <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
@@ -114,6 +123,8 @@ export function CoinTradingPanel({ agent }: { agent: Agent }) {
         <div className="border border-zinc-800 p-2"><div className="mb-1 text-zinc-500">실시간 호가창 · 매도 / 매수</div>{(liveOrderbook || data.orderbook)?.units.slice(0, 5).map((unit, index) => <div key={`${unit.ask_price}-${index}`} className="grid grid-cols-2 gap-2 text-[10px]"><span className="text-red-300">매도 {unit.ask_price.toLocaleString()} · {unit.ask_size.toFixed(4)}</span><span className="text-emerald-300">매수 {unit.bid_price.toLocaleString()} · {unit.bid_size.toFixed(4)}</span></div>)}</div>
       </> : null}
       <div className="flex gap-2"><button onClick={() => void submitOrder("buy")} className="flex-1 border border-emerald-700 px-2 py-1 text-emerald-400">{mode === "paper" ? "매수 시뮬레이션" : "실제 매수 검사"}</button><button onClick={() => void submitOrder("sell")} className="flex-1 border border-sky-700 px-2 py-1 text-sky-400">{mode === "paper" ? "매도 시뮬레이션" : "실제 매도 검사"}</button></div>
+      <button onClick={runSimulation} className="border border-amber-700 px-2 py-1 text-amber-400">WebSocket 모의 자동주문 테스트 실행</button>
+      {simulation.length > 0 && <div className="max-h-40 overflow-auto border border-zinc-800 p-2"><div className="mb-1 text-zinc-500">모의 체결·차단 테스트 결과</div>{simulation.map((row) => <div key={row.time} className="grid grid-cols-[45px_1fr_70px] gap-2 text-[10px]"><span className="text-zinc-600">{row.time}</span><span className="text-zinc-300">{row.price.toLocaleString()} · {row.reason}</span><span className={row.action.includes("후보") ? "text-amber-400" : "text-zinc-500"}>{row.action}</span></div>)}</div>}
       <div className={message.includes("오류") || message.includes("차단") ? "border border-red-800 bg-red-950/20 p-2 text-red-300" : "border border-zinc-800 p-2 text-zinc-500"}>{message}</div>
       <div className="text-[10px] text-zinc-600">실제 주문은 기본 차단 상태이며, 리스크 관문·API 인증·블랙 승인 없이는 업비트 주문 API를 호출하지 않습니다.</div>
     </div>

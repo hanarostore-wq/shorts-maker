@@ -18,6 +18,12 @@ export interface CoinRiskInput {
   websocketHealthy?: boolean;
   liveEnabled?: boolean;
   liveConfirmation?: string;
+  expectedSlippageBps?: number;
+  maxSlippageBps?: number;
+  networkLatencyMs?: number;
+  maxNetworkLatencyMs?: number;
+  dataAgeMs?: number;
+  maxDataAgeMs?: number;
 }
 
 export interface CoinRiskResult {
@@ -39,6 +45,9 @@ export function evaluateCoinOrder(input: CoinRiskInput): CoinRiskResult {
     noOpenOrder: !input.hasOpenOrder,
     websocket: input.websocketHealthy !== false,
     liveGate: input.mode === "paper" || (input.liveEnabled === true && input.liveConfirmation === "BLACK_LIVE_TRADING_ENABLE"),
+    slippage: (input.expectedSlippageBps ?? 0) <= (input.maxSlippageBps ?? 30),
+    latency: (input.networkLatencyMs ?? 0) <= (input.maxNetworkLatencyMs ?? 1500),
+    freshData: (input.dataAgeMs ?? 0) <= (input.maxDataAgeMs ?? 3000),
   };
   const failed = Object.entries(checks).find(([, passed]) => !passed);
   if (failed) {
@@ -53,6 +62,9 @@ export function evaluateCoinOrder(input: CoinRiskInput): CoinRiskResult {
       noOpenOrder: "미체결 주문이 있어 중복 주문을 차단했습니다",
       websocket: "실시간 시세 연결이 비정상이라 주문을 차단했습니다",
       liveGate: "실거래 활성화 플래그와 블랙 승인 토큰이 없어 실제 주문을 차단했습니다",
+      slippage: "예상 슬리피지가 허용 한도를 초과해 주문을 차단했습니다",
+      latency: "네트워크 지연이 허용 한도를 초과해 주문을 차단했습니다",
+      freshData: "시세 데이터가 오래되어 주문을 차단했습니다",
     };
     return { allowed: false, reasonCode: `COIN_${failed[0].toUpperCase()}_BLOCKED`, message: messages[failed[0]], checks };
   }

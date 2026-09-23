@@ -11,6 +11,7 @@ import { SharedStoragePanel } from "./SharedStoragePanel";
 import { SourcingWorkerPanel } from "./SourcingWorkerPanel";
 import { SourcingManagementPanel } from "./SourcingManagementPanel";
 import { CoinTradingPanel } from "./CoinTradingPanel";
+import { UpbitConnectionPanel } from "./UpbitConnectionPanel";
 
 export function AgentDetailModal({
   agent,
@@ -51,6 +52,7 @@ export function AgentDetailModal({
         {tool === "sourcingWorker" && <SourcingWorkerPanel />}
         {tool === "sourcingManagement" && <SourcingManagementPanel />}
         {tool === "coinTrading" && <CoinTradingPanel agent={agent} />}
+        {agent.id === "c8" && <UpbitConnectionPanel />}
         {platforms.length > 0 && <IntegrationPanel platforms={platforms} />}
         {tool === null && platforms.length === 0 && (
           <p className="text-[11px] text-zinc-600">
