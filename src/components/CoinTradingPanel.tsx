@@ -42,12 +42,15 @@ export function CoinTradingPanel({ agent }: { agent: Agent }) {
     return () => { window.clearTimeout(initial); window.clearInterval(timer); };
   }, [load]);
 
-  const simulate = (side: "매수" | "매도") => {
-    if (mode === "live") {
-      setMessage("실제 주문 차단: 서버의 실거래 활성화와 블랙 승인 토큰이 필요합니다");
-      return;
+  const submitOrder = async (side: "buy" | "sell") => {
+    setMessage(`${mode === "paper" ? "모의" : "실제"} ${side === "buy" ? "매수" : "매도"} 주문 리스크 검사 중...`);
+    try {
+      const response = await fetch("/api/coin/order", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, side, market, price: data?.price || 0, orderKrw: 5000, volume: 0, krwBalance: 100000, coinBalance: 0, dailyPnl: 0, spreadBps: 0, websocketHealthy: Boolean(data?.ok), hasOpenOrder: false }) });
+      const result = await response.json();
+      setMessage(result.ok ? result.message : result.error || "주문 오류: 서버가 상세 오류를 반환하지 않았습니다");
+    } catch (error) {
+      setMessage(`주문 연결 오류: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
     }
-    setMessage(`모의 ${side} 주문 접수: 리스크 관문 통과 후 체결 시뮬레이션`);
   };
 
   return (
@@ -66,7 +69,7 @@ export function CoinTradingPanel({ agent }: { agent: Agent }) {
         <button onClick={() => setMode("live")} className={`border px-2 py-1 ${mode === "live" ? "border-red-500 text-red-400" : "border-zinc-700 text-zinc-500"}`}>실제주문</button>
       </div>
       {data?.ok ? <div className="grid grid-cols-2 gap-2 border border-zinc-800 p-2 text-zinc-300"><div>현재가 {data.price?.toLocaleString()}원</div><div>RSI14 {data.indicators?.rsi14?.toFixed(2) ?? "-"}</div><div>SMA5 {data.indicators?.sma5?.toFixed(2) ?? "-"}</div><div>SMA20 {data.indicators?.sma20?.toFixed(2) ?? "-"}</div></div> : null}
-      <div className="flex gap-2"><button onClick={() => simulate("매수")} className="flex-1 border border-emerald-700 px-2 py-1 text-emerald-400">매수 시뮬레이션</button><button onClick={() => simulate("매도")} className="flex-1 border border-sky-700 px-2 py-1 text-sky-400">매도 시뮬레이션</button></div>
+      <div className="flex gap-2"><button onClick={() => void submitOrder("buy")} className="flex-1 border border-emerald-700 px-2 py-1 text-emerald-400">{mode === "paper" ? "매수 시뮬레이션" : "실제 매수 검사"}</button><button onClick={() => void submitOrder("sell")} className="flex-1 border border-sky-700 px-2 py-1 text-sky-400">{mode === "paper" ? "매도 시뮬레이션" : "실제 매도 검사"}</button></div>
       <div className={message.includes("오류") || message.includes("차단") ? "border border-red-800 bg-red-950/20 p-2 text-red-300" : "border border-zinc-800 p-2 text-zinc-500"}>{message}</div>
       <div className="text-[10px] text-zinc-600">실제 주문은 기본 차단 상태이며, 리스크 관문·API 인증·블랙 승인 없이는 업비트 주문 API를 호출하지 않습니다.</div>
     </div>
