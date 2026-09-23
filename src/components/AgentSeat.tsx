@@ -43,7 +43,7 @@ export function AgentSeat({
     <div
       onClick={onClick}
       title={`${agent.name} · ${agent.task}`}
-      className={`flex h-[76px] flex-col items-center justify-center gap-0.5 overflow-hidden border p-1 ${
+      className={`flex h-[92px] flex-col items-center justify-center gap-0.5 overflow-hidden border p-1 ${
         isAnomaly
           ? "border-rose-600 bg-rose-950/40"
           : "border-zinc-700 bg-zinc-900"
