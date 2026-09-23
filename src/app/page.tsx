@@ -76,8 +76,9 @@ export default function Home() {
   const liveSelectedAgent = selectedAgent
     ? allAgents.find((a) => a.id === selectedAgent.id) ?? selectedAgent
     : null;
+  const completedEntries = state.log.filter((entry) => /완료|성공|정상|조회/.test(entry.message)).filter((entry, index, entries) => entries.findIndex((candidate) => candidate.agentId === entry.agentId && candidate.message === entry.message) === index);
   const statusItems = selectedStatus === "오늘 완료"
-    ? state.log.filter((entry) => /완료|성공|정상/.test(entry.message)).slice(0, 100).map((entry) => ({ title: entry.agentName, detail: entry.message, meta: entry.time }))
+    ? completedEntries.slice(0, 100).map((entry) => ({ title: entry.agentName, detail: entry.message, meta: entry.time }))
     : allAgents.filter((agent) => selectedStatus === "이상발생" ? agent.task.startsWith("⚠") : selectedStatus === "업무중" ? agent.status === "active" : selectedStatus === "대기" ? agent.status === "standby" : selectedStatus === "휴면" ? agent.status === "idle" : agent.status === "offline").map((agent) => ({ title: agent.name, detail: agent.task, meta: agent.status }));
 
   const handleReorder = (departmentId: string, agentIds: string[]) => {
@@ -126,7 +127,7 @@ export default function Home() {
             <StatCounter label="휴면" value={counts.idle} tone="gray" onClick={() => setSelectedStatus("휴면")} />
             <StatCounter label="퇴근" value={counts.offline} tone="gray" onClick={() => setSelectedStatus("퇴근")} />
             <StatCounter label="이상발생" value={counts.anomaly} tone="red" onClick={() => setSelectedStatus("이상발생")} />
-            <StatCounter label="오늘 완료" value={state.completedToday} tone="green" onClick={() => setSelectedStatus("오늘 완료")} />
+            <StatCounter label="오늘 완료" value={completedEntries.length} tone="green" onClick={() => setSelectedStatus("오늘 완료")} />
           </div>
         </div>
       </header>

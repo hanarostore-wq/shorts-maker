@@ -46,6 +46,9 @@ export const departments: Department[] = [
       { id: "c8", name: "업비트파견", task: "업비트 공개 시세·거래 API 연결 대기", status: "offline" },
       { id: "c9", name: "승인관리", task: "실거래 전환 승인 대기", status: "offline" },
       { id: "c10", name: "블랙", task: "코인매매 최종 통제·긴급정지", status: "offline" },
+      { id: "c11", name: "자산관리", task: "현금자산·매매자산 실시간 조회", status: "offline" },
+      { id: "c12", name: "수익실현", task: "보유자산 평가손익 실시간 계산", status: "offline" },
+      { id: "c13", name: "실제매매원", task: "승인된 업비트 실거래 실행", status: "offline" },
     ],
   },
   {
@@ -63,6 +66,9 @@ export const departments: Department[] = [
       { id: "t8", name: "나무플러그파견", task: "나무플러그 시세·주문 API 연결 대기", status: "offline" },
       { id: "t9", name: "승인관리", task: "실거래 전환 승인 대기", status: "offline" },
       { id: "t10", name: "블랙", task: "주식매매 최종 통제·긴급정지", status: "offline" },
+      { id: "t11", name: "자산관리", task: "현금자산·매매자산 실시간 조회", status: "offline" },
+      { id: "t12", name: "수익실현", task: "보유자산 평가손익 실시간 계산", status: "offline" },
+      { id: "t13", name: "실제매매원", task: "승인된 나무플러그 실거래 실행", status: "offline" },
     ],
   },
   {

@@ -243,6 +243,12 @@ export async function reportCompletion(input: {
   agent.task = input.message;
   if (input.incidentKey) delete state.failureByKey[input.incidentKey];
 
+  const duplicateCompletion = state.log.some((item) => item.agentId === agent.id && item.message === input.message && /완료|성공|정상|조회/.test(item.message));
+  if (duplicateCompletion) {
+    await writeState(state);
+    return null;
+  }
+
   const entry: LogEntry = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     time: new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }),
@@ -413,6 +419,11 @@ export async function addSourcedProducts(
     if (agent) {
       agent.status = "active";
       agent.task = `신상품 후보 스캔 - 방금 ${summary}`;
+    }
+    const duplicateSourcing = state.log.some((item) => item.agentId === "s1" && item.message === `확장프로그램으로 상품 ${summary}`);
+    if (duplicateSourcing) {
+      await writeState(state);
+      return { added, updatedCount };
     }
     const logEntry: LogEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,

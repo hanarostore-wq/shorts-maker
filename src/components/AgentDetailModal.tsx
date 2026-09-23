@@ -14,6 +14,8 @@ import { CoinTradingPanel } from "./CoinTradingPanel";
 import { UpbitConnectionPanel } from "./UpbitConnectionPanel";
 import { CoinSimulationPanel } from "./CoinSimulationPanel";
 import { StockTradingPanel } from "./StockTradingPanel";
+import { UpbitReportDashboard } from "./UpbitReportDashboard";
+import { AssetManagementPanel, LiveTradingPanel, ProfitRealizationPanel } from "./TradingAccountPanels";
 
 export function AgentDetailModal({
   agent,
@@ -60,8 +62,12 @@ export function AgentDetailModal({
             <CoinSimulationPanel />
             <UpbitConnectionPanel />
           </div>
+          <UpbitReportDashboard />
         </>}
         {tool === "stockTrading" && <StockTradingPanel agent={agent} />}
+        {tool === "assetManagement" && <AssetManagementPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
+        {tool === "profitRealization" && <ProfitRealizationPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
+        {tool === "liveTrading" && <LiveTradingPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
         {platforms.length > 0 && <IntegrationPanel platforms={platforms} />}
         {tool === null && platforms.length === 0 && (
           <p className="text-[11px] text-zinc-600">
