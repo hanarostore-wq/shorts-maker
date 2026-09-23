@@ -34,6 +34,7 @@ export function CoinTradingPanel({ agent }: { agent: Agent }) {
   const [market, setMarket] = useState("KRW-BTC");
   const [data, setData] = useState<MarketData | null>(null);
   const [liveOrderbook, setLiveOrderbook] = useState<MarketData["orderbook"]>();
+  const [streamStatus, setStreamStatus] = useState("WebSocket 연결 중");
   const [mode, setMode] = useState<"paper" | "live">("paper");
   const [message, setMessage] = useState("시세 조회 대기");
 
@@ -57,11 +58,12 @@ export function CoinTradingPanel({ agent }: { agent: Agent }) {
 
   useEffect(() => {
     const socket = new WebSocket("wss://api.upbit.com/websocket/v1");
-    socket.onopen = () => socket.send(JSON.stringify([{ ticket: "moneyos-realtime" }, { type: "orderbook", codes: [market], format: "DEFAULT" }, { type: "ticker", codes: [market], format: "DEFAULT" }]));
+    socket.onopen = () => { setStreamStatus("실시간 스트림 정상"); socket.send(JSON.stringify([{ ticket: "moneyos-realtime" }, { type: "orderbook", codes: [market], format: "DEFAULT" }, { type: "ticker", codes: [market], format: "DEFAULT" }])); };
     socket.onmessage = async (event) => {
       try {
         const text = typeof event.data === "string" ? event.data : new TextDecoder().decode(await event.data.arrayBuffer());
         const tick = JSON.parse(text);
+        setStreamStatus(`실시간 수신 ${new Date().toLocaleTimeString("ko-KR")}`);
         if (tick.type === "orderbook") {
           setLiveOrderbook({ totalAskSize: tick.total_ask_size, totalBidSize: tick.total_bid_size, units: tick.orderbook_units?.slice(0, 8) || [] });
         } else if (tick.type === "ticker") {
@@ -75,7 +77,8 @@ export function CoinTradingPanel({ agent }: { agent: Agent }) {
         }
       } catch { setMessage("호가창 WebSocket 데이터 해석 오류: 업비트 응답 형식을 확인하세요"); }
     };
-    socket.onerror = () => setMessage("호가창 WebSocket 연결 오류: 공개 실시간 호가 스트림을 연결하지 못했습니다");
+    socket.onerror = () => { setStreamStatus("실시간 스트림 오류"); setMessage("실시간 WebSocket 연결 오류: 업비트 공개 스트림을 연결하지 못했습니다"); };
+    socket.onclose = () => setStreamStatus("실시간 스트림 종료");
     return () => socket.close();
   }, [market]);
 
@@ -94,7 +97,7 @@ export function CoinTradingPanel({ agent }: { agent: Agent }) {
     <div className="flex flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-3 text-[11px]">
       <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
         <span className="font-bold text-zinc-100">업비트 현물 단타 관제</span>
-        <span className={mode === "paper" ? "text-amber-400" : "text-red-400"}>{mode === "paper" ? "모의주문" : "실제주문"}</span>
+        <span className={mode === "paper" ? "text-amber-400" : "text-red-400"}>{mode === "paper" ? "모의주문" : "실제주문"}</span><span className="text-emerald-400">● {streamStatus}</span>
       </div>
       <div className="text-zinc-500">현재 직원 임무: <span className="text-zinc-300">{roleText[agent.id] || agent.task}</span></div>
       <div className="flex gap-2">
