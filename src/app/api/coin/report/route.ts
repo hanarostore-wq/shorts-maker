@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { loadUpbitCredentials } from "@/lib/coinCredentials";
+import { saveUpbitDailyReport } from "@/lib/upbitReport";
 
 function b64(value: string) { return Buffer.from(value).toString("base64url"); }
 async function auth(query: URLSearchParams) {
@@ -26,7 +27,8 @@ export async function GET(request: Request) {
     const filled = orders.filter((order) => order.state === "done");
     const buys = filled.filter((order) => order.side === "bid");
     const sells = filled.filter((order) => order.side === "ask");
-    const report = { date: new Date().toISOString().slice(0, 10), mode: process.env.COIN_LIVE_TRADING_ENABLED === "true" ? "live" : "paper", filledOrders: filled.length, buys: buys.length, sells: sells.length, estimatedVolumeKrw: filled.reduce((sum, order) => sum + Number(order.executed_funds || 0), 0), dailyLossLimitKrw: Number(process.env.COIN_DAILY_LOSS_LIMIT_KRW || 20000), maxPositionKrw: Number(process.env.COIN_MAX_POSITION_KRW || 50000), liveTradingEnabled: process.env.COIN_LIVE_TRADING_ENABLED === "true" };
+    const report = { date: new Date().toISOString().slice(0, 10), generatedAt: new Date().toISOString(), mode: process.env.COIN_LIVE_TRADING_ENABLED === "true" ? "live" as const : "paper" as const, filledOrders: filled.length, buys: buys.length, sells: sells.length, estimatedVolumeKrw: filled.reduce((sum, order) => sum + Number(order.executed_funds || 0), 0), dailyLossLimitKrw: Number(process.env.COIN_DAILY_LOSS_LIMIT_KRW || 20000), maxPositionKrw: Number(process.env.COIN_MAX_POSITION_KRW || 50000), liveTradingEnabled: process.env.COIN_LIVE_TRADING_ENABLED === "true" };
+    await saveUpbitDailyReport(report);
     return NextResponse.json({ ok: true, report, message: "업비트 일일 리스크·거래성과 리포트를 생성했습니다" });
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "일일 리포트 생성 중 알 수 없는 오류" }, { status: 502 });
