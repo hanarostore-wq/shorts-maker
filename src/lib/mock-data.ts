@@ -32,6 +32,23 @@ export const departments: Department[] = [
     ],
   },
   {
+    id: "coin",
+    name: "코인매매부서",
+    icon: "₿",
+    agents: [
+      { id: "c1", name: "전략연구AI", task: "GPT·로컬AI 현물 단타 전략 연구 대기", status: "offline" },
+      { id: "c2", name: "JEV판단원", task: "업비트 실시간 현물 신호 판단 대기", status: "offline" },
+      { id: "c3", name: "Python계산원", task: "지표·수수료·손익 계산 대기", status: "offline" },
+      { id: "c4", name: "호가감시원", task: "업비트 호가·스프레드 감시 대기", status: "offline" },
+      { id: "c5", name: "포지션관리원", task: "현물 보유·미체결 주문 관리 대기", status: "offline" },
+      { id: "c6", name: "리스크관리원", task: "현물 단타 주문 차단 규칙 대기", status: "offline" },
+      { id: "c7", name: "모의매매원", task: "실제 주문 없는 체결 시뮬레이션 대기", status: "offline" },
+      { id: "c8", name: "업비트파견", task: "업비트 공개 시세·거래 API 연결 대기", status: "offline" },
+      { id: "c9", name: "승인관리", task: "실거래 전환 승인 대기", status: "offline" },
+      { id: "c10", name: "블랙", task: "코인매매 최종 통제·긴급정지", status: "offline" },
+    ],
+  },
+  {
     id: "shorts",
     name: "쇼츠부서",
     icon: "🎬",
@@ -62,4 +79,5 @@ export const projects: Project[] = [
   { id: "p2", name: "쿠팡 자동화", departmentId: "store", agentCount: 4, leadAgent: "가격감시자" },
   { id: "p3", name: "쇼츠 팩토리", departmentId: "shorts", agentCount: 6, leadAgent: "영상감독" },
   { id: "p4", name: "블로그 팩토리", departmentId: "blog", agentCount: 4, leadAgent: "글쓰기작가" },
+  { id: "p5", name: "업비트 현물 단타", departmentId: "coin", agentCount: 10, leadAgent: "JEV판단원" },
 ];

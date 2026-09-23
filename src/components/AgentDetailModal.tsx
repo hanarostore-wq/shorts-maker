@@ -10,6 +10,7 @@ import { PolicyPanel } from "./PolicyPanel";
 import { SharedStoragePanel } from "./SharedStoragePanel";
 import { SourcingWorkerPanel } from "./SourcingWorkerPanel";
 import { SourcingManagementPanel } from "./SourcingManagementPanel";
+import { CoinTradingPanel } from "./CoinTradingPanel";
 
 export function AgentDetailModal({
   agent,
@@ -49,6 +50,7 @@ export function AgentDetailModal({
         {tool === "storage" && <SharedStoragePanel />}
         {tool === "sourcingWorker" && <SourcingWorkerPanel />}
         {tool === "sourcingManagement" && <SourcingManagementPanel />}
+        {tool === "coinTrading" && <CoinTradingPanel agent={agent} />}
         {platforms.length > 0 && <IntegrationPanel platforms={platforms} />}
         {tool === null && platforms.length === 0 && (
           <p className="text-[11px] text-zinc-600">
