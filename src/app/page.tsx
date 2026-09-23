@@ -20,6 +20,7 @@ interface State {
 export default function Home() {
   const [state, setState] = useState<State | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,6 +76,9 @@ export default function Home() {
   const liveSelectedAgent = selectedAgent
     ? allAgents.find((a) => a.id === selectedAgent.id) ?? selectedAgent
     : null;
+  const statusItems = selectedStatus === "오늘 완료"
+    ? state.log.filter((entry) => /완료|성공|정상/.test(entry.message)).slice(0, 100).map((entry) => ({ title: entry.agentName, detail: entry.message, meta: entry.time }))
+    : allAgents.filter((agent) => selectedStatus === "이상발생" ? agent.task.startsWith("⚠") : selectedStatus === "업무중" ? agent.status === "active" : selectedStatus === "대기" ? agent.status === "standby" : selectedStatus === "휴면" ? agent.status === "idle" : agent.status === "offline").map((agent) => ({ title: agent.name, detail: agent.task, meta: agent.status }));
 
   const handleReorder = (departmentId: string, agentIds: string[]) => {
     // 화면엔 바로 반영하고, 저장은 뒤에서 조용히 진행한다.
@@ -101,7 +105,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-1 flex-col gap-6 bg-black px-4 py-6 font-mono sm:px-8">
+    <div className="flex flex-1 flex-col gap-3 bg-black px-4 py-6 font-mono sm:px-8">
       <AutoSync />
       {state.sharedStorageConfigured === false && (
         <div className="border border-red-700 bg-red-950/30 px-3 py-2 text-xs text-red-300">
@@ -116,19 +120,19 @@ export default function Home() {
               운영본부 관제실
             </h1>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <StatCounter label="업무중" value={counts.active} tone="green" />
-            <StatCounter label="대기" value={counts.standby} tone="blue" />
-            <StatCounter label="휴면" value={counts.idle} tone="gray" />
-            <StatCounter label="퇴근" value={counts.offline} tone="gray" />
-            <StatCounter label="이상발생" value={counts.anomaly} tone="red" />
-            <StatCounter label="오늘 완료" value={state.completedToday} tone="green" />
+          <div className="flex flex-wrap items-center gap-3">
+            <StatCounter label="업무중" value={counts.active} tone="green" onClick={() => setSelectedStatus("업무중")} />
+            <StatCounter label="대기" value={counts.standby} tone="blue" onClick={() => setSelectedStatus("대기")} />
+            <StatCounter label="휴면" value={counts.idle} tone="gray" onClick={() => setSelectedStatus("휴면")} />
+            <StatCounter label="퇴근" value={counts.offline} tone="gray" onClick={() => setSelectedStatus("퇴근")} />
+            <StatCounter label="이상발생" value={counts.anomaly} tone="red" onClick={() => setSelectedStatus("이상발생")} />
+            <StatCounter label="오늘 완료" value={state.completedToday} tone="green" onClick={() => setSelectedStatus("오늘 완료")} />
           </div>
         </div>
       </header>
 
       <section className="flex flex-col gap-3">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
           {state.departments.map((department) => (
             <DepartmentFloor
               key={department.id}
@@ -150,6 +154,14 @@ export default function Home() {
           departments={state.departments}
           onClose={() => setSelectedAgent(null)}
         />
+      )}
+      {selectedStatus && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 font-mono" onClick={() => setSelectedStatus(null)}>
+          <div className="flex max-h-[70vh] w-full max-w-xl flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-4" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b-2 border-zinc-800 pb-2"><span className="text-sm font-bold text-zinc-100">{selectedStatus} 목록</span><button type="button" onClick={() => setSelectedStatus(null)} className="text-xs text-zinc-500">✕ 닫기</button></div>
+            <div className="overflow-y-auto">{statusItems.length ? statusItems.map((item, index) => <div key={`${item.title}-${index}`} className="grid grid-cols-[120px_1fr_90px] gap-2 border-b border-zinc-900 py-2 text-[11px]"><span className="font-bold text-zinc-200">{item.title}</span><span className="text-zinc-400">{item.detail}</span><span className="text-right text-zinc-600">{item.meta}</span></div>) : <div className="py-8 text-center text-zinc-600">표시할 항목이 없습니다</div>}</div>
+          </div>
+        </div>
       )}
     </div>
   );
