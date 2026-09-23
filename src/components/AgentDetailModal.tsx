@@ -10,12 +10,9 @@ import { PolicyPanel } from "./PolicyPanel";
 import { SharedStoragePanel } from "./SharedStoragePanel";
 import { SourcingWorkerPanel } from "./SourcingWorkerPanel";
 import { SourcingManagementPanel } from "./SourcingManagementPanel";
-import { CoinTradingPanel } from "./CoinTradingPanel";
-import { UpbitConnectionPanel } from "./UpbitConnectionPanel";
-import { CoinSimulationPanel } from "./CoinSimulationPanel";
-import { StockTradingPanel } from "./StockTradingPanel";
 import { UpbitReportDashboard } from "./UpbitReportDashboard";
 import { AssetManagementPanel, LiveTradingPanel, ProfitRealizationPanel } from "./TradingAccountPanels";
+import { TradingRolePanel } from "./TradingRolePanel";
 
 export function AgentDetailModal({
   agent,
@@ -35,7 +32,7 @@ export function AgentDetailModal({
       onClick={onClose}
     >
       <div
-        className={`flex w-full ${agent.id === "c8" || agent.id === "t8" ? "max-w-6xl" : "max-w-lg"} flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-4`}
+        className={`flex w-full ${agent.id === "c7" || agent.id === "t7" ? "max-w-3xl" : "max-w-lg"} flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-4`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b-2 border-zinc-800 pb-2">
@@ -55,16 +52,9 @@ export function AgentDetailModal({
         {tool === "storage" && <SharedStoragePanel />}
         {tool === "sourcingWorker" && <SourcingWorkerPanel />}
         {tool === "sourcingManagement" && <SourcingManagementPanel />}
-        {tool === "coinTrading" && agent.id !== "c8" && <CoinTradingPanel agent={agent} />}
-        {agent.id === "c8" && <>
-          <CoinTradingPanel agent={agent} showSimulation={false} />
-          <div className="grid grid-cols-2 gap-3">
-            <CoinSimulationPanel />
-            <UpbitConnectionPanel />
-          </div>
-          <UpbitReportDashboard />
-        </>}
-        {tool === "stockTrading" && <StockTradingPanel agent={agent} />}
+        {tool === "coinTrading" && <TradingRolePanel kind="coin" agent={agent} />}
+        {agent.id === "c8" && <UpbitReportDashboard />}
+        {tool === "stockTrading" && <TradingRolePanel kind="stock" agent={agent} />}
         {tool === "assetManagement" && <AssetManagementPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
         {tool === "profitRealization" && <ProfitRealizationPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
         {tool === "liveTrading" && <LiveTradingPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
