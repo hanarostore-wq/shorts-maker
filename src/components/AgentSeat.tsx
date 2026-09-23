@@ -43,7 +43,7 @@ export function AgentSeat({
     <div
       onClick={onClick}
       title={`${agent.name} · ${agent.task}`}
-      className={`flex h-[62px] flex-col items-center justify-center gap-0.5 border p-1 ${
+      className={`flex h-[62px] flex-col items-center justify-center gap-0.5 overflow-hidden border p-1 ${
         isAnomaly
           ? "border-rose-600 bg-rose-950/40"
           : "border-zinc-700 bg-zinc-900"
@@ -92,6 +92,9 @@ export function AgentSeat({
           {isAnomaly ? "이상발생" : labelByStatus[agent.status]}
         </span>
       </div>
+      <span className="w-full min-w-0 truncate px-0.5 text-center text-[7px] leading-none text-zinc-500" title={agent.task}>
+        {agent.task}
+      </span>
     </div>
   );
 }

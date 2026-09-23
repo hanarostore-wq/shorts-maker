@@ -4,6 +4,8 @@ import { useEffect } from "react";
 
 const SYNC_INTERVAL_MS = 60_000;
 const LAST_DEPLOYMENT_KEY = "shorts-maker:last-deployment-uid";
+const LAST_PLATFORM_SYNC_PREFIX = "shorts-maker:last-platform-sync:";
+const PLATFORM_INTERVALS: Record<string, number> = { naver: 5 * 60 * 60 * 1000, coupang: 60 * 60 * 1000, vercel: 60 * 1000 };
 
 export function AutoSync() {
   useEffect(() => {
@@ -11,12 +13,16 @@ export function AutoSync() {
     let timer: ReturnType<typeof setInterval> | null = null;
 
     const syncPlatform = async (platform: string) => {
+      const interval = PLATFORM_INTERVALS[platform] ?? SYNC_INTERVAL_MS;
+      const lastSync = Number(localStorage.getItem(`${LAST_PLATFORM_SYNC_PREFIX}${platform}`) || 0);
+      if (Date.now() - lastSync < interval) return;
       const res = await fetch("/api/integrations/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ platform }),
       }).catch(() => null);
       if (!res || !res.ok) return;
+      localStorage.setItem(`${LAST_PLATFORM_SYNC_PREFIX}${platform}`, String(Date.now()));
 
       if (platform === "vercel") {
         const data = await res.json().catch(() => null);

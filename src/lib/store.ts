@@ -213,6 +213,18 @@ export async function getState(): Promise<State> {
   return state;
 }
 
+export async function markAgentConnected(agentId: string, message: string): Promise<void> {
+  const state = await readState();
+  for (const department of state.departments) {
+    const agent = department.agents.find((item) => item.id === agentId);
+    if (!agent) continue;
+    agent.status = "active";
+    agent.task = message;
+    await writeState(state);
+    return;
+  }
+}
+
 export async function reportCompletion(input: {
   departmentId: string;
   agentId: string;

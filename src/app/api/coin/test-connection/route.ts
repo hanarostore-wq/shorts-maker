@@ -1,5 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { markAgentConnected } from "@/lib/store";
 
 function base64url(value: string) { return Buffer.from(value).toString("base64url"); }
 
@@ -15,7 +16,8 @@ export async function POST(request: Request) {
     const response = await fetch("https://api.upbit.com/v1/accounts", { headers: { Authorization: `Bearer ${header}.${payload}.${signature}` }, cache: "no-store" });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !Array.isArray(data)) return NextResponse.json({ ok: false, stage: "upbit_auth", error: `업비트 API 인증 오류 ${response.status}: ${data?.error?.message || "키 권한 또는 서명을 확인하세요"}` }, { status: 502 });
-    return NextResponse.json({ ok: true, stage: "upbit_auth", message: "업비트 API 연결 정상 · 잔고 조회 성공", accountCount: data.length, currencies: data.map((account) => account.currency).slice(0, 20), persisted: false });
+    await markAgentConnected("c8", "업비트 API 연결 정상 · 잔고 조회 완료");
+    return NextResponse.json({ ok: true, stage: "upbit_auth", message: "업비트 API 연결 정상 · 잔고 조회 성공", accountCount: data.length, currencies: data.map((account) => account.currency).slice(0, 20), credentialsPersisted: false, statusPersisted: true });
   } catch (error) {
     return NextResponse.json({ ok: false, stage: "network", error: `업비트 API 연결 네트워크 오류: ${error instanceof Error ? error.message : "알 수 없는 오류"}` }, { status: 502 });
   }
