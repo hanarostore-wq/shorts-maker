@@ -16,7 +16,10 @@ export function UpbitConnectionPanel() {
       const response = await fetch("/api/coin/test-connection", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accessKey, secretKey }) });
       const result = await response.json();
       setSaved(Boolean(result.credentialsPersisted));
-      setMessage(result.ok ? `${result.message} · 통화 ${result.accountCount}개` : `[${result.code || "UPBIT_CONNECTION_UNKNOWN"}] ${result.error || "업비트 연결 오류: 상세 오류가 없습니다"}`);
+      const code = result.code || "UPBIT_CONNECTION_UNKNOWN";
+      const detail = String(result.error || "업비트 연결 오류: 상세 오류가 없습니다");
+      const cleanDetail = detail.replace(new RegExp(`^\\[?${code}\\]?[: ]*`), "").trim();
+      setMessage(result.ok ? `${result.message} · 통화 ${result.accountCount}개` : `[${code}] ${cleanDetail}`);
     } catch (error) {
       setMessage(`업비트 연결 요청 오류: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
     } finally { setBusy(false); }
