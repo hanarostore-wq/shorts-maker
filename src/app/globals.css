@@ -41,19 +41,6 @@ body {
   50% { transform: translateY(-1px); }
 }
 
-@keyframes agent-task-marquee {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-
-.agent-task-marquee-text {
-  display: flex;
-  width: max-content;
-  gap: 2rem;
-  white-space: nowrap;
-  animation: agent-task-marquee 8s linear infinite;
-}
-
 .agent-avatar-active {
   animation: agent-type 0.5s ease-in-out infinite;
 }

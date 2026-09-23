@@ -92,8 +92,8 @@ export function AgentSeat({
           {isAnomaly ? "이상발생" : labelByStatus[agent.status]}
         </span>
       </div>
-      <span className="agent-task-marquee w-full min-w-0 overflow-hidden px-0.5 text-[8px] leading-[10px] text-white" title={agent.task}>
-        <span className="agent-task-marquee-text"><span>{agent.task}</span><span aria-hidden="true">{agent.task}</span></span>
+      <span className="line-clamp-2 w-full min-w-0 break-words px-0.5 text-center text-[8px] leading-[10px] text-white" title={agent.task}>
+        {agent.task}
       </span>
     </div>
   );
