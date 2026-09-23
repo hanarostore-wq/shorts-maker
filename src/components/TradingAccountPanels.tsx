@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { TraderWorkspace } from "./TraderWorkspace";
 
 type Account = { ok: boolean; liveTradingEnabled?: boolean; cash?: number; tradingValue?: number; totalValue?: number; pnl?: number; updatedAt?: string; error?: string };
 const won = (value: number) => `${Math.round(value).toLocaleString("ko-KR")}원`;
@@ -33,4 +34,7 @@ export function ProfitRealizationPanel({ asset }: { asset: "coin" | "stock" }) {
   return <div className="flex flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-3 text-[11px]"><div className="flex items-center justify-between border-b border-zinc-800 pb-2"><b className="text-zinc-100">수익실현</b><span className={value >= 0 ? "text-emerald-400" : "text-red-400"}>{value >= 0 ? "+" : "-"}{won(Math.abs(value))}</span></div><div className="border border-zinc-800 p-4 text-center"><div className="mb-2 text-zinc-500">{label}</div><div className={`text-2xl font-bold ${value >= 0 ? "text-emerald-400" : "text-red-400"}`}>{value >= 0 ? "+" : "-"}{won(Math.abs(value))}</div><div className="mt-2 text-[10px] text-zinc-600">전체 보유량을 현재 가격과 매수가로 비교한 금액</div></div><div className={message.includes("오류") ? "border border-red-800 bg-red-950/20 p-2 text-red-300" : "border border-zinc-800 p-2 text-zinc-500"}>{message}</div></div>;
 }
 
-export function LiveTradingPanel({ asset }: { asset: "coin" | "stock" }) { return <div className="flex flex-col gap-3 border-2 border-red-900 bg-zinc-950 p-3 text-[11px]"><b className="text-red-400">실제매매원</b><div className="border border-red-950 bg-red-950/20 p-3 text-red-300">실제 주문은 승인관리·리스크관리·블랙 3단계 승인 전까지 차단됩니다.</div><div className="text-zinc-500">{asset === "coin" ? "업비트 주문 API" : "나무플러그 주문 API"} 연결 상태와 주문 명세 확인이 필요합니다.</div></div>; }
+export function LiveTradingPanel({ asset }: { asset: "coin" | "stock" }) {
+  if (asset === "coin") return <TraderWorkspace mode="live" />;
+  return <div className="flex flex-col gap-3 border-2 border-red-900 bg-zinc-950 p-3 text-[11px]"><b className="text-red-400">실제매매원</b><div className="border border-red-950 bg-red-950/20 p-3 text-red-300">실제 주문은 승인관리·리스크관리·블랙 3단계 승인 전까지 차단됩니다.</div><div className="text-zinc-500">나무플러그 주문 API 연결 상태와 주문 명세 확인이 필요합니다.</div></div>;
+}
