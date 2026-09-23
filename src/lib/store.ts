@@ -73,8 +73,15 @@ function defaultState(): State {
 // 실제 연동이 없는 직원에게 예전에 잘못 찍혔던 "이상발생" 표시가
 // 영원히 남아있지 않도록, 매번 상태를 읽을 때 원래 모습으로 되돌린다.
 function healState(state: State): State {
+  if (!Array.isArray(state.departments)) state.departments = structuredClone(initialDepartments);
   if (!state.sourcedProducts) state.sourcedProducts = [];
   if (!state.failureByKey) state.failureByKey = {};
+  const existingDepartmentIds = new Set(state.departments.map((department) => department.id));
+  for (const freshDepartment of initialDepartments) {
+    if (!existingDepartmentIds.has(freshDepartment.id)) {
+      state.departments.push(structuredClone(freshDepartment));
+    }
+  }
   for (const department of state.departments) {
     const fresh = initialDepartments.find((d) => d.id === department.id);
     if (!fresh) continue;

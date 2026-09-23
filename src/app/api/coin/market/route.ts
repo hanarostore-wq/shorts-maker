@@ -15,20 +15,41 @@ function rsi(values: number[], period = 14) {
   return 100 - 100 / (1 + gains / losses);
 }
 
+function smaAt(values: number[], period: number, end: number) {
+  if (end < period) return null;
+  return values.slice(end - period, end).reduce((sum, value) => sum + value, 0) / period;
+}
+
 export async function GET(request: Request) {
   const market = new URL(request.url).searchParams.get("market") || "KRW-BTC";
   if (!/^KRW-[A-Z0-9-]+$/.test(market)) {
     return NextResponse.json({ ok: false, error: "시세 조회 오류: KRW 마켓 코드만 허용됩니다" }, { status: 400 });
   }
   try {
-    const response = await fetch(`https://api.upbit.com/v1/candles/minutes/1?market=${market}&count=200`, { cache: "no-store" });
-    const data = await response.json();
-    if (!response.ok || !Array.isArray(data)) {
-      return NextResponse.json({ ok: false, error: `업비트 공개 시세 API 오류 ${response.status}: ${data?.error?.message || "캔들 데이터를 받지 못했습니다"}` }, { status: 502 });
+    const [candleResponse, orderbookResponse] = await Promise.all([
+      fetch(`https://api.upbit.com/v1/candles/minutes/1?market=${market}&count=200`, { cache: "no-store" }),
+      fetch(`https://api.upbit.com/v1/orderbook?markets=${market}`, { cache: "no-store" }),
+    ]);
+    const data = await candleResponse.json();
+    const orderbook = await orderbookResponse.json();
+    if (!candleResponse.ok || !Array.isArray(data)) {
+      return NextResponse.json({ ok: false, error: `업비트 1분봉 API 오류 ${candleResponse.status}: ${data?.error?.message || "캔들 데이터를 받지 못했습니다"}` }, { status: 502 });
+    }
+    if (!orderbookResponse.ok || !Array.isArray(orderbook) || !orderbook[0]) {
+      return NextResponse.json({ ok: false, error: `업비트 호가창 API 오류 ${orderbookResponse.status}: ${orderbook?.error?.message || "호가 데이터를 받지 못했습니다"}` }, { status: 502 });
     }
     const closes = data.map((candle) => Number(candle.trade_price)).reverse();
     const last = closes.at(-1) ?? null;
-    return NextResponse.json({ ok: true, market, candleCount: closes.length, price: last, indicators: { sma5: sma(closes, 5), sma20: sma(closes, 20), rsi14: rsi(closes) }, candles: data.slice(0, 60) });
+    const sma5 = sma(closes, 5);
+    const sma20 = sma(closes, 20);
+    const previousSma5 = smaAt(closes, 5, closes.length - 1);
+    const previousSma20 = smaAt(closes, 20, closes.length - 1);
+    const signal = previousSma5 !== null && previousSma5 <= (previousSma20 ?? Infinity) && (sma5 ?? 0) > (sma20 ?? Infinity)
+      ? "golden_cross"
+      : previousSma5 !== null && previousSma5 >= (previousSma20 ?? -Infinity) && (sma5 ?? 0) < (sma20 ?? -Infinity)
+        ? "dead_cross"
+        : "neutral";
+    return NextResponse.json({ ok: true, market, candleCount: closes.length, price: last, indicators: { sma5, sma20, previousSma5, previousSma20, rsi14: rsi(closes), signal }, candles: data.slice(0, 60), orderbook: { totalAskSize: orderbook[0].total_ask_size, totalBidSize: orderbook[0].total_bid_size, units: orderbook[0].orderbook_units?.slice(0, 8) || [] } });
   } catch (error) {
     return NextResponse.json({ ok: false, error: `업비트 공개 시세 연결 오류: ${error instanceof Error ? error.message : "알 수 없는 네트워크 오류"}` }, { status: 502 });
   }

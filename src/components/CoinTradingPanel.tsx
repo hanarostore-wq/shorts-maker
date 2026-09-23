@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Agent } from "@/lib/types";
 
-type MarketData = { ok: boolean; market: string; price?: number; indicators?: { sma5: number | null; sma20: number | null; rsi14: number | null }; error?: string };
+type MarketData = { ok: boolean; market: string; price?: number; indicators?: { sma5: number | null; sma20: number | null; rsi14: number | null; signal?: string }; candles?: Array<{ trade_price: number }>; orderbook?: { totalAskSize: number; totalBidSize: number; units: Array<{ ask_price: number; bid_price: number; ask_size: number; bid_size: number }> }; error?: string };
 
 const roleText: Record<string, string> = {
   c1: "GPT·로컬AI 전략 연구",
@@ -68,7 +68,11 @@ export function CoinTradingPanel({ agent }: { agent: Agent }) {
         <button onClick={() => setMode("paper")} className={`border px-2 py-1 ${mode === "paper" ? "border-amber-500 text-amber-400" : "border-zinc-700 text-zinc-500"}`}>모의주문</button>
         <button onClick={() => setMode("live")} className={`border px-2 py-1 ${mode === "live" ? "border-red-500 text-red-400" : "border-zinc-700 text-zinc-500"}`}>실제주문</button>
       </div>
-      {data?.ok ? <div className="grid grid-cols-2 gap-2 border border-zinc-800 p-2 text-zinc-300"><div>현재가 {data.price?.toLocaleString()}원</div><div>RSI14 {data.indicators?.rsi14?.toFixed(2) ?? "-"}</div><div>SMA5 {data.indicators?.sma5?.toFixed(2) ?? "-"}</div><div>SMA20 {data.indicators?.sma20?.toFixed(2) ?? "-"}</div></div> : null}
+      {data?.ok ? <>
+        <div className="grid grid-cols-2 gap-2 border border-zinc-800 p-2 text-zinc-300"><div>현재가 {data.price?.toLocaleString()}원</div><div>RSI14 {data.indicators?.rsi14?.toFixed(2) ?? "-"}</div><div>SMA5 {data.indicators?.sma5?.toFixed(2) ?? "-"}</div><div>SMA20 {data.indicators?.sma20?.toFixed(2) ?? "-"}</div><div className={data.indicators?.signal === "golden_cross" ? "text-emerald-400" : data.indicators?.signal === "dead_cross" ? "text-red-400" : "text-zinc-500"}>{data.indicators?.signal === "golden_cross" ? "골든크로스" : data.indicators?.signal === "dead_cross" ? "데드크로스" : "교차 없음"}</div></div>
+        <div className="border border-zinc-800 p-2"><div className="mb-1 text-zinc-500">1분봉 차트 · 종가</div><svg viewBox="0 0 300 80" className="h-20 w-full" preserveAspectRatio="none"><polyline fill="none" stroke="#10b981" strokeWidth="1.5" points={(data.candles || []).slice().reverse().map((candle, index, values) => `${(index / Math.max(values.length - 1, 1)) * 300},${80 - ((Number(candle.trade_price) - Math.min(...values.map((v) => Number(v.trade_price)))) / Math.max(Math.max(...values.map((v) => Number(v.trade_price))) - Math.min(...values.map((v) => Number(v.trade_price))), 1)) * 70}`).join(" ")} /></svg></div>
+        <div className="border border-zinc-800 p-2"><div className="mb-1 text-zinc-500">실시간 호가창 · 매도 / 매수</div>{data.orderbook?.units.slice(0, 5).map((unit, index) => <div key={`${unit.ask_price}-${index}`} className="grid grid-cols-2 gap-2 text-[10px]"><span className="text-red-300">매도 {unit.ask_price.toLocaleString()} · {unit.ask_size.toFixed(4)}</span><span className="text-emerald-300">매수 {unit.bid_price.toLocaleString()} · {unit.bid_size.toFixed(4)}</span></div>)}</div>
+      </> : null}
       <div className="flex gap-2"><button onClick={() => void submitOrder("buy")} className="flex-1 border border-emerald-700 px-2 py-1 text-emerald-400">{mode === "paper" ? "매수 시뮬레이션" : "실제 매수 검사"}</button><button onClick={() => void submitOrder("sell")} className="flex-1 border border-sky-700 px-2 py-1 text-sky-400">{mode === "paper" ? "매도 시뮬레이션" : "실제 매도 검사"}</button></div>
       <div className={message.includes("오류") || message.includes("차단") ? "border border-red-800 bg-red-950/20 p-2 text-red-300" : "border border-zinc-800 p-2 text-zinc-500"}>{message}</div>
       <div className="text-[10px] text-zinc-600">실제 주문은 기본 차단 상태이며, 리스크 관문·API 인증·블랙 승인 없이는 업비트 주문 API를 호출하지 않습니다.</div>
