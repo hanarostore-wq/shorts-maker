@@ -6,6 +6,7 @@ import { fetchViaFixedIp } from "@/lib/proxyFetch";
 
 const UPBIT_API = "https://api.upbit.com";
 const LIVE_CONFIRMATION = "BLACK_LIVE_TRADING_ENABLE";
+const SMP_TYPES = new Set(["cancel_taker", "cancel_maker", "reduce"]);
 
 function base64url(value: string) { return Buffer.from(value).toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_"); }
 async function signUpbit(query: URLSearchParams) {
@@ -41,7 +42,9 @@ export async function POST(request: Request) {
     if (!risk.allowed) return NextResponse.json({ ok: false, stage: "risk_gate", error: `주문 차단 [${risk.reasonCode}]: ${risk.message}`, checks: risk.checks }, { status: 409 });
     if (mode === "paper") return NextResponse.json({ ok: true, mode, stage: "paper_execution", order: { id: `paper-${randomUUID()}`, market, side, orderKrw, volume, price, status: "simulated" }, message: "모의 현물 주문을 체결 시뮬레이션했습니다" });
     if (body.liveConfirmation !== LIVE_CONFIRMATION) return NextResponse.json({ ok: false, stage: "live_gate", error: `실거래 차단 [COIN_LIVE_CONFIRMATION_REQUIRED]: ${LIVE_CONFIRMATION} 승인 토큰이 필요합니다` }, { status: 403 });
-    const query = new URLSearchParams({ market, side: side === "buy" ? "bid" : "ask", ord_type: side === "buy" ? "price" : "market", identifier: `moneyos-${randomUUID()}` });
+    const smpType = String(body.smpType || process.env.UPBIT_SMP_TYPE || "cancel_taker");
+    if (!SMP_TYPES.has(smpType)) return NextResponse.json({ ok: false, stage: "order_input", code: "UPBIT_SMP_TYPE_INVALID", error: `업비트 주문 차단 [UPBIT_SMP_TYPE_INVALID]: smp_type은 cancel_taker, cancel_maker, reduce 중 하나여야 합니다` }, { status: 400 });
+    const query = new URLSearchParams({ market, side: side === "buy" ? "bid" : "ask", ord_type: side === "buy" ? "price" : "market", identifier: `moneyos-${randomUUID()}`, smp_type: smpType });
     if (side === "buy") query.set("price", String(orderKrw)); else query.set("volume", String(volume));
     const order = await upbit("/v1/orders", query);
     return NextResponse.json({ ok: true, mode, stage: "live_execution", order, message: "업비트 현물 주문을 전송했습니다" });
