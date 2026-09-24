@@ -1,3 +1,7 @@
+# MAIN 공통 규칙 진입점
+
+작업 시작 시 [중앙 AGENTS](../AGENTS.md)를 먼저 읽고 필수 읽기 순서를 따릅니다. 현재 로컬 원본은 C:/Users/Administrator/Desktop/Main/AGENTS.md, 원격 기준은 hanarostore-wq/obsidian-main/main/AGENTS.md입니다. 중앙 체크아웃에 접근하지 못하면 그 이유와 필요한 최신 인계를 기록합니다. 아래 프로젝트 규칙도 함께 지킵니다. 공통 규칙 전문은 복제하지 않습니다.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
