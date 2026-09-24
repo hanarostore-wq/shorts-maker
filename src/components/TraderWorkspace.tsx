@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { runLoopTick, newLoopState, type LoopState } from "@/lib/jevLoopEngine";
 
 type Candle = { trade_price: number; opening_price?: number; high_price?: number; low_price?: number; candle_acc_trade_volume?: number; candle_date_time_kst?: string };
@@ -38,9 +38,25 @@ export function TraderWorkspace({ mode }: { mode: "paper" | "live" }) {
   const [status, setStatus] = useState("실시간 연결 준비"); const [hovered, setHovered] = useState<Candle | null>(null); const [loop, setLoop] = useState<LoopState>(() => newLoopState()); const [notice, setNotice] = useState("모의매매는 실시간 업비트 데이터에 맞춰 지정가 체결을 시뮬레이션합니다");
 
   const load = async (code = market) => { try { const r = await fetch(`/api/coin/market?market=${code}`, { cache: "no-store" }); const p = await r.json() as Payload; if (!p.ok) throw new Error(p.error || "[MARKET_DATA_ERROR] 업비트 캔들·호가 응답이 비어 있습니다"); setData(p); } catch (e) { setNotice(e instanceof Error ? e.message : "[MARKET_DATA_ERROR] 업비트 시세 조회 단계에서 원인을 확인할 수 없습니다"); } };
-  useEffect(() => { void load(); void fetch("/api/coin/markets", { cache: "no-store" }).then((r) => r.json()).then((x) => { if (x.ok && x.markets?.length) setMarkets(x.markets); }).catch(() => setNotice("[MARKET_LIST_ERROR] 업비트 코인 목록 조회 단계에서 연결에 실패했습니다")); }, []);
+  useEffect(() => { void fetch("/api/coin/markets", { cache: "no-store" }).then((r) => r.json()).then((x) => { if (x.ok && x.markets?.length) { setMarkets(x.markets); setPrices(Object.fromEntries(x.markets.filter((item: Market) => typeof item.price === "number").map((item: Market) => [item.market, item.price as number]))); } }).catch(() => setNotice("[MARKET_LIST_ERROR] 업비트 코인 목록 조회 단계에서 연결에 실패했습니다")); }, []);
   useEffect(() => { void load(market); }, [market]);
-  useEffect(() => { const ws = new WebSocket("wss://api.upbit.com/websocket/v1"); ws.onopen = () => { setStatus("● 실시간 수신 중"); ws.send(JSON.stringify([{ ticket: "moneyos-upbit-trader" }, { type: "ticker", codes: markets.map((m) => m.market), format: "DEFAULT" }, { type: "orderbook", codes: [market], format: "DEFAULT" }])); }; ws.onmessage = async (e) => { try { const text = typeof e.data === "string" ? e.data : new TextDecoder().decode(await e.data.arrayBuffer()); const x = JSON.parse(text); if (x.type === "ticker") { const code = x.code as string; setPrices((p) => ({ ...p, [code]: Number(x.trade_price) })); setFlash(code); window.setTimeout(() => setFlash((f) => f === code ? null : f), 260); if (code === market) { setData((p) => p ? { ...p, price: Number(x.trade_price), candles: p.candles?.map((c, i) => i === 0 ? { ...c, trade_price: Number(x.trade_price) } : c) } : p); setStatus(`● 실시간 수신 ${new Date().toLocaleTimeString("ko-KR")}`); } } else if (x.type === "orderbook" && x.code === market) setData((p) => p ? { ...p, orderbook: { units: x.orderbook_units?.slice(0, 12) || [] } } : p); } catch { setNotice("[UPBIT_WS_PARSE_ERROR] 실시간 티커·호가 데이터 해석 단계에서 업비트 응답 형식이 달라졌습니다"); } }; ws.onerror = () => { setStatus("○ 실시간 오류"); setNotice("[UPBIT_WS_CONNECTION_ERROR] 업비트 WebSocket 연결 단계에서 실시간 수신이 중단되었습니다"); }; return () => ws.close(); }, [market, markets]);
+  useEffect(() => {
+    let stopped = false;
+    let retry = 0;
+    let socket: WebSocket | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const connect = () => {
+      if (stopped) return;
+      setStatus(retry ? `○ 실시간 재연결 중 ${retry}회` : "실시간 연결 중");
+      socket = new WebSocket("wss://api.upbit.com/websocket/v1");
+      socket.onopen = () => { retry = 0; setStatus("● 실시간 연결됨 · 첫 데이터 대기"); socket?.send(JSON.stringify([{ ticket: "moneyos-upbit-trader" }, { type: "ticker", codes: Array.from(new Set([market, ...commonMarkets])), format: "DEFAULT" }, { type: "orderbook", codes: [market], format: "DEFAULT" }])); };
+      socket.onmessage = async (e) => { try { const text = typeof e.data === "string" ? e.data : new TextDecoder().decode(await e.data.arrayBuffer()); const x = JSON.parse(text); if (x.type === "ticker") { const code = x.code as string; setPrices((p) => ({ ...p, [code]: Number(x.trade_price) })); setFlash(code); window.setTimeout(() => setFlash((f) => f === code ? null : f), 260); if (code === market) { setData((p) => p ? { ...p, price: Number(x.trade_price), candles: p.candles?.map((c, i) => i === 0 ? { ...c, trade_price: Number(x.trade_price) } : c) } : p); setStatus(`● 실시간 수신 ${new Date().toLocaleTimeString("ko-KR")}`); } } else if (x.type === "orderbook" && x.code === market) setData((p) => p ? { ...p, orderbook: { units: x.orderbook_units?.slice(0, 12) || [] } } : p); } catch { setNotice("[UPBIT_WS_PARSE_ERROR] 실시간 티커·호가 데이터 해석 단계에서 업비트 응답 형식이 달라졌습니다"); } };
+      socket.onerror = () => { if (stopped) return; setStatus("○ 실시간 재연결 대기"); setNotice("[UPBIT_WS_CONNECTION_RETRY] 업비트 WebSocket 연결이 끊겨 자동 재연결을 시도합니다"); socket?.close(); };
+      socket.onclose = () => { if (stopped) return; retry = Math.min(retry + 1, 8); retryTimer = setTimeout(connect, Math.min(1000 * (2 ** (retry - 1)), 10000)); };
+    };
+    connect();
+    return () => { stopped = true; if (retryTimer) clearTimeout(retryTimer); socket?.close(); };
+  }, [market]);
   const tick = () => { if (!data?.price || !data.orderbook?.units?.[0]) return setNotice("[JEV_TICK_BLOCKED] 현재가·최우선 호가가 없어 판단 루프를 실행하지 않았습니다"); const u = data.orderbook.units[0]; const result = runLoopTick(loop, { price: data.price, prices: data.candles?.map((c) => Number(c.trade_price)).reverse() || [], bestAsk: u.ask_price, bestBid: u.bid_price, askSize: u.ask_size, bidSize: u.bid_size, websocketHealthy: true, dataAgeMs: 0, allowedBuy: true, allowedSell: true }); setLoop(result.state); setNotice(`[JEV ${result.action}] ${result.decisionReason}${result.fills.length ? ` · ${result.fills.length}건 지정가 체결` : " · 아직 체결 없음"}`); };
   const units = data?.orderbook?.units || []; const current = data?.price || prices[market];
   const selected = hovered || data?.candles?.[0];
