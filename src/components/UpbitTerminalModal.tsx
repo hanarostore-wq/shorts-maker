@@ -68,7 +68,7 @@ export function UpbitTerminalModal({ mode, onClose }: { mode: Mode; onClose: () 
       <div className={styles.content}>
         <iframe key={`${mode}-${attempt}`} ref={frame} title={`${title} 업비트 매매 프로그램`}
           className={styles.frame} src={`${terminalOrigin}/workspace/${mode}/`}
-          referrerPolicy="origin" allow="local-network-access"
+          referrerPolicy="origin" allow="local-network-access; loopback-network"
           onError={() => setFailed(true)} />
         {(!status || failed) && <section className={styles.connectionPanel} aria-live="polite">
           <div className={styles.card}>
@@ -77,7 +77,7 @@ export function UpbitTerminalModal({ mode, onClose }: { mode: Mode; onClose: () 
               <p>연결 단계: 이 PC의 매매 화면 불러오기. 브라우저 보안 제한으로 프로그램 종료·접근 차단 중 어느 원인인지는 여기서 구분할 수 없습니다.</p>
               <ol>
                 <li>이 PC에서 JEV SPOT 업비트 프로그램을 실행해 주세요.</li>
-                <li>브라우저가 로컬 네트워크 접근을 물으면 이 운영본부 사이트에 허용해 주세요.</li>
+                <li>브라우저가 ‘기기의 앱’ 또는 ‘로컬 네트워크’ 접근을 물으면 이 운영본부 사이트에 허용해 주세요.</li>
                 <li>프로그램이 이미 켜져 있다면 업데이트된 프로그램을 다시 실행하고 아래 버튼을 눌러 주세요.</li>
               </ol>
               <p>현재 연결은 이 PC 전용입니다. 휴대폰에서는 PC의 매매 프로그램에 연결되지 않습니다. 별도 주소로 연 운영본부는 프로그램의 허용된 사이트 설정도 확인해야 합니다.</p>
