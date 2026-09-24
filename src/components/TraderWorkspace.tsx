@@ -43,19 +43,18 @@ export function TraderWorkspace({ mode }: { mode: "paper" | "live" }) {
   useEffect(() => {
     let stopped = false;
     let retry = 0;
-    let socket: WebSocket | null = null;
+    let stream: EventSource | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     const connect = () => {
       if (stopped) return;
       setStatus(retry ? `○ 실시간 재연결 중 ${retry}회` : "실시간 연결 중");
-      socket = new WebSocket("wss://api.upbit.com/websocket/v1");
-      socket.onopen = () => { retry = 0; setStatus("● 실시간 연결됨 · 첫 데이터 대기"); socket?.send(JSON.stringify([{ ticket: "moneyos-upbit-trader" }, { type: "ticker", codes: Array.from(new Set([market, ...commonMarkets])), format: "DEFAULT" }, { type: "orderbook", codes: [market], format: "DEFAULT" }])); };
-      socket.onmessage = async (e) => { try { const text = typeof e.data === "string" ? e.data : new TextDecoder().decode(await e.data.arrayBuffer()); const x = JSON.parse(text); if (x.type === "ticker") { const code = x.code as string; setPrices((p) => ({ ...p, [code]: Number(x.trade_price) })); setFlash(code); window.setTimeout(() => setFlash((f) => f === code ? null : f), 260); if (code === market) { setData((p) => p ? { ...p, price: Number(x.trade_price), candles: p.candles?.map((c, i) => i === 0 ? { ...c, trade_price: Number(x.trade_price) } : c) } : p); setStatus(`● 실시간 수신 ${new Date().toLocaleTimeString("ko-KR")}`); } } else if (x.type === "orderbook" && x.code === market) setData((p) => p ? { ...p, orderbook: { units: x.orderbook_units?.slice(0, 12) || [] } } : p); } catch { setNotice("[UPBIT_WS_PARSE_ERROR] 실시간 티커·호가 데이터 해석 단계에서 업비트 응답 형식이 달라졌습니다"); } };
-      socket.onerror = () => { if (stopped) return; setStatus("○ 실시간 재연결 대기"); setNotice("[UPBIT_WS_CONNECTION_RETRY] 업비트 WebSocket 연결이 끊겨 자동 재연결을 시도합니다"); socket?.close(); };
-      socket.onclose = () => { if (stopped) return; retry = Math.min(retry + 1, 8); retryTimer = setTimeout(connect, Math.min(1000 * (2 ** (retry - 1)), 10000)); };
+      stream = new EventSource(`/api/coin/stream?market=${encodeURIComponent(market)}&codes=${encodeURIComponent(commonMarkets.join(","))}`);
+      stream.onopen = () => { retry = 0; setStatus("● 실시간 중계 연결됨 · 첫 데이터 대기"); };
+      stream.onmessage = (e) => { try { const x = JSON.parse(e.data) as Record<string, unknown>; if (x.type === "relay_open") return; if (x.type === "relay_heartbeat") return; if (x.type === "relay_error") { setNotice(`${String(x.code)} ${String(x.message)}`); return; } if (x.type === "ticker") { const code = x.code as string; setPrices((p) => ({ ...p, [code]: Number(x.trade_price) })); setFlash(code); window.setTimeout(() => setFlash((f) => f === code ? null : f), 260); if (code === market) { setData((p) => p ? { ...p, price: Number(x.trade_price), candles: p.candles?.map((c, i) => i === 0 ? { ...c, trade_price: Number(x.trade_price) } : c) } : p); setStatus(`● 실시간 수신 ${new Date().toLocaleTimeString("ko-KR")}`); } } else if (x.type === "orderbook" && x.code === market) setData((p) => p ? { ...p, orderbook: { units: (x.orderbook_units as Unit[] | undefined)?.slice(0, 12) || [] } } : p); } catch { setNotice("[UPBIT_RELAY_PARSE_ERROR] 서버 중계 티커·호가 데이터 해석에 실패했습니다"); } };
+      stream.onerror = () => { if (stopped) return; setStatus("○ 서버 중계 재연결 대기"); setNotice("[UPBIT_RELAY_CONNECTION_RETRY] 서버 중계 연결이 끊겨 자동 재연결을 시도합니다"); stream?.close(); retry = Math.min(retry + 1, 8); retryTimer = setTimeout(connect, Math.min(1000 * (2 ** (retry - 1)), 10000)); };
     };
     connect();
-    return () => { stopped = true; if (retryTimer) clearTimeout(retryTimer); socket?.close(); };
+    return () => { stopped = true; if (retryTimer) clearTimeout(retryTimer); stream?.close(); };
   }, [market]);
   const tick = () => { if (!data?.price || !data.orderbook?.units?.[0]) return setNotice("[JEV_TICK_BLOCKED] 현재가·최우선 호가가 없어 판단 루프를 실행하지 않았습니다"); const u = data.orderbook.units[0]; const result = runLoopTick(loop, { price: data.price, prices: data.candles?.map((c) => Number(c.trade_price)).reverse() || [], bestAsk: u.ask_price, bestBid: u.bid_price, askSize: u.ask_size, bidSize: u.bid_size, websocketHealthy: true, dataAgeMs: 0, allowedBuy: true, allowedSell: true }); setLoop(result.state); setNotice(`[JEV ${result.action}] ${result.decisionReason}${result.fills.length ? ` · ${result.fills.length}건 지정가 체결` : " · 아직 체결 없음"}`); };
   const units = data?.orderbook?.units || []; const current = data?.price || prices[market];
