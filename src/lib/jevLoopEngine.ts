@@ -4,7 +4,7 @@ export type LoopAction = "KILL" | "PULL_QUOTES" | "WIDEN" | "QUOTE_BOTH_SIDES" |
 export type OrderSide = "buy" | "sell";
 export type RestingOrder = { id: string; side: OrderSide; price: number; quantity: number; createdAt: number };
 export type Fill = { id: string; orderId: string; side: OrderSide; price: number; quantity: number; fee: number; timestamp: number };
-export type LoopInput = PaperMarket & { timestamp?: number; allowedBuy?: boolean; allowedSell?: boolean; marketOpen?: boolean; feeRate?: number; targetNotional?: number };
+export type LoopInput = PaperMarket & { timestamp?: number; allowedBuy?: boolean; allowedSell?: boolean; marketOpen?: boolean; feeRate?: number; targetNotional?: number; jevAction?: "BUY" | "SELL" | "HOLD" | "KILL"; jevProbabilities?: Partial<Record<"BUY" | "SELL" | "HOLD" | "KILL", number>>; jevConfidence?: number; jevProvider?: "JEV" | "RULES_ONLY" };
 export type LoopState = { cash: number; asset: number; averageCost: number; realizedPnl: number; resting: RestingOrder[]; fills: Fill[]; tick: number };
 export type Battery = { regime: string; direction: "BUY" | "SELL" | "HOLD"; toxicFlow: string; liquidityStress: string; quoteEnvironment: string; inventoryPressure: string; executionHealth: string; buyConfidence: number; sellConfidence: number; latencyMs: number; provider: "JEV" | "RULES_ONLY" };
 export type LoopTick = { state: LoopState; action: LoopAction; battery: Battery; decisionReason: string; orders: RestingOrder[]; fills: Fill[]; spreadBps: number; mid: number };
@@ -27,17 +27,20 @@ function battery(input: LoopInput, decision: ReturnType<typeof decidePaper>): Ba
     buyConfidence,
     sellConfidence,
     latencyMs: 0,
-    provider: "RULES_ONLY",
+    provider: input.jevProvider || "RULES_ONLY",
   };
 }
 
 function composeAction(input: LoopInput, state: LoopState, decision: ReturnType<typeof decidePaper>, feed: Battery): LoopAction {
   if (input.marketOpen === false) return "KILL";
   if (!input.websocketHealthy || (input.dataAgeMs ?? 0) > 3000 || !decision.risk.allowed) return "KILL";
+  if (input.jevAction === "KILL") return "KILL";
+  if (input.jevProvider === "JEV" && (input.jevConfidence ?? 0) < 0.55) return "STAND_DOWN";
   if (!input.allowedBuy && !input.allowedSell) return "STAND_DOWN";
   if (decision.state.spreadBps > 30) return "PULL_QUOTES";
   if (decision.state.spreadBps > 12) return "QUOTE_WIDE";
   if (Math.abs(decision.state.imbalance) > 0.65) return "WIDEN";
+  if (input.jevProvider === "JEV" && input.jevAction === "HOLD") return "STAND_DOWN";
   if (feed.direction === "HOLD") return "QUOTE_BOTH_SIDES";
   if (state.asset > 0 && state.asset * input.price > (input.targetNotional ?? 50000) * 0.9) return "STAND_DOWN";
   return "QUOTE_BOTH_SIDES";
@@ -91,8 +94,12 @@ export function runLoopTick(previous: LoopState, input: LoopInput): LoopTick {
     const target = input.targetNotional ?? 5000;
     const buyQty = target / bid;
     const sellQty = Math.min(state.asset, target / ask);
-    if (input.allowedBuy !== false && state.cash >= target && feed.buyConfidence >= 0.5) state.resting.push({ id: id(), side: "buy", price: bid, quantity: buyQty, createdAt: now });
-    if (input.allowedSell !== false && sellQty > 0 && feed.sellConfidence >= 0.5) state.resting.push({ id: id(), side: "sell", price: ask, quantity: sellQty, createdAt: now });
+    const jevAllowsBuy = input.jevProvider !== "JEV" || input.jevAction === "BUY";
+    const jevAllowsSell = input.jevProvider !== "JEV" || input.jevAction === "SELL";
+    const hasBuy = state.resting.some((order) => order.side === "buy");
+    const hasSell = state.resting.some((order) => order.side === "sell");
+    if (input.allowedBuy !== false && jevAllowsBuy && !hasBuy && state.cash >= target && feed.buyConfidence >= 0.5) state.resting.push({ id: id(), side: "buy", price: bid, quantity: buyQty, createdAt: now });
+    if (input.allowedSell !== false && jevAllowsSell && !hasSell && sellQty > 0 && feed.sellConfidence >= 0.5) state.resting.push({ id: id(), side: "sell", price: ask, quantity: sellQty, createdAt: now });
   }
   state.tick += 1;
   return { state, action, battery: feed, decisionReason: paper.reason, orders: state.resting, fills, spreadBps: paper.state.spreadBps, mid };
