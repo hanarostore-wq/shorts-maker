@@ -48,7 +48,7 @@ export function CoinTradingPanel({ agent, showSimulation = true }: { agent: Agen
   const [market, setMarket] = useState("KRW-BTC");
   const [data, setData] = useState<MarketData | null>(null);
   const [liveOrderbook, setLiveOrderbook] = useState<MarketData["orderbook"]>();
-  const [streamStatus, setStreamStatus] = useState("WebSocket 연결 중");
+  const [streamStatus, setStreamStatus] = useState("서버 실시간 중계 연결 중");
   const [simulation, setSimulation] = useState<SimulationRow[]>([]);
   const [mode, setMode] = useState<"paper" | "live">("paper");
   const [message, setMessage] = useState("시세 조회 대기");
@@ -72,29 +72,24 @@ export function CoinTradingPanel({ agent, showSimulation = true }: { agent: Agen
   }, [load]);
 
   useEffect(() => {
-    const socket = new WebSocket("wss://api.upbit.com/websocket/v1");
-    socket.onopen = () => { setStreamStatus("실시간 스트림 정상"); socket.send(JSON.stringify([{ ticket: "moneyos-realtime" }, { type: "orderbook", codes: [market], format: "DEFAULT" }, { type: "ticker", codes: [market], format: "DEFAULT" }])); };
-    socket.onmessage = async (event) => {
+    const stream = new EventSource(`/api/coin/stream?market=${encodeURIComponent(market)}&codes=${encodeURIComponent(market)}`);
+    stream.onopen = () => setStreamStatus("실시간 서버 중계 정상");
+    stream.onmessage = (event) => {
       try {
-        const text = typeof event.data === "string" ? event.data : new TextDecoder().decode(await event.data.arrayBuffer());
-        const tick = JSON.parse(text);
+        const tick = JSON.parse(event.data) as { type?: string; code?: string; trade_price?: number; total_ask_size?: number; total_bid_size?: number; orderbook_units?: NonNullable<MarketData["orderbook"]>["units"]; message?: string; errorCode?: string };
+        if (tick.type === "relay_heartbeat" || tick.type === "relay_open") return;
+        if (tick.type === "relay_error") { setStreamStatus("실시간 중계 오류"); setMessage(`${tick.errorCode || "[UPBIT_RELAY_ERROR]"} ${tick.message || "업비트 서버 중계 오류"}`); return; }
         setStreamStatus(`실시간 수신 ${new Date().toLocaleTimeString("ko-KR")}`);
-        if (tick.type === "orderbook") {
-          setLiveOrderbook({ totalAskSize: tick.total_ask_size, totalBidSize: tick.total_bid_size, units: tick.orderbook_units?.slice(0, 8) || [] });
-        } else if (tick.type === "ticker") {
-          setData((previous) => {
-            if (!previous?.candles?.length) return previous;
-            const closes = previous.candles.map((candle, index) => index === 0 ? Number(tick.trade_price) : Number(candle.trade_price)).reverse();
-            const sma5 = liveSma(closes, 5);
-            const sma20 = liveSma(closes, 20);
-            return { ...previous, price: Number(tick.trade_price), candles: previous.candles.map((candle, index) => index === 0 ? { ...candle, trade_price: Number(tick.trade_price) } : candle), indicators: { ...previous.indicators, sma5, sma20, rsi14: liveRsi(closes), signal: previous.indicators?.signal } };
-          });
-        }
-      } catch { setMessage("호가창 WebSocket 데이터 해석 오류: 업비트 응답 형식을 확인하세요"); }
+        if (tick.type === "orderbook" && tick.code === market) setLiveOrderbook({ totalAskSize: Number(tick.total_ask_size || 0), totalBidSize: Number(tick.total_bid_size || 0), units: tick.orderbook_units?.slice(0, 8) || [] });
+        else if (tick.type === "ticker" && tick.code === market) setData((previous) => {
+          if (!previous?.candles?.length) return previous;
+          const closes = previous.candles.map((candle, index) => index === 0 ? Number(tick.trade_price) : Number(candle.trade_price)).reverse();
+          return { ...previous, price: Number(tick.trade_price), candles: previous.candles.map((candle, index) => index === 0 ? { ...candle, trade_price: Number(tick.trade_price) } : candle), indicators: { ...previous.indicators, sma5: liveSma(closes, 5), sma20: liveSma(closes, 20), rsi14: liveRsi(closes), signal: previous.indicators?.signal } };
+        });
+      } catch { setMessage("[UPBIT_RELAY_PARSE_ERROR] 서버 중계 시세·호가 데이터 해석 오류"); }
     };
-    socket.onerror = () => { setStreamStatus("실시간 스트림 오류"); setMessage("실시간 WebSocket 연결 오류: 업비트 공개 스트림을 연결하지 못했습니다"); };
-    socket.onclose = () => setStreamStatus("실시간 스트림 종료");
-    return () => socket.close();
+    stream.onerror = () => { setStreamStatus("실시간 중계 재연결 대기"); setMessage("[UPBIT_RELAY_CONNECTION_ERROR] 업비트 서버 중계 연결이 끊겼습니다"); };
+    return () => stream.close();
   }, [market]);
 
   const submitOrder = async (side: "buy" | "sell") => {
