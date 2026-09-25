@@ -8,6 +8,19 @@ function errorResponse(code: string, error: string, status = 400) {
   return NextResponse.json({ ok: false, code, error }, { status });
 }
 
+function classifyNaverError(message: string) {
+  if (message.includes("NAVER_DATALAB_401") || message.includes("NAVER_SEARCH_401")) {
+    return { code: "NAVER_CLIENT_AUTH_401", message: "네이버 로그인 아이디가 아니라 네이버 개발자센터 Application > 내 애플리케이션 > 개요에 표시된 Client ID와 Client Secret을 입력하세요." };
+  }
+  if (message.includes("NAVER_DATALAB_403")) {
+    return { code: "NAVER_DATALAB_PERMISSION_403", message: "개발자센터 내 애플리케이션의 API 설정에서 데이터랩 (검색어트렌드)을 추가하세요." };
+  }
+  if (message.includes("NAVER_SEARCH_403")) {
+    return { code: "NAVER_SEARCH_PERMISSION_403", message: "개발자센터 내 애플리케이션의 API 설정에서 검색 API를 추가하세요." };
+  }
+  return { code: message.split(":")[0] || "NAVER_CONNECTION_ERROR", message };
+}
+
 async function checkNaverApi(clientId: string, clientSecret: string) {
   const headers = { "X-Naver-Client-Id": clientId, "X-Naver-Client-Secret": clientSecret, "Content-Type": "application/json" };
   const dataLabResponse = await fetch(DATALAB_URL, { method: "POST", headers, body: JSON.stringify({ startDate: "2025-01-01", endDate: "2025-01-07", timeUnit: "date", keywordGroups: [{ groupName: "머니OS 연결 테스트", keywords: ["자동화"] }] }), cache: "no-store" });
@@ -35,7 +48,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, configured: true, status: "encrypted", dataLab: checks.dataLab, search: checks.search, message: "Naver DataLab·Search API 정상 · 암호화 저장 완료" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Naver API 연결 실패";
-    const code = message.split(":")[0] || "NAVER_CONNECTION_ERROR";
-    return errorResponse(code, message, 502);
+    const classified = classifyNaverError(message);
+    return errorResponse(classified.code, classified.message, 502);
   }
 }
