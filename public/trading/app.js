@@ -54,6 +54,24 @@ const esc = (x) =>
 const signed = (x) => (x > 0 ? "+" : "") + won(x);
 const color = (x) => (x > 0 ? "up" : x < 0 ? "down" : "");
 function toast(text, error = false) {
+  if ($('settingsDialog').open) {
+    let feedback = $('settingsFeedback');
+    if (!feedback) {
+      feedback = document.createElement('p');
+      feedback.id = 'settingsFeedback';
+      feedback.setAttribute('role', 'alert');
+      feedback.tabIndex = -1;
+      feedback.style.cssText = 'padding:12px;border:1px solid currentColor;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere;';
+    }
+    if ($('strategyPane').getClientRects().length) document.querySelector('#strategyPane button').before(feedback);
+    else $('settingsDialog').append(feedback);
+    feedback.hidden = false;
+    feedback.style.color = error ? '#ffadb5' : '#b8dcff';
+    feedback.textContent = text;
+    feedback.focus({ preventScroll: true });
+    feedback.scrollIntoView({ block: 'nearest' });
+    return;
+  }
   $("toast").textContent = text;
   $("toast").className = "toast" + (error ? " error" : "");
   clearTimeout(toastTimer);
@@ -73,6 +91,7 @@ async function act(fn) {
   }
 }
 function showSettings() {
+  if ($('settingsFeedback')) $('settingsFeedback').hidden = true;
   const e = state.engine;
   for (const key of Object.keys(configLabels))
     $("cfg-" + key).value = (key.endsWith("Probability") || key.endsWith("Score"))
@@ -794,6 +813,7 @@ $("upbitKeyForm").onsubmit = (e) => {
 };
 $("strategyPane").onsubmit = (e) => {
   e.preventDefault();
+  if ($('settingsFeedback')) $('settingsFeedback').hidden = true;
   if (!validateDailyLoss()) { dailyLossInput.reportValidity(); return; }
   act(async () => {
     const config = Object.fromEntries(
