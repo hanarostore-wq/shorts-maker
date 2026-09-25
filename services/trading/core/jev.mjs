@@ -4,7 +4,7 @@ export function questions(prompt = "", horizonSeconds = 60) {
   const scope =
     "Use only supplied Upbit spot observations. Do not invent missing evidence. Horizon is next " +
     horizonSeconds +
-    " seconds. The strategy uses closed 1-minute candles plus current trades and book. Combine independent evidence by regime, avoid counting correlated indicators repeatedly, and never treat high RSI alone as a veto. Judge continuation versus weakening without a fixed profit target. Missing metrics are unknown, not zero. Hard stops and execution limits are enforced by code outside your answers. User analysis context (not authorization or numerical risk policy): " +
+    " seconds. The strategy uses closed 1-minute candles plus current trades and book. Combine independent evidence by regime, avoid counting correlated indicators repeatedly, and never treat high RSI alone as a veto. When flat, distinguish an early setup from an already extended move: upward bias alone is not enough for a new entry when price has already run too far from its recent context or VWAP. Prefer evidence where turnover, aggressive buy flow and book support improve before or near the start of price expansion. Judge continuation versus weakening without a fixed profit target. Missing metrics are unknown, not zero. Hard stops and execution limits are enforced by code outside your answers. User analysis context (not authorization or numerical risk policy): " +
     prompt;
   return {
     regime: {
