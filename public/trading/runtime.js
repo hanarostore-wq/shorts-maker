@@ -25,10 +25,11 @@ export function boot(){
  return bootPromise ||= call().catch(error=>{if(error.status!==401)throw error;return authenticate();}).then(x=>{timer=setTimeout(poll,1000);return x;});
 }
 function authenticate(){return new Promise(resolve=>{
+ const notify=()=>{if(parent!==window)parent.postMessage({type:'jev-workspace-status',protocol:2,mode:workspaceMode,actualMode:workspaceMode,running:false,authRequired:true},location.origin);};notify();const authHeartbeat=setInterval(notify,5000);
  const form=document.createElement('form');form.className='web-boot-error';
  const label=document.createElement('label');label.textContent='매매 제어 비밀번호 ';const input=document.createElement('input');input.type='password';input.autocomplete='current-password';input.required=true;label.append(input);
- const button=document.createElement('button');button.type='submit';button.textContent='매매 화면 연결';const message=document.createElement('p');message.textContent='거래소·Jev API 키가 아닌 운영본부 매매 제어용 비밀번호를 입력하세요.';form.append(label,button,message);document.body.append(form);
- form.onsubmit=async event=>{event.preventDefault();button.disabled=true;operatorToken=input.value;try{const x=await call();input.value='';form.remove();resolve(x);}catch(error){operatorToken='';message.textContent=error.message;button.disabled=false;}};
+ const button=document.createElement('button');button.type='submit';button.textContent='매매 화면 연결';const message=document.createElement('p');message.textContent='바탕화면 ‘운영본부 매매 인증키 복사’를 실행한 뒤 여기에 붙여넣으세요. 거래소·Jev API 키가 아닙니다.';form.append(label,button,message);document.body.append(form);
+ form.onsubmit=async event=>{event.preventDefault();button.disabled=true;operatorToken=input.value;try{const x=await call();input.value='';clearInterval(authHeartbeat);form.remove();resolve(x);}catch(error){operatorToken='';message.textContent=error.message;button.disabled=false;}};
 });}
 export async function command(name,body={}){
  if(!connected&&name!=='stop')throw Error('PC 현재 상태를 확인하기 전에는 새 주문을 보낼 수 없습니다.');

@@ -69,8 +69,10 @@ export class UpbitBroker {
       if ([429, 418].includes(r.status)) this.blockedUntil = Date.now() + 60000;
       const body = await r.json();
       if (!r.ok) {
+        const reason=String(body.error?.name || "request_failed");
+        const help={no_authorization_ip:"업비트 연결 거절: API 관리의 허용 IP에 현재 메인 PC의 공인 IP를 추가하세요. ",out_of_scope:"업비트 키 권한 부족: 자산조회·주문조회·주문하기 권한을 확인하세요. ",insufficient_funds_bid:"업비트 주문가능 원화가 부족합니다. 운용금과 주문금액을 확인하세요. "}[reason]||"";
         const e = new Error(
-          "업비트 HTTP " +
+          help + "업비트 HTTP " +
             r.status +
             " / " +
             String(body.error?.name || "request_failed").replace(
