@@ -20,7 +20,8 @@ export type AgentTool =
   | "assetManagement"
   | "profitRealization"
   | "liveTrading"
-  | "shortsStudio"\n  | "naverBlog";
+  | "shortsStudio"
+  | "naverBlog";
 
 export const AGENT_TOOLS: Record<string, AgentTool> = {
   c_analytics: "tradingAnalytics",
@@ -64,7 +65,8 @@ export const AGENT_TOOLS: Record<string, AgentTool> = {
   v3: "shortsStudio",
   v4: "shortsStudio",
   v5: "shortsStudio",
-  v6: "shortsStudio",\n  b_naver: "naverBlog",
+  v6: "shortsStudio",
+  b_naver: "naverBlog",
 };
 
 export const SHORTS_AGENT_STEP_MAP: Record<string, string> = {
