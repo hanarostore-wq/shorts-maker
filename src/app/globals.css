@@ -45,6 +45,16 @@ button, a { -webkit-tap-highlight-color: transparent; }
   letter-spacing: -0.01em;
 }
 
+.control-room-modal-card {
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .72), 0 0 0 1px rgba(98, 215, 208, .06);
+  animation: control-room-modal-in .16s ease-out both;
+}
+
+@keyframes control-room-modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 .control-room-modal :where(h1,h2,h3,p,li,span,button,a,label) {
   overflow-wrap: anywhere;
   word-break: keep-all;

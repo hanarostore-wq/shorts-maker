@@ -41,7 +41,7 @@ export function AgentDetailModal({
       onClick={onClose}
     >
       <div
-        className={`control-room-scroll flex max-h-[96vh] w-[calc(100vw-1rem)] ${["c7", "c13", "t7", "t13"].includes(agent.id) ? "max-w-[1600px]" : ["tradingEvidence","tradingAnalytics"].includes(tool||"") ? "max-w-5xl" : "max-w-lg"} flex-col gap-3 overflow-y-auto border border-[var(--control-line-strong)] bg-[var(--control-bg)] p-3 shadow-2xl sm:p-4`}
+        className="control-room-modal-card control-room-scroll flex h-[min(92vh,1100px)] max-h-[calc(100dvh-2rem)] w-[min(1600px,calc(100vw-2rem))] max-w-none flex-col gap-3 overflow-y-auto border border-[var(--control-line-strong)] bg-[var(--control-bg)] p-3 shadow-2xl sm:p-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--control-line)] pb-2">
