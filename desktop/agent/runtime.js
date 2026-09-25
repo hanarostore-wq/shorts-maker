@@ -39,6 +39,11 @@ function withTimeout(promise, ms, message) {
   ]);
 }
 
+function contentIdFromInstruction(instruction) {
+  const match = String(instruction || "").match(/(?:^|\n)CONTENT_ID:\s*([^\n]+)/);
+  return match ? match[1].trim() : null;
+}
+
 /** 페이지를 열고 로딩이 끝날 때까지 기다린다. */
 async function loadPage(view, url) {
   const wc = view.webContents;
@@ -188,6 +193,10 @@ async function runTask(controlUrl, partition, task, log, startUrl) {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await callApi(controlUrl, "/api/agent/claim", "PATCH", { taskId: task.id, status: "failed", error: message });
+      const contentId = contentIdFromInstruction(task.instruction);
+      if (contentId) {
+        await callApi(controlUrl, "/api/blog/naver", "PATCH", { id: contentId, action: "publish-result", status: "failed", publishAttemptId: task.id, error: message });
+      }
       log(`작업 ${task.id} 실패: ${message}`);
     } finally {
       view.webContents.close();

@@ -173,6 +173,22 @@ export async function claimDueBlogSlots(at = new Date()) {
   return claimed;
 }
 
+export async function recoverStaleBlogPublishes(maxAgeMs = 120_000) {
+  const items = await readArticles();
+  const cutoff = Date.now() - maxAgeMs;
+  let recovered = 0;
+  for (const article of items) {
+    if (!["queued", "publishing"].includes(article.status)) continue;
+    if (Date.parse(article.updatedAt) > cutoff) continue;
+    article.status = "failed";
+    article.error = "발행 워커 응답 시간 초과. 실패 처리했으며 즉시 발행을 다시 시도할 수 있습니다.";
+    article.updatedAt = now();
+    recovered += 1;
+  }
+  if (recovered) await writeArticles(items);
+  return recovered;
+}
+
 export async function confirmPublishAndCleanup(input: { articleId: string; blogId?: string; publishedUrl: string; publishAttemptId: string; verified: boolean; publishedAt?: string; error?: string | null }) {
   const items = await readArticles();
   const article = items.find((x) => x.id === input.articleId);

@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { loadNaverBlogCredentials } from "@/lib/naverBlogCredentials";
-import { enqueueTask } from "@/lib/agent/store";
 import {
   getBlogResearchDashboard,
   listBlogResearch,
@@ -15,7 +14,7 @@ const DATALAB_URL = `${API_HUB_BASE_URL}/search-trend/v1/search`;
 const SEARCH_URL = `${API_HUB_BASE_URL}/search/v1/blog`;
 const MAX_KEYWORDS = 200;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const AUTO_PROFILE_TERMS = ["생활정보", "실용정보", "비교추천", "절약", "관리방법"];
+const AUTO_PROFILE_TERMS = ["생활", "실용", "절약", "관리", "추천", "비교", "운동", "집밥", "여행"];
 const AUTO_TOPIC_BASES = [
   "전기요금 절약", "통신비 절약", "생활비 절약", "자취방 정리", "냉장고 정리", "냉장고 냄새 제거", "세탁기 청소", "수건 냄새 제거", "곰팡이 제거", "싱크대 배수구 관리",
   "에어프라이어 관리", "전자레인지 청소", "욕실 물때 제거", "주방 기름때 제거", "장마철 빨래", "겨울철 난방비", "여름철 전기요금", "집 먼지 줄이기", "옷장 냄새 제거", "이사 체크리스트",
@@ -26,6 +25,10 @@ const AUTO_VARIANTS = ["추천", "비교", "사용법", "관리 방법", "구매
 
 function discoverKeywords() {
   return [...new Set(AUTO_TOPIC_BASES.flatMap((base) => AUTO_VARIANTS.map((variant) => `${base} ${variant}`)))].slice(0, MAX_KEYWORDS);
+}
+function masterTopicFor(keyword: string) {
+  const base = keyword.replace(/\s+(추천|비교|사용법|관리 방법|구매 전 체크리스트)$/, "").trim();
+  return `${base} 선택과 관리의 핵심 가이드`;
 }
 
 function cleanKeyword(value: unknown) { return String(value || "").trim().replace(/\s+/g, " "); }
@@ -79,7 +82,7 @@ async function collectCandidates(input: { keywords: string[]; blogId: string; pr
       const supplyScore = clamp(Math.log10(result.total + 1) / 6 * 100);
       const fitScore = input.profileKeywords.length ? clamp(50 + input.profileKeywords.filter((profileKeyword) => keyword.includes(profileKeyword) || profileKeyword.includes(keyword)).length * 25) : 70;
       const contentGapScore = clamp(demandScore * 0.6 + (100 - supplyScore) * 0.4);
-      const item = await upsertBlogResearch({ id: topicId(input.blogId, keyword), blogId: input.blogId, keyword, mainKeyword: keyword, keywordCluster: [keyword], masterTopic: `${keyword} 실전 가이드`, searchIntent: "정보 탐색", sourceUrl: result.items[0]?.link || null, sourceTitle: result.items[0]?.title || null, notes: `DataLab 상대 검색수요 ${demandScore} · 최근 30일 추세 ${lab.trend} · Blog Search 공급량 ${result.total}`, demandScore, gapScore: contentGapScore, fitScore, freshnessScore: lab.trend, trendScore: lab.trend, supplyScore, contentGapScore, selectionReason: `상대 검색수요 ${demandScore}, 콘텐츠 공백 ${contentGapScore}, 블로그 적합도 ${fitScore}`, status: "candidate" });
+      const item = await upsertBlogResearch({ id: topicId(input.blogId, keyword), blogId: input.blogId, keyword, mainKeyword: keyword, keywordCluster: [keyword], masterTopic: masterTopicFor(keyword), searchIntent: "정보 탐색", sourceUrl: result.items[0]?.link || null, sourceTitle: result.items[0]?.title || null, notes: `DataLab 상대 검색수요 ${demandScore} · 최근 30일 추세 ${lab.trend} · Blog Search 공급량 ${result.total}`, demandScore, gapScore: contentGapScore, fitScore, freshnessScore: lab.trend, trendScore: lab.trend, supplyScore, contentGapScore, selectionReason: `상대 검색수요 ${demandScore}, 추세 ${lab.trend}, 콘텐츠 공백 ${contentGapScore}, 블로그 적합도 ${fitScore}`, status: "candidate" });
       results.push(item);
     }
     if (index + 5 < uniqueKeywords.length) await sleep(150);
@@ -109,15 +112,6 @@ export async function POST(request: Request) {
   if (action === "upsert") {
     if (!body.keyword || !body.masterTopic) return NextResponse.json({ error: "keyword/masterTopic은 필수입니다." }, { status: 400 });
     return NextResponse.json({ ok: true, item: await upsertBlogResearch({ id: body.id, blogId: body.blogId, keyword: String(body.keyword), masterTopic: String(body.masterTopic), sourceUrl: body.sourceUrl, sourceTitle: body.sourceTitle, notes: body.notes, demandScore: body.demandScore, gapScore: body.gapScore, fitScore: body.fitScore, freshnessScore: body.freshnessScore, status: body.status }) });
-  }
-  if (action === "send-to-ready") {
-    const item = (await listBlogResearch()).find((candidate) => candidate.id === String(body?.id || ""));
-    if (!item) return NextResponse.json({ error: "소재 후보를 찾을 수 없습니다." }, { status: 404 });
-    if (item.status !== "approved") return NextResponse.json({ error: "승인된 소재만 READY 브리프로 보낼 수 있습니다." }, { status: 409 });
-    const brief = [`[BLOG_RESEARCH_BRIEF]`, `RESEARCH_ID: ${item.id}`, `BLOG_ID: ${item.blogId}`, `MASTER_TOPIC: ${item.masterTopic}`, `KEYWORD: ${item.mainKeyword}`, `KEYWORD_CLUSTER: ${item.keywordCluster.join(", ")}`, `SEARCH_INTENT: ${item.searchIntent}`, `OPPORTUNITY_SCORE: ${item.opportunityScore}`, `SELECTION_REASON: ${item.selectionReason}`, `SOURCE_URL: ${item.sourceUrl || "없음"}`, `NOTES: ${item.notes || "없음"}`, "요청: 이 브리프로 GPT 무료 웹에서 글을 수동 생성한 뒤 READY 관리자에 import하세요. GPT/OpenAI API는 호출하지 않습니다."].join("\n");
-    const task = await enqueueTask({ departmentId: "blog", agentId: "b_ready", instruction: brief });
-    await patchBlogResearch(item.id, { status: "used" });
-    return NextResponse.json({ ok: true, brief, task });
   }
   return NextResponse.json({ error: "지원하지 않는 action입니다." }, { status: 400 });
 }

@@ -7,12 +7,14 @@ import {
   listBlogArticles,
   markPublishFailure,
   patchBlogArticle,
+  recoverStaleBlogPublishes,
   saveBlogSchedule,
   setBlogSelection,
   upsertBlogArticle,
 } from "@/lib/blogStore";
 
 export async function GET() {
+  await recoverStaleBlogPublishes();
   return NextResponse.json(await getBlogDashboard(), { headers: { "Cache-Control": "no-store" } });
 }
 
