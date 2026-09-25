@@ -93,7 +93,8 @@ export const departments: Department[] = [
     name: "블로그부서",
     icon: "✍️",
     agents: [
-      { id: "b_research", name: "소재 조사원", task: "네이버 검색수요·콘텐츠 공급 공백 조사 대기", status: "standby" },\n      { id: "b_naver", name: "네이버 블로거", task: "READY 콘텐츠를 일정에 맞춰 네이버 블로그에 배포·결과 기록", status: "standby" },
+      { id: "b_research", name: "소재 조사원", task: "네이버 검색수요·콘텐츠 공급 공백 조사 대기", status: "standby" },
+      { id: "b_naver", name: "네이버 블로거", task: "READY 콘텐츠를 일정에 맞춰 네이버 블로그에 배포·결과 기록", status: "standby" },
     ],
   },
 ];
