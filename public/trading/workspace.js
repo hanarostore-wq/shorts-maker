@@ -14,6 +14,15 @@ export function setupWorkspace(api){
  window.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.querySelector('dialog[open]'))send('jev-workspace-close');});
 }
 export function renderWorkspace(state){
- if(state.worker?.connectionLost)for(const id of ['startBtn','submitOrder','analyzeBtn','judgmentToggle','capitalBtn','reconcileBtn','cancelPendingBtn','testLiveBtn','settingsBtn'])document.getElementById(id).disabled=true;
+ const lost=!!state.worker?.connectionLost;
+ for(const id of ['startBtn','submitOrder','analyzeBtn','judgmentToggle','capitalBtn','reconcileBtn','cancelPendingBtn','testLiveBtn']){
+  const button=document.getElementById(id);
+  if(lost){if(!button.hasAttribute('data-connection-disabled'))button.dataset.connectionDisabled=String(button.disabled);button.disabled=true;}
+  else if(button.hasAttribute('data-connection-disabled')){if(!['startBtn','submitOrder','analyzeBtn'].includes(id))button.disabled=button.dataset.connectionDisabled==='true';delete button.dataset.connectionDisabled;}
+ }
+ // Settings can be inspected while offline. Saving still requires connectivity.
+ document.getElementById('settingsBtn').disabled=false;
+ const save=document.querySelector('#strategyPane button');
+ if(save){save.disabled=lost;save.title=lost?'PC 연결 복구 후 저장할 수 있습니다.':'';}
  send('jev-workspace-status',{actualMode:workspaceMode,running:!!(state.engine.running||state.engine.startRequested||state.engine.tracking?.active),liveLocked:!!state.worker?.liveLocked});
 }

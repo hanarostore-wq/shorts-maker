@@ -32,8 +32,8 @@ export function formatMoneyField(input) {
   const valid = raw === '' || /^[\d,]+$/.test(raw);
   input.setCustomValidity(valid ? '' : '금액은 숫자로 입력하세요. 예: 10,000');
   if (!valid) return;
-  const parsed = raw ? parseMoney(raw) : null;
-  input.value = parsed === null ? '' : groupedMoneyInput(String(parsed));
+  // Editing must not round/truncate digits; execution parsing is separate.
+  input.value = groupedMoneyInput(raw);
   if (beforeDigits !== null && document.activeElement === input) {
     let pos = 0, seen = 0;
     while (pos < input.value.length && seen < Math.min(beforeDigits, input.value.replace(/\D/g, '').length)) {

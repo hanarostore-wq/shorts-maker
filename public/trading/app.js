@@ -32,6 +32,17 @@ const pct = (x) =>
   x === null || x === undefined ? "—" : (x * 100).toFixed(1) + "%";
 const tm = (x) =>
   x ? new Date(x).toLocaleTimeString("ko-KR", { hour12: false }) : "—";
+let lastStateReceivedAt = 0;
+let clockState = null;
+function updateClock() {
+  if (state !== clockState) { clockState = state; lastStateReceivedAt = Date.now(); }
+  const age = lastStateReceivedAt ? Math.max(0, Math.floor((Date.now()-lastStateReceivedAt)/1000)) : null;
+  $("clock").textContent = '현재 ' + tm(Date.now());
+  let freshness = $('stateFreshness');
+  if (!freshness) { freshness=document.createElement('small');freshness.id='stateFreshness';$('clock').before(freshness); }
+  freshness.textContent = state?.worker?.connectionLost ? 'PC 연결 확인 중 · 마지막 응답 '+tm(state?.at)+' ' : 'PC 응답 '+tm(state?.at)+' · '+(age===null?'대기':age+'초 전')+' ';
+}
+setInterval(updateClock, 1000);
 const esc = (x) =>
   String(x ?? "").replace(
     /[&<>"']/g,
@@ -132,6 +143,19 @@ $("configFields").innerHTML = Object.entries(configLabels)
       '" required></label>',
   )
   .join("");
+const dailyLossInput = $('cfg-dailyLossKrw');
+const dailyLossHelp = document.createElement('small');
+dailyLossHelp.id='dailyLossHelp';
+dailyLossHelp.textContent='허용 범위: 100원~1,000,000원. 기존 손실 한도를 자동으로 늘리지 않습니다.';
+dailyLossInput.after(dailyLossHelp);
+dailyLossInput.setAttribute('aria-describedby','dailyLossHelp');
+function validateDailyLoss() {
+  const raw=dailyLossInput.value.replaceAll(',','');
+  const value=Number(raw);
+  const valid=/^\d+$/.test(raw)&&Number.isSafeInteger(value)&&value>=100&&value<=1000000;
+  dailyLossInput.setCustomValidity(valid?'':'하루 손실 한도는 100원~1,000,000원 사이로 입력하세요.');
+  return valid;
+}
 function renderStrategy() {
   const e=state.engine,s=e.features?.strategy, risk=e.safety, intent=risk?.intent;
   const labels={ENTRY:'매수 기회',WATCH:'관찰 중',HOLD:'보유 유지',WEAKEN:'상승 힘 약해짐',EXIT:'청산 중'};
@@ -182,7 +206,7 @@ function render() {
       : e.armed
         ? "실전 주문 활성화 · 실제 원화가 사용됩니다"
         : "실전 화면 · 주문 잠금";
-  $("clock").textContent = tm(state.at);
+  updateClock();
   $("accountLabel").textContent =
     e.mode === "paper" ? "모의 계좌" : "실전 봇 운용 계좌";
   $("capitalBtn").innerHTML =
@@ -770,6 +794,7 @@ $("upbitKeyForm").onsubmit = (e) => {
 };
 $("strategyPane").onsubmit = (e) => {
   e.preventDefault();
+  if (!validateDailyLoss()) { dailyLossInput.reportValidity(); return; }
   act(async () => {
     const config = Object.fromEntries(
       Object.keys(configLabels).map((k) => [
@@ -1013,6 +1038,7 @@ async function init(){try{state=await boot();render();renderWorkspace(state);sub
 document.querySelectorAll('[data-money]').forEach(input => {
   formatMoneyField(input);
   input.addEventListener('input', () => formatMoneyField(input));
+  if (input === dailyLossInput) input.addEventListener('input', validateDailyLoss);
 });
 setupWorkspace(api);
 init();

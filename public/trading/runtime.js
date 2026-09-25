@@ -15,9 +15,11 @@ function connectionError(error){
  if(lastState){lastState={...lastState,worker:{...lastState.worker,connectionLost:true}};listener?.(lastState);}
 }
 async function poll(){
+ const started=performance.now();
  try{const x=await call();document.getElementById('pcConnectionError')?.remove();listener?.(x);}
  catch(error){connectionError(error);if(error.status===401){await authenticate();document.getElementById('pcConnectionError')?.remove();}}
- timer=setTimeout(poll,document.visibilityState==='hidden'?15000:1000);
+ // One request at a time; do not add a full second to every network round trip.
+ timer=setTimeout(poll,document.visibilityState==='hidden'?15000:Math.max(250,1000-(performance.now()-started)));
 }
 export function subscribe(fn){listener=fn;}
 export function boot(){
