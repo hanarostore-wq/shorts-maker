@@ -124,6 +124,22 @@ export async function listApprovals(
   return state.approvals.filter((a) => a.state === filter.state);
 }
 
+/** 승인 대기함에서 사람이 제거한 요청을 영속 삭제한다. */
+export async function removeApproval(approvalId: string): Promise<ApprovalRequest | null> {
+  const state = await readState();
+  const index = state.approvals.findIndex((approval) => approval.id === approvalId);
+  if (index === -1) return null;
+  const [removed] = state.approvals.splice(index, 1);
+  const task = state.tasks.find((candidate) => candidate.id === removed.taskId);
+  if (task && (task.status === "waiting_approval" || task.status === "queued")) {
+    task.status = "cancelled";
+    task.updatedAt = nowIso();
+    task.error = "승인 대기함에서 삭제됨";
+  }
+  await writeState(state);
+  return removed;
+}
+
 /** 관제실에서 새 지시를 큐에 넣는다. */
 export async function enqueueTask(input: {
   agentId: string;

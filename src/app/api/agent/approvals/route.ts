@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { decideApproval, listApprovals } from "@/lib/agent/store";
+import { decideApproval, listApprovals, removeApproval } from "@/lib/agent/store";
 import type { ApprovalRequest } from "@/lib/agent/types";
 
 export async function GET(request: Request) {
@@ -45,4 +45,18 @@ export async function POST(request: Request) {
     approval: result.approval,
     resumed: result.approval.state === "approved",
   });
+}
+
+/** 승인 목록에서 X로 제거한다. 연결된 대기 작업도 재실행되지 않도록 취소한다. */
+export async function DELETE(request: Request) {
+  const body = await request.json().catch(() => ({}));
+  const approvalId = typeof body?.approvalId === "string" ? body.approvalId : "";
+  if (!approvalId) {
+    return NextResponse.json({ error: "approvalId는 필수입니다." }, { status: 400 });
+  }
+  const removed = await removeApproval(approvalId);
+  if (!removed) {
+    return NextResponse.json({ error: "해당 승인 요청을 찾을 수 없습니다." }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true, removedApprovalId: removed.id });
 }

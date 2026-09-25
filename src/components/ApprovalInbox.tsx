@@ -81,6 +81,30 @@ export function ApprovalInbox() {
     }
   };
 
+  const remove = async (approvalId: string) => {
+    setBusyId(approvalId);
+    setNotice(null);
+    // 서버 응답을 기다리는 동안에도 현재 목록에서 즉시 제거한다.
+    setApprovals((current) => current.filter((item) => item.id !== approvalId));
+    try {
+      const res = await fetch("/api/agent/approvals", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approvalId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.error ?? "삭제하지 못했습니다.");
+        setRefreshTick((n) => n + 1);
+      }
+    } catch {
+      setNotice("삭제 요청이 실패했습니다. 잠시 후 다시 확인해 주세요.");
+      setRefreshTick((n) => n + 1);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-3 border-2 border-amber-700 bg-zinc-950 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -121,6 +145,16 @@ export function ApprovalInbox() {
                 {formatTime(item.createdAt)}
               </span>
               <span className="text-[11px] text-zinc-200">{item.action.summary}</span>
+              <button
+                type="button"
+                aria-label={`${item.action.summary} 승인 요청 삭제`}
+                title="승인 요청 삭제"
+                onClick={() => void remove(item.id)}
+                disabled={busyId === item.id}
+                className="ml-auto text-base leading-none text-zinc-600 hover:text-rose-300 disabled:opacity-40"
+              >
+                ×
+              </button>
             </div>
 
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-zinc-500">
