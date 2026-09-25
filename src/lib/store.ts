@@ -296,6 +296,26 @@ export async function reportCompletion(input: {
     return null;
   }
 
+  // Vercel은 BUILDING → READY처럼 하나의 배포 상태가 바뀐다.
+  // 상태별로 새 줄을 쌓으면 과거 "빌드 중"이 현재 상태처럼 보여 혼동되므로
+  // 관제실에는 Vercel의 최신 상태를 하나의 로그 줄로 유지한다.
+  const replaceIndex = input.incidentKey === "vercel"
+    ? state.log.findIndex((item) => item.agentId === agent.id && /Vercel|빌드|배포/.test(item.message))
+    : -1;
+  if (replaceIndex >= 0) {
+    const previous = state.log[replaceIndex];
+    state.log = state.log.filter((item, index) =>
+      index === replaceIndex || !(item.agentId === agent.id && /Vercel|빌드|배포/.test(item.message)),
+    );
+    state.log[replaceIndex] = {
+      ...previous,
+      time: new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }),
+      message: input.message,
+    };
+    await writeState(state);
+    return state.log[replaceIndex];
+  }
+
   const entry: LogEntry = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     time: new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }),
