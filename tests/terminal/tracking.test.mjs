@@ -108,6 +108,7 @@ function terminal(params, funds, state = "cancel") {
 }
 test("percentage buttons are distinct and use fee/position adjusted buying power", (t) => {
   const { e, feed } = setup(t);
+  e.config.maxPositionKrw = 50000;
   const base = manualBuyingPower(e.paper, e.config, feed.book);
   assert.equal(base, 50000);
   assert.deepEqual(

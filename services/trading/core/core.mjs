@@ -4,8 +4,8 @@ import { strategyDecision } from "./strategy.mjs";
 export const D = (x) => new Decimal(x);
 export const defaults = {
   orderKrw: 10000,
-  maxPositionKrw: 50000,
-  dailyLossKrw: 10000,
+  maxPositionKrw: 0,
+  dailyLossKrw: 0,
   maxDrawdownPct: 3,
   stopLossPct: 0.7,
   takeProfitPct: 1.2,
@@ -31,8 +31,8 @@ export const defaults = {
 export function validateConfig(input, base = defaults) {
   const ranges = {
     orderKrw: [5000, 10000000],
-    maxPositionKrw: [5000, 10000000],
-    dailyLossKrw: [100, 1000000],
+    maxPositionKrw: [0, Number.MAX_SAFE_INTEGER],
+    dailyLossKrw: [0, Number.MAX_SAFE_INTEGER],
     maxDrawdownPct: [0.1, 20],
     stopLossPct: [0.1, 10],
     takeProfitPct: [0.1, 30],
@@ -67,9 +67,12 @@ export function validateConfig(input, base = defaults) {
       throw Error("잘못된 설정: " + k);
     if (["strategyEnabled", "autoScan"].includes(k) && !Number.isInteger(v))
       throw Error("잘못된 ON/OFF 설정: " + k);
+    if (["maxPositionKrw", "dailyLossKrw"].includes(k) &&
+      (!Number.isSafeInteger(v) || (v !== 0 && v < (k === "maxPositionKrw" ? 5000 : 100))))
+      throw Error(k === "maxPositionKrw" ? "최대 보유금액은 제한 없음 또는 5,000원 이상의 정수로 입력하세요." : "하루 손실 한도는 제한 없음 또는 100원 이상의 정수로 입력하세요.");
     out[k] = v;
   }
-  if (out.orderKrw > out.maxPositionKrw)
+  if (out.maxPositionKrw > 0 && out.orderKrw > out.maxPositionKrw)
     throw Error("1회 주문금액이 최대 보유금액보다 큽니다.");
   return out;
 }
@@ -276,11 +279,11 @@ export function riskCheck({
     if (!Number.isFinite(amount) || amount < 5000 || amount > config.orderKrw)
       throw Error("최소 주문/1회 주문 한도 위반");
     if (
-      m.dailyPnl <= -config.dailyLossKrw ||
+      (config.dailyLossKrw > 0 && m.dailyPnl <= -config.dailyLossKrw) ||
       m.drawdownPct >= config.maxDrawdownPct
     )
       throw Error("손실 한도 도달: 신규 매수 중단");
-    if (m.positionKrw + amount > config.maxPositionKrw)
+    if (config.maxPositionKrw > 0 && m.positionKrw + amount > config.maxPositionKrw)
       throw Error("최대 보유금액 초과");
     if (D(ledger.cash).lt(D(amount).mul(D(1).plus(D(config.feePct).div(100)))))
       throw Error("수수료 포함 잔액 부족");
@@ -309,7 +312,7 @@ export function decide(answers, features, ledger, config, now = Date.now()) {
     if (!config.strategyEnabled && now - ledger.openedAt >= config.maxHoldSeconds * 1000)
       return { side: "sell", reason: "최대 보유시간 도달" };
     if (
-      m.dailyPnl <= -config.dailyLossKrw ||
+      (config.dailyLossKrw > 0 && m.dailyPnl <= -config.dailyLossKrw) ||
       m.drawdownPct >= config.maxDrawdownPct
     )
       return { side: "sell", reason: "계좌 손실 한도: 포지션 정리" };

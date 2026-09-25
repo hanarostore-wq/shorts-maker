@@ -54,11 +54,11 @@ export function investmentPlan(policy,action,ledger,f,config,chance=null){
  if(!Number.isFinite(exchange)||!Number.isFinite(fee)||fee<0||fee>0.01)return zero('주문가능 원화·수수료 확인 필요');
  const available=Math.max(0,Math.min(Number(ledger.cash),exchange));
  const allocated=Number(ledger.cash)+Number(ledger.quantity)*f.bid;
- const lossLeft=Math.max(0,Math.min(config.dailyLossKrw+allocated-Number(ledger.dayStart||ledger.initial),allocated-Number(ledger.highWater)*(1-config.maxDrawdownPct/100)));
+ const lossLeft=Math.max(0,Math.min((config.dailyLossKrw === 0 ? Infinity : config.dailyLossKrw+allocated-Number(ledger.dayStart||ledger.initial)),allocated-Number(ledger.highWater)*(1-config.maxDrawdownPct/100)));
  const riskBudget=Math.min(allocated*policy.sizing.riskPct/100,lossLeft);
  const stopDistance=config.stopLossPct/100+fee*2+config.slippageBps/10000;
  const depth=(f.visibleAskKrw??Infinity);
- const caps={판단비율:available*targetPct/100,수수료:available/(1+fee),최대보유:Math.max(0,config.maxPositionKrw-Number(ledger.quantity)*f.bid),손실예산:riskBudget/stopDistance,호가물량:depth*0.1};
+ const caps={판단비율:available*targetPct/100,수수료:available/(1+fee),최대보유:config.maxPositionKrw === 0 ? Infinity : Math.max(0,config.maxPositionKrw-Number(ledger.quantity)*f.bid),손실예산:riskBudget/stopDistance,호가물량:depth*0.1};
  if(Object.values(caps).some(x=>Number.isNaN(x)))return zero('투자비용 계산 자료 오류');
  const limiting=Object.entries(caps).sort((a,b)=>a[1]-b[1])[0];const amount=Math.floor(limiting[1]);const minimum=chance?Number(chance.market?.bid?.min_total):5000;
  if(!Number.isFinite(minimum)||amount<minimum)return {...zero('계산 금액이 최소 주문금액 미만 · 한도 자동 확대 안 함'),availableKrw:available,targetPct};

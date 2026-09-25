@@ -100,6 +100,11 @@ function showSettings() {
         ? e.config[key] / 100
         : e.config[key];
   document.querySelectorAll("[data-money]").forEach(formatMoneyField);
+  for (const [key,control] of Object.entries(optionalLimits)) {
+    control.select.value = e.config[key] === 0 ? 'none' : 'amount';
+    if (e.config[key] === 0) control.input.value = '';
+    control.sync();
+  }
   $("strategyPrompt").value = e.prompt;
   $("settingsDialog").showModal();
 }
@@ -162,18 +167,45 @@ $("configFields").innerHTML = Object.entries(configLabels)
       '" required></label>',
   )
   .join("");
-const dailyLossInput = $('cfg-dailyLossKrw');
-const dailyLossHelp = document.createElement('small');
-dailyLossHelp.id='dailyLossHelp';
-dailyLossHelp.textContent='허용 범위: 100원~1,000,000원. 기존 손실 한도를 자동으로 늘리지 않습니다.';
-dailyLossInput.after(dailyLossHelp);
-dailyLossInput.setAttribute('aria-describedby','dailyLossHelp');
-function validateDailyLoss() {
-  const raw=dailyLossInput.value.replaceAll(',','');
-  const value=Number(raw);
-  const valid=/^\d+$/.test(raw)&&Number.isSafeInteger(value)&&value>=100&&value<=1000000;
-  dailyLossInput.setCustomValidity(valid?'':'하루 손실 한도는 100원~1,000,000원 사이로 입력하세요.');
-  return valid;
+const optionalLimits = {};
+for (const key of ['maxPositionKrw','dailyLossKrw']) {
+  const input = $('cfg-'+key);
+  const select = document.createElement('select');
+  select.id = 'limit-'+key;
+  select.setAttribute('aria-label', configLabels[key][0]+' 제한 방식');
+  select.innerHTML = '<option value="none">제한 없음</option><option value="amount">금액 지정</option>';
+  input.before(select);
+  const help = document.createElement('small');
+  help.id = 'help-'+key;
+  help.textContent = '기본: 제한 없음 · 필요할 때 금액을 지정하세요.';
+  input.after(help);
+  input.setAttribute('aria-describedby',help.id);
+  const sync = () => {
+    const unlimited = select.value === 'none';
+    input.disabled = unlimited;
+    input.hidden = unlimited;
+    input.required = !unlimited;
+    input.setCustomValidity('');
+    if (unlimited) help.textContent = '제한 없음';
+    else help.textContent = key === 'maxPositionKrw' ? '5,000원 이상의 정수로 입력하세요.' : '100원 이상의 정수로 입력하세요.';
+  };
+  select.onchange = sync;
+  optionalLimits[key] = {input,select,sync};
+  sync();
+}
+function validateOptionalLimits() {
+  for (const [key,{input,select}] of Object.entries(optionalLimits)) {
+    input.setCustomValidity('');
+    if (select.value === 'none') continue;
+    const raw = input.value.replaceAll(',','');
+    const value = Number(raw);
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < (key === 'maxPositionKrw' ? 5000 : 100)) {
+      input.setCustomValidity(configLabels[key][0]+'을 올바르게 입력하거나 제한 없음을 선택하세요.');
+      input.reportValidity();
+      return false;
+    }
+  }
+  return true;
 }
 function renderStrategy() {
   const e=state.engine,s=e.features?.strategy, risk=e.safety, intent=risk?.intent;
@@ -290,7 +322,7 @@ function render() {
       ? e.config.feePct + "% / " + (e.config.slippageBps / 100).toFixed(3) + "%"
       : "업비트 실제 수수료";
   $("limitHint").textContent =
-    "근거별 비율 투자 / " + moneyLabel(e.config.maxPositionKrw, 0);
+    "근거별 비율 투자 / " + (e.config.maxPositionKrw === 0 ? "제한 없음" : moneyLabel(e.config.maxPositionKrw, 0));
   $("submitOrder").textContent =
     (e.mode === "paper" ? "모의 " : "실전 ") +
     (side === "buy" ? "추적 매수" : "추적 매도");
@@ -814,12 +846,12 @@ $("upbitKeyForm").onsubmit = (e) => {
 $("strategyPane").onsubmit = (e) => {
   e.preventDefault();
   if ($('settingsFeedback')) $('settingsFeedback').hidden = true;
-  if (!validateDailyLoss()) { dailyLossInput.reportValidity(); return; }
+  if (!validateOptionalLimits()) return;
   act(async () => {
     const config = Object.fromEntries(
       Object.keys(configLabels).map((k) => [
         k,
-        (k.endsWith("Krw") ? parseMoney($("cfg-" + k).value) : Number($("cfg-" + k).value)) *
+        (optionalLimits[k] ? (optionalLimits[k].select.value === "none" ? 0 : Number($("cfg-"+k).value.replaceAll(",",""))) : k.endsWith("Krw") ? parseMoney($("cfg-" + k).value) : Number($("cfg-" + k).value)) *
           ((k.endsWith("Probability") || k.endsWith("Score")) ? 0.01 : k.endsWith("Bps") ? 100 : 1),
       ]),
     );
@@ -1058,7 +1090,7 @@ async function init(){try{state=await boot();render();renderWorkspace(state);sub
 document.querySelectorAll('[data-money]').forEach(input => {
   formatMoneyField(input);
   input.addEventListener('input', () => formatMoneyField(input));
-  if (input === dailyLossInput) input.addEventListener('input', validateDailyLoss);
+
 });
 setupWorkspace(api);
 init();

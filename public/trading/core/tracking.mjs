@@ -12,7 +12,7 @@ export function manualBuyingPower(ledger, config, book, chance = null) {
   const cash = chance
     ? Decimal.min(ledger.cash, chance.bid_account?.balance || 0)
     : D(ledger.cash);
-  const headroom = D(config.maxPositionKrw).minus(D(ledger.quantity).mul(bid));
+  const headroom = config.maxPositionKrw === 0 ? cash : D(config.maxPositionKrw).minus(D(ledger.quantity).mul(bid));
   return Decimal.max(0, Decimal.min(cash.div(D(1).plus(fee)), headroom))
     .floor()
     .toNumber();
@@ -60,7 +60,7 @@ export class TrackingExecutor {
     )
       .toDecimalPlaces(8, 1)
       .toString();
-    const cfg = { ...e.config, orderKrw: e.config.maxPositionKrw };
+    const cfg = { ...e.config, orderKrw: e.config.maxPositionKrw === 0 ? Number.MAX_SAFE_INTEGER : e.config.maxPositionKrw };
     riskCheck({
       ledger: l,
       book: e.feed.book,
@@ -256,7 +256,7 @@ export class TrackingExecutor {
     if (e.orderBusy) throw Error("다른 주문 처리 중");
     e.orderBusy = true;
     try {
-      let cfg = { ...e.config, orderKrw: e.config.maxPositionKrw };
+      let cfg = { ...e.config, orderKrw: e.config.maxPositionKrw === 0 ? Number.MAX_SAFE_INTEGER : e.config.maxPositionKrw };
       if (s.mode === "live") {
         e.chance = await e.broker.chance(s.market);
         const fee = Number(

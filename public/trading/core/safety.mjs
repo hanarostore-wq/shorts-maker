@@ -8,7 +8,7 @@ export function safetySignal(ledger, f, config, now = Date.now()) {
   const netBid = f.bid * (1 - config.feePct / 100);
   if (netBid <= average * (1 - config.stopLossPct / 100))
     return '절대 손실 한도 도달';
-  if (mark.dailyPnl <= -config.dailyLossKrw || mark.drawdownPct >= config.maxDrawdownPct)
+  if ((config.dailyLossKrw > 0 && mark.dailyPnl <= -config.dailyLossKrw) || mark.drawdownPct >= config.maxDrawdownPct)
     return '계좌 손실 한도 도달';
   if (!config.strategyEnabled) return null;
   if (Number.isFinite(f.strategy?.fastReturnBps) && f.strategy.fastReturnBps <= -config.crashBps)
