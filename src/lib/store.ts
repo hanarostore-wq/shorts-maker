@@ -87,6 +87,10 @@ function healState(state: State): State {
   for (const department of state.departments) {
     const fresh = initialDepartments.find((d) => d.id === department.id);
     if (!fresh) continue;
+    if (department.id === "ops") {
+      // 당장 업무가 없는 운영 직원은 화면에서 임시 제외한다. 직원 ID·로그·관련 기능은 보존한다.
+      department.agents = department.agents.filter((agent) => !["o1", "o2", "o3"].includes(agent.id));
+    }
     if (department.id === 'coin' || department.id === 'stock') {
       const allowed = new Map(fresh.agents.map(a => [a.id,a]));
       // One-time roster migration; later drag order remains user-owned.

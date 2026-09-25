@@ -7,9 +7,6 @@ export const departments: Department[] = [
     icon: "⚙️",
     agents: [
       { id: "o4", name: "Vercel파견직원", task: "Vercel 배포/빌드 전반 관리 - 아직 연동 안 됨", status: "offline" },
-      { id: "o1", name: "정산담당", task: "채널별 수익 집계 - 아직 연동 안 됨", status: "offline" },
-      { id: "o2", name: "보고서작성원", task: "일일 리포트 생성 - 아직 연동 안 됨", status: "offline" },
-      { id: "o3", name: "이상감지원", task: "이상 감지/알림 - 아직 연동 안 됨", status: "offline" },
       { id: "o5", name: "공유저장소", task: "Upstash Redis 공유 상태 관리", status: "active" },
     ],
   },
