@@ -9,6 +9,16 @@ class FakeSocket extends EventTarget {
  close(){this.dispatchEvent(new Event('close'));}
  message(value){const e=new Event('message');e.data=JSON.stringify(value);this.dispatchEvent(e);}
 }
+for (const Feed of [MarketFeed,PreviewFeed]) test((Feed===MarketFeed?'PC':'preview')+': quiet selected market does not reconnect while other subscribed tickers arrive',t=>{
+ const original=globalThis.WebSocket;globalThis.WebSocket=FakeSocket;t.after(()=>globalThis.WebSocket=original);
+ let now=1000,heartbeat,closed=0;
+ t.mock.method(Date,'now',()=>now);
+ t.mock.method(globalThis,'setInterval',fn=>{heartbeat=fn;return 1;});
+ t.mock.method(globalThis,'clearInterval',()=>{});
+ const f=new Feed();f.scanner={};f.markets=[{market:'KRW-BTC'},{market:'KRW-COMP'}];f.symbol='KRW-COMP';t.after(()=>f.stop());f.connect(f.generation);
+ const ws=FakeSocket.latest;ws.addEventListener('close',()=>closed++);ws.dispatchEvent(new Event('open'));
+ now=15000;ws.message({type:'ticker',code:'KRW-BTC',trade_price:100});now=20000;heartbeat();assert.equal(closed,0);
+});
 for(const mode of ['paper','live'])test(mode+': shared scanner omits empty trade subscription and selected quote stays connected',t=>{
  const original=globalThis.WebSocket;globalThis.WebSocket=FakeSocket;t.after(()=>globalThis.WebSocket=original);
  const f=new MarketFeed();f.scanner={};f.markets=[{market:'KRW-BTC'}];t.after(()=>f.stop());f.connect(f.generation);

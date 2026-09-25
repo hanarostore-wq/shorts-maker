@@ -172,6 +172,7 @@ export class MarketFeed {
         const m = JSON.parse(raw.toString());
         if (m.error) throw Error(m.error.name);
         if (gen !== this.generation) return;
+        alive = Date.now();
         if (m.type === "ticker") {
           this.activity.observe(m);
           this.tickers[m.code] = { ...m, market: m.code };
@@ -179,7 +180,6 @@ export class MarketFeed {
           if (m.code !== this.symbol) return;
         }
         if (m.code !== this.symbol) return;
-        alive = Date.now();
         this.lastMessage = alive;
         this.status = "실시간 연결";
         if (m.type === "ticker")
