@@ -15,6 +15,18 @@ const DATALAB_URL = `${API_HUB_BASE_URL}/search-trend/v1/search`;
 const SEARCH_URL = `${API_HUB_BASE_URL}/search/v1/blog`;
 const MAX_KEYWORDS = 200;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const AUTO_PROFILE_TERMS = ["생활정보", "실용정보", "비교추천", "절약", "관리방법"];
+const AUTO_TOPIC_BASES = [
+  "전기요금 절약", "통신비 절약", "생활비 절약", "자취방 정리", "냉장고 정리", "냉장고 냄새 제거", "세탁기 청소", "수건 냄새 제거", "곰팡이 제거", "싱크대 배수구 관리",
+  "에어프라이어 관리", "전자레인지 청소", "욕실 물때 제거", "주방 기름때 제거", "장마철 빨래", "겨울철 난방비", "여름철 전기요금", "집 먼지 줄이기", "옷장 냄새 제거", "이사 체크리스트",
+  "무선청소기", "로봇청소기", "제습기", "공기청정기", "선풍기", "전기포트", "무선 이어폰", "모니터", "노트북", "차량용품",
+  "아침 스트레칭", "목 어깨 스트레칭", "걷기 운동", "집 하체 운동", "수면 관리", "직장인 건강관리", "자취생 식비", "간단한 집밥", "여행 준비물", "가계부 관리",
+];
+const AUTO_VARIANTS = ["추천", "비교", "사용법", "관리 방법", "구매 전 체크리스트"];
+
+function discoverKeywords() {
+  return [...new Set(AUTO_TOPIC_BASES.flatMap((base) => AUTO_VARIANTS.map((variant) => `${base} ${variant}`)))].slice(0, MAX_KEYWORDS);
+}
 
 function cleanKeyword(value: unknown) { return String(value || "").trim().replace(/\s+/g, " "); }
 function topicId(blogId: string, keyword: string) { return `TOPIC-${createHash("sha256").update(`${blogId}:${keyword.toLowerCase()}`).digest("hex").slice(0, 16)}`; }
@@ -80,6 +92,15 @@ export async function GET() { return NextResponse.json(await getBlogResearchDash
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const action = String(body?.action || "upsert");
+  if (action === "discover") {
+    try {
+      const keywords = discoverKeywords();
+      return NextResponse.json({ ok: true, mode: "automatic", profileKeywords: AUTO_PROFILE_TERMS, ...(await collectCandidates({ keywords, blogId: String(body.blogId || "b_naver_main"), profileKeywords: AUTO_PROFILE_TERMS })) });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "자동 소재 발굴 실패";
+      return NextResponse.json({ ok: false, code: message.split(":")[0], error: message }, { status: 502 });
+    }
+  }
   if (action === "collect") {
     try { return NextResponse.json({ ok: true, ...(await collectCandidates({ keywords: Array.isArray(body.keywords) ? body.keywords.map(cleanKeyword).filter(Boolean) : [], blogId: String(body.blogId || "b_naver_main"), profileKeywords: Array.isArray(body.profileKeywords) ? body.profileKeywords.map(cleanKeyword).filter(Boolean) : [] })) }); }
     catch (error) { const message = error instanceof Error ? error.message : "소재 수집 실패"; return NextResponse.json({ ok: false, code: message.split(":")[0], error: message }, { status: 502 }); }
