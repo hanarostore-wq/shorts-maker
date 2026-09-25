@@ -46,14 +46,42 @@ export function TraderWorkspace({ mode }: { mode: "paper" | "live" }) {
   const [status, setStatus] = useState("실시간 연결 준비"); const [hovered, setHovered] = useState<Candle | null>(null); const [loopsByMarket, setLoopsByMarket] = useState<Record<string, LoopState>>({}); const [tickMetaByMarket, setTickMetaByMarket] = useState<Record<string, TickMeta>>({}); const [notice, setNotice] = useState("PAPER · JEV 판단 기반 실시간 이벤트 루프 대기"); const [auto, setAuto] = useState(mode === "paper"); const [busy, setBusy] = useState(false); const [side, setSide] = useState<"buy" | "sell">("buy"); const busyRef = useRef(false); const [liveAccount, setLiveAccount] = useState<AccountPayload | null>(null); const [workerState, setWorkerState] = useState<WorkerState | null>(null); const [eventSeq, setEventSeq] = useState(0); const [clock, setClock] = useState(0);
   const [orderAmount, setOrderAmount] = useState("5000");
   const loop = loopsByMarket[market] || newLoopState();
-  useEffect(() => { if (eventSeq > 0) setClock(Date.now()); }, [eventSeq]);
+  useEffect(() => {
+    if (eventSeq === 0) return;
+    const timer = window.setTimeout(() => setClock(Date.now()), 0);
+    return () => window.clearTimeout(timer);
+  }, [eventSeq]);
 
   const load = useCallback(async (code: string) => { try { const r = await fetch(`/api/coin/market?market=${code}`, { cache: "no-store" }); const p = await r.json() as Payload; if (!p.ok) throw new Error(p.error || "[MARKET_DATA_ERROR] 업비트 캔들·호가 응답이 비어 있습니다"); setData(p); } catch (e) { setNotice(e instanceof Error ? e.message : "[MARKET_DATA_ERROR] 업비트 시세 조회에 실패했습니다"); } }, []);
   const refreshAccount = useCallback(async () => { if (mode !== "live") return; try { const r = await fetch("/api/coin/account", { cache: "no-store" }); const x = await r.json() as AccountPayload; if (!x.ok) throw new Error(x.error || "[LIVE_ACCOUNT_SYNC_ERROR] 실전 잔고 응답이 없습니다"); setLiveAccount(x); } catch (e) { setNotice(e instanceof Error ? e.message : "[LIVE_ACCOUNT_SYNC_ERROR] 실전 잔고 동기화에 실패했습니다"); } }, [mode]);
-  useEffect(() => { void fetch("/api/coin/markets", { cache: "no-store" }).then((r) => r.json()).then((x) => { if (x.ok && x.markets?.length) { setMarkets(x.markets); setPrices(Object.fromEntries(x.markets.filter((item: Market) => typeof item.price === "number").map((item: Market) => [item.market, item.price as number]))); } }).catch(() => setNotice("[MARKET_LIST_ERROR] 업비트 코인 목록 조회에 실패했습니다")); }, []);
-  useEffect(() => { void load(market); }, [load, market]);
+  useEffect(() => {
+    let stopped = false;
+    const readMarkets = async () => {
+      try {
+        const r = await fetch("/api/coin/markets", { cache: "no-store" });
+        const x = await r.json();
+        if (!stopped && x.ok && x.markets?.length) {
+          setMarkets(x.markets);
+          setPrices(Object.fromEntries(x.markets.filter((item: Market) => typeof item.price === "number").map((item: Market) => [item.market, item.price as number])));
+        }
+      } catch {
+        if (!stopped) setNotice("[MARKET_LIST_ERROR] 업비트 코인 목록 조회에 실패했습니다");
+      }
+    };
+    void readMarkets();
+    return () => { stopped = true; };
+  }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(market), 0);
+    return () => window.clearTimeout(timer);
+  }, [load, market]);
   useEffect(() => { let stopped = false; let retry = 0; let stream: EventSource | null = null; let timer: ReturnType<typeof setTimeout> | null = null; const connect = () => { if (stopped) return; setStatus(retry ? `○ 실시간 재연결 중 ${retry}회` : "실시간 연결 중"); stream = new EventSource(`/api/coin/stream?market=${encodeURIComponent(market)}&codes=${encodeURIComponent(commonMarkets.join(","))}`); stream.onopen = () => { retry = 0; setStatus("● 실시간 중계 연결됨"); }; stream.onmessage = (e) => { try { const x = JSON.parse(e.data) as Record<string, unknown>; if (["relay_open", "relay_heartbeat"].includes(String(x.type))) return; if (x.type === "relay_error") { setNotice(`${String(x.code)} ${String(x.message)}`); return; } if (x.type === "ticker") { const code = String(x.code); const next = Number(x.trade_price); setPrices((p) => ({ ...p, [code]: next })); setFlash(code); window.setTimeout(() => setFlash((f) => f === code ? null : f), 260); if (code === market) { setData((p) => p ? { ...p, price: next } : p); setStatus(`● 실시간 수신 ${new Date().toLocaleTimeString("ko-KR")}`); setEventSeq((value) => value + 1); if (mode === "live") void refreshAccount(); } } else if (x.type === "orderbook" && x.code === market) { setData((p) => p ? { ...p, orderbook: { units: (x.orderbook_units as Unit[] | undefined)?.slice(0, 15) || [] } } : p); setEventSeq((value) => value + 1); } } catch { setNotice("[UPBIT_RELAY_PARSE_ERROR] 서버 중계 데이터 해석에 실패했습니다"); } }; stream.onerror = () => { if (stopped) return; setStatus("○ 서버 중계 재연결 대기"); setNotice("[UPBIT_RELAY_CONNECTION_RETRY] 서버 중계 연결이 끊겨 재연결합니다"); stream?.close(); retry = Math.min(retry + 1, 8); timer = setTimeout(connect, Math.min(1000 * 2 ** (retry - 1), 10000)); }; }; connect(); return () => { stopped = true; if (timer) clearTimeout(timer); stream?.close(); }; }, [market, mode, refreshAccount]);
-  useEffect(() => { if (mode !== "live") return; void refreshAccount(); const timer = window.setInterval(() => void refreshAccount(), 2500); return () => window.clearInterval(timer); }, [mode, refreshAccount]);
+  useEffect(() => {
+    if (mode !== "live") return;
+    const initial = window.setTimeout(() => void refreshAccount(), 0);
+    const timer = window.setInterval(() => void refreshAccount(), 2500);
+    return () => { window.clearTimeout(initial); window.clearInterval(timer); };
+  }, [mode, refreshAccount]);
   useEffect(() => { let stopped = false; const read = async () => { try { const r = await fetch(`/api/coin/terminal/worker?mode=${mode}`, { cache: "no-store" }); if (!r.ok) return; const x = await r.json() as WorkerState; if (!stopped) setWorkerState(x); } catch { /* worker may be unavailable; UI stays explicit */ } }; void read(); const timer = window.setInterval(() => void read(), 5000); return () => { stopped = true; window.clearInterval(timer); }; }, [mode, eventSeq]);
 
   const runTick = useCallback(async () => { if (busyRef.current || !data?.price || !data.orderbook?.units?.[0] || mode !== "paper") return; busyRef.current = true; setBusy(true); const u = data.orderbook.units[0]; try { const r = await fetch("/api/coin/paper/tick", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ market, state: loop, input: { price: data.price, prices: data.candles?.map((c) => Number(c.trade_price)).reverse() || [], bestAsk: u.ask_price, bestBid: u.bid_price, askSize: u.ask_size, bidSize: u.bid_size, websocketHealthy: true, dataAgeMs: 0, allowedBuy: true, allowedSell: true, targetNotional: Number(orderAmount) || 5000 } }) }); const x = await r.json() as TickResponse; if (!x.ok || !x.result) throw new Error(x.error || `[${x.code || "JEV_PAPER_TICK_ERROR"}] 자동 판단 결과가 없습니다`); setLoopsByMarket((previous) => ({ ...previous, [market]: x.result!.state })); setTickMetaByMarket((previous) => ({ ...previous, [market]: { action: x.jev?.action || x.result!.action, provider: x.jev?.provider || x.result!.battery.provider, latencyMs: x.jev?.latencyMs || x.result!.battery.latencyMs, fills: x.result!.fills.length, orders: x.result!.orders.length, eventSeq } })); setNotice(`${x.jev?.provider === "JEV" ? "JEV" : "RULES_ONLY"} ${x.jev?.action || x.result.action} · 매수 ${(Number(x.jev?.probabilities?.BUY || x.result.battery.buyConfidence) * 100).toFixed(0)}% · 매도 ${(Number(x.jev?.probabilities?.SELL || x.result.battery.sellConfidence) * 100).toFixed(0)}% · ${x.result.fills.length ? `${x.result.fills.length}건 체결` : "지정가 대기"}${x.jev?.errorCode ? ` · [${x.jev.errorCode}]` : ""}`); } catch (e) { setNotice(e instanceof Error ? e.message : "[JEV_PAPER_TICK_ERROR] 자동 루프 실행에 실패했습니다"); } finally { busyRef.current = false; setBusy(false); } }, [data, eventSeq, loop, market, mode, orderAmount]);

@@ -13,6 +13,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "desktop/**",
+    // Third-party browser bundles are distributed artifacts, not source code.
+    "public/trading/vendor/**",
   ]),
 ]);
 
