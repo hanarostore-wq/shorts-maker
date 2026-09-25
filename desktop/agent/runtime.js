@@ -178,6 +178,9 @@ async function runTask(controlUrl, partition, task, log, startUrl) {
         id: result.contentId,
         action: "publish-result",
         status: result.status,
+        publishAttemptId: task.id,
+        verified: result.status === "done",
+        verifiedBy: "browser-worker",
         publishedUrl: result.publishedUrl || null,
         error: status === "done" ? null : result.message,
       });
@@ -276,6 +279,9 @@ async function tick(controlUrl, partition, log, getStartUrl) {
   if (running) return;
   running = true;
   try {
+    // READY 관리자가 저장한 하루 3회 슬롯을 워커가 결정론적으로 claim한다.
+    // 슬롯이 아니면 서버는 빈 결과를 돌려주며, 글이 체크되지 않았으면 임의 선택하지 않는다.
+    await callApi(controlUrl, "/api/blog/naver", "POST", { action: "run-due-slots" });
     const { ok, data } = await callApi(controlUrl, "/api/agent/claim", "POST");
     if (!ok || !data.task) return;
     // 지시에 주소가 없으면 담당자가 지금 보고 있는 화면에서 이어서 한다.
