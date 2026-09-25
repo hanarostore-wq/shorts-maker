@@ -107,6 +107,13 @@ export default function Home() {
 
   const isShortsAgentSelected = Boolean(liveSelectedAgent && liveSelectedAgent.id.startsWith("v"));
   const shortsStep = liveSelectedAgent?.id ? (SHORTS_AGENT_STEP_MAP[liveSelectedAgent.id] || "search") : "search";
+  const shortsAgents = allAgents.filter((agent) => agent.id.startsWith("v"));
+  const handleNextShortsAgent = () => {
+    if (!liveSelectedAgent || shortsAgents.length < 2) return;
+    const currentIndex = shortsAgents.findIndex((agent) => agent.id === liveSelectedAgent.id);
+    const nextAgent = shortsAgents[(currentIndex + 1) % shortsAgents.length];
+    if (nextAgent) setSelectedAgent(nextAgent);
+  };
 
   return (
     <div className="flex flex-1 flex-col gap-3 bg-black px-4 py-6 font-mono sm:px-8">
@@ -162,6 +169,7 @@ export default function Home() {
         targetAgentId={liveSelectedAgent?.id}
         targetAgentName={liveSelectedAgent?.name}
         targetAgentTask={liveSelectedAgent?.task}
+        onNextAgent={handleNextShortsAgent}
         onClose={() => setSelectedAgent(null)}
       />
 

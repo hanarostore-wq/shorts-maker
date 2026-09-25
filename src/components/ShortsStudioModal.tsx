@@ -6,6 +6,7 @@ import styles from "./ShortsStudioModal.module.css";
 interface ShortsStudioModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onNextAgent: () => void;
   initialStep?: string;
   targetAgentId?: string | null;
   targetAgentName?: string | null;
@@ -15,6 +16,7 @@ interface ShortsStudioModalProps {
 export function ShortsStudioModal({
   isOpen,
   onClose,
+  onNextAgent,
   initialStep = "search",
   targetAgentId,
   targetAgentName,
@@ -23,6 +25,7 @@ export function ShortsStudioModal({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const lastNavigationKeyRef = useRef<string | null>(null);
+  const lastStepByAgentRef = useRef(new Map<string, string>());
   const onCloseRef = useRef(onClose);
 
   useEffect(() => {
@@ -44,9 +47,11 @@ export function ShortsStudioModal({
 
       // 같은 직원을 다시 열 때는 iframe의 현재 단계·입력·검색 결과를 유지한다.
       // 직원이 바뀐 경우에만 해당 직원의 첫 단계로 이동한다.
-      const navigationKey = `${targetAgentId || "unknown"}:${initialStep}`;
+      const agentKey = targetAgentId || "unknown";
+      const step = lastStepByAgentRef.current.get(agentKey) || initialStep;
+      const navigationKey = `${agentKey}:${step}`;
       if (lastNavigationKeyRef.current !== navigationKey) {
-        navigateFrame(initialStep);
+        navigateFrame(step);
         lastNavigationKeyRef.current = navigationKey;
       }
 
@@ -62,10 +67,13 @@ export function ShortsStudioModal({
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type === "close-shorts-modal") onCloseRef.current();
+      if (event.data?.type === "shorts-step-changed" && typeof event.data.step === "string" && targetAgentId) {
+        lastStepByAgentRef.current.set(targetAgentId, event.data.step);
+      }
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, []);
+  }, [targetAgentId]);
 
   return (
     <dialog
@@ -88,6 +96,7 @@ export function ShortsStudioModal({
             {targetAgentTask && <span className={styles.status} style={{ opacity: 0.75 }}>({targetAgentTask})</span>}
           </div>
           <div className={styles.actions}>
+            <button type="button" className={styles.closeBtn} onClick={onNextAgent} aria-label="다음 쇼츠 직원으로 이동">다음 직원 →</button>
             <button type="button" className={styles.closeBtn} onClick={() => onCloseRef.current()} aria-label="쇼츠 분석기 닫기">✕ 닫기</button>
           </div>
         </header>
@@ -97,7 +106,7 @@ export function ShortsStudioModal({
             className={styles.frame}
             title="남다른AI Shorts 분석기"
             src={`/shorts/index.html?step=${encodeURIComponent(initialStep)}`}
-            onLoad={() => navigateFrame(initialStep)}
+            onLoad={() => navigateFrame(lastStepByAgentRef.current.get(targetAgentId || "unknown") || initialStep)}
           />
         </div>
       </div>

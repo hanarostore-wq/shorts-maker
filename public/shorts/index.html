@@ -646,6 +646,7 @@
 
         function navigate(step) {
             state.currentStep = step;
+            window.parent.postMessage({ type: 'shorts-step-changed', step }, window.location.origin);
             
             navItems.forEach(item => {
                 if(item.getAttribute('data-step') === step) {
