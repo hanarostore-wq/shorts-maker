@@ -84,6 +84,9 @@ function healState(state: State): State {
       state.departments.push(structuredClone(freshDepartment));
     }
   }
+  const knownAgentIds = new Set(
+    state.departments.flatMap((department) => department.agents.map((agent) => agent.id)),
+  );
   for (const department of state.departments) {
     const fresh = initialDepartments.find((d) => d.id === department.id);
     if (!fresh) continue;
@@ -91,53 +94,19 @@ function healState(state: State): State {
       // 당장 업무가 없는 운영 직원은 화면에서 임시 제외한다. 직원 ID·로그·관련 기능은 보존한다.
       department.agents = department.agents.filter((agent) => !["o1", "o2", "o3"].includes(agent.id));
     }
-    if (department.id === 'coin' || department.id === 'stock') {
-      const allowed = new Map(fresh.agents.map(a => [a.id,a]));
-      // One-time roster migration; later drag order remains user-owned.
-      const migrateAnalyticsOrder=!department.agents.some(a=>a.id.endsWith('_analytics'));
-
-      department.agents = department.agents.filter(a => allowed.has(a.id)).map(a => {
-        const current=allowed.get(a.id)!;
-        return a.id.includes('_') ? structuredClone(current) : {...a,name:current.name,...(['c11','c12','t11','t12'].includes(a.id)?{task:current.task}:{})};
-      });
-      if(migrateAnalyticsOrder){const byId=new Map(department.agents.map(a=>[a.id,a]));department.agents=fresh.agents.map(a=>byId.get(a.id)||structuredClone(a));}
-    }
-    const existingIds = new Set(department.agents.map((agent) => agent.id));
+    // 부서와 순서는 사용자가 직접 배치한다. 직원 ID에 해당하는 최신 업무
+    // 정보만 동기화하고, 다른 부서로 옮긴 직원은 원래 자리로 되돌리지 않는다.
+    department.agents = department.agents.map((agent) => {
+      const current = initialDepartments
+        .flatMap((item) => item.agents)
+        .find((candidate) => candidate.id === agent.id);
+      return current ? { ...agent, name: current.name, task: current.task } : agent;
+    });
     for (const freshAgent of fresh.agents) {
-      if (!existingIds.has(freshAgent.id)) {
+      if (!knownAgentIds.has(freshAgent.id)) {
         department.agents.push(structuredClone(freshAgent));
+        knownAgentIds.add(freshAgent.id);
       }
-    }
-
-    // 블로그부서는 최신 roster만 유지하고 구버전 b1~b4 직원을 제거한다.
-    // Redis에 남아 있는 예전 4인 블로그 조직이 다시 나타나지 않게 한다.
-    if (department.id === "blog") {
-      const byId = new Map(department.agents.map((a) => [a.id, a]));
-      department.agents = fresh.agents.map((fa) => {
-        const existing = byId.get(fa.id);
-        return existing ? { ...existing, name: fa.name, task: fa.task } : structuredClone(fa);
-      });
-    }
-
-    // 쇼츠부서는 직원 이름·업무·상태를 항상 최신 mock-data 기준으로 강제 동기화한다.
-    // (Upstash Redis에 구버전 데이터가 남아 있어도 관제실 화면이 항상 최신을 보여주도록)
-    if (department.id === "shorts") {
-      // 순서도 fresh 기준으로 재정렬
-      const byId = new Map(department.agents.map((a) => [a.id, a]));
-      const reordered = fresh.agents
-        .map((fa) => {
-          const existing = byId.get(fa.id);
-          if (existing) {
-            // 이름·task·status를 fresh 기준으로 덮어쓴다
-            existing.name = fa.name;
-            existing.task = fa.task;
-            existing.status = fa.status;
-            return existing;
-          }
-          return structuredClone(fa);
-        });
-      // fresh에 없는 구버전 직원은 제거
-      department.agents = reordered;
     }
 
     for (const agent of department.agents) {
@@ -402,6 +371,31 @@ export async function reorderAgents(
   }
 
   department.agents = reordered;
+  await writeState(state);
+  return true;
+}
+
+export async function moveAgent(
+  fromDepartmentId: string,
+  toDepartmentId: string,
+  agentId: string,
+  beforeAgentId?: string | null,
+): Promise<boolean> {
+  const state = await readState();
+  const from = state.departments.find((department) => department.id === fromDepartmentId);
+  const to = state.departments.find((department) => department.id === toDepartmentId);
+  if (!from || !to) return false;
+  const agentIndex = from.agents.findIndex((agent) => agent.id === agentId);
+  if (agentIndex === -1) return false;
+
+  const [agent] = from.agents.splice(agentIndex, 1);
+  const existingIndex = to.agents.findIndex((candidate) => candidate.id === agentId);
+  if (existingIndex !== -1) to.agents.splice(existingIndex, 1);
+  const beforeIndex = beforeAgentId
+    ? to.agents.findIndex((candidate) => candidate.id === beforeAgentId)
+    : -1;
+  if (beforeIndex === -1) to.agents.push(agent);
+  else to.agents.splice(beforeIndex, 0, agent);
   await writeState(state);
   return true;
 }

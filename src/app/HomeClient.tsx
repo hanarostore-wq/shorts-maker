@@ -105,6 +105,34 @@ export default function Home() {
     }).catch(() => null);
   };
 
+  const handleMoveAgent = (agentId: string, toDepartmentId: string, beforeAgentId?: string | null) => {
+    const fromDepartment = state.departments.find((department) => department.agents.some((agent) => agent.id === agentId));
+    if (!fromDepartment || fromDepartment.id === toDepartmentId && !beforeAgentId) return;
+    const sourceAgent = fromDepartment.agents.find((agent) => agent.id === agentId);
+    if (!sourceAgent) return;
+
+    setState((previous) => {
+      if (!previous) return previous;
+      const moved = previous.departments.map((department) => ({ ...department, agents: [...department.agents] }));
+      const source = moved.find((department) => department.id === fromDepartment.id);
+      const target = moved.find((department) => department.id === toDepartmentId);
+      if (!source || !target) return previous;
+      const index = source.agents.findIndex((agent) => agent.id === agentId);
+      if (index === -1) return previous;
+      const [agent] = source.agents.splice(index, 1);
+      const targetIndex = target.agents.findIndex((candidate) => candidate.id === beforeAgentId);
+      if (targetIndex === -1) target.agents.push(agent);
+      else target.agents.splice(targetIndex, 0, agent);
+      return { ...previous, departments: moved };
+    });
+
+    fetch("/api/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromDepartmentId: fromDepartment.id, toDepartmentId, agentId, beforeAgentId: beforeAgentId ?? null }),
+    }).catch(() => null);
+  };
+
   const isShortsAgentSelected = Boolean(liveSelectedAgent && liveSelectedAgent.id.startsWith("v"));
   const shortsStep = liveSelectedAgent?.id ? (SHORTS_AGENT_STEP_MAP[liveSelectedAgent.id] || "search") : "search";
   const shortsAgents = allAgents.filter((agent) => agent.id.startsWith("v"));
@@ -150,6 +178,7 @@ export default function Home() {
               department={department}
               onAgentClick={setSelectedAgent}
               onReorder={handleReorder}
+              onMoveAgent={handleMoveAgent}
             />
           ))}
         </div>

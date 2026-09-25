@@ -1,7 +1,7 @@
 "use client";
 
 import {DepartmentFinance,useTradingFinance} from "./DepartmentFinance";
-import { useState } from "react";
+import { useState, type DragEvent } from "react";
 import type { Agent, Department } from "@/lib/types";
 import { AgentSeat } from "./AgentSeat";
 import { isAgentClickable } from "@/lib/agentIntegrations";
@@ -10,13 +10,16 @@ export function DepartmentFloor({
   department,
   onAgentClick,
   onReorder,
+  onMoveAgent,
 }: {
   department: Department;
   onAgentClick: (agent: Agent) => void;
   onReorder: (departmentId: string, agentIds: string[]) => void;
+  onMoveAgent: (agentId: string, toDepartmentId: string, beforeAgentId?: string | null) => void;
 }) {
   const finance=useTradingFinance(department.id);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [isDropTarget, setIsDropTarget] = useState(false);
   const runtime=department.id==='coin'?finance.data?.runtime:null;
   const activeCount = department.agents.filter((a) => {
     if (department.id==='coin' && a.id==='c7') return runtime?.mode==='paper' && Boolean(runtime.running);
@@ -26,29 +29,57 @@ export function DepartmentFloor({
   }).length;
   const utilization = Math.round((activeCount / department.agents.length) * 100);
 
-  const handleDrop = (targetId: string) => {
-    if (!draggingId || draggingId === targetId) return;
+  const handleDrop = (targetId: string, event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const droppedId = event.dataTransfer.getData("text/plain") || draggingId;
+    if (!droppedId || droppedId === targetId) return;
     const ids = department.agents.map((a) => a.id);
-    const from = ids.indexOf(draggingId);
+    const from = ids.indexOf(droppedId);
     const to = ids.indexOf(targetId);
-    if (from === -1 || to === -1) return;
+    if (from === -1) {
+      onMoveAgent(droppedId, department.id, targetId);
+      setDraggingId(null);
+      setIsDropTarget(false);
+      return;
+    }
+    if (to === -1) return;
     ids.splice(from, 1);
-    ids.splice(to, 0, draggingId);
+    ids.splice(to, 0, droppedId);
     onReorder(department.id, ids);
     setDraggingId(null);
+    setIsDropTarget(false);
+  };
+
+  const handleFloorDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const droppedId = event.dataTransfer.getData("text/plain") || draggingId;
+    if (droppedId) onMoveAgent(droppedId, department.id, null);
+    setDraggingId(null);
+    setIsDropTarget(false);
   };
 
   return (
-    <div className="flex min-h-[280px] flex-col gap-2 border-2 border-zinc-700 bg-zinc-950 p-3">
+    <div
+      className={`flex min-h-[280px] flex-col gap-2 border-2 bg-zinc-950 p-3 transition-colors ${isDropTarget ? "border-cyan-400 bg-cyan-950/10" : "border-zinc-700"}`}
+      onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }}
+      onDragEnter={() => setIsDropTarget(true)}
+      onDragLeave={(event) => { if (event.currentTarget === event.target) setIsDropTarget(false); }}
+      onDrop={handleFloorDrop}
+    >
       <div className="flex flex-wrap items-center justify-between gap-y-2 border-b-2 border-zinc-800 pb-2">
         <div className="flex items-center gap-2">
           <span className="text-lg">{department.icon}</span>
           <span className="text-sm font-bold text-zinc-100">{department.name}</span>
         </div>
         <DepartmentFinance asset={department.id} data={finance.data} message={finance.message}/>
-        <span className="font-mono text-sm font-bold text-emerald-400">
-          {department.agents.length}명 근무
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="hidden text-[9px] text-zinc-600 xl:inline">직원 카드를 드래그해 자리 이동</span>
+          <span className="font-mono text-sm font-bold text-emerald-400">
+            {department.agents.length}명 근무
+          </span>
+        </div>
       </div>
 
       <div className="flex items-center gap-2">
@@ -88,10 +119,14 @@ export function DepartmentFloor({
             <div
               key={agent.id}
               draggable
-              onDragStart={() => setDraggingId(agent.id)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => handleDrop(agent.id)}
-              onDragEnd={() => setDraggingId(null)}
+              onDragStart={(event) => {
+                setDraggingId(agent.id);
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", agent.id);
+              }}
+              onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = "move"; }}
+              onDrop={(event) => handleDrop(agent.id, event)}
+              onDragEnd={() => { setDraggingId(null); setIsDropTarget(false); }}
               className={`cursor-grab select-none ${draggingId === agent.id ? "opacity-40" : ""}`}
             >
               <AgentSeat

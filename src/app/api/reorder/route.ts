@@ -1,8 +1,20 @@
 import { NextResponse } from "next/server";
-import { reorderAgents } from "@/lib/store";
+import { moveAgent, reorderAgents } from "@/lib/store";
 
 export async function POST(request: Request) {
-  const { departmentId, agentIds } = await request.json();
+  const body = await request.json();
+  const { departmentId, agentIds, fromDepartmentId, toDepartmentId, agentId, beforeAgentId } = body ?? {};
+
+  if (fromDepartmentId && toDepartmentId && agentId) {
+    const ok = await moveAgent(
+      String(fromDepartmentId),
+      String(toDepartmentId),
+      String(agentId),
+      beforeAgentId ? String(beforeAgentId) : null,
+    );
+    if (!ok) return NextResponse.json({ error: "직원 또는 부서를 찾을 수 없습니다." }, { status: 404 });
+    return NextResponse.json({ ok: true, moved: true });
+  }
 
   if (!departmentId || !Array.isArray(agentIds)) {
     return NextResponse.json(
