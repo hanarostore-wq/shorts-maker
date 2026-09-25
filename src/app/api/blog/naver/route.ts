@@ -22,6 +22,16 @@ export async function PATCH(request: Request) {
   const article = articles.find((x) => x.id === id);
   if (!article) return NextResponse.json({ error: "글을 찾을 수 없습니다." }, { status: 404 });
 
+  if (action === "publish-result") {
+    const nextStatus = body.status === "done" ? "published" : body.status === "needs_human" ? "ready" : "failed";
+    const updated = await patchBlogArticle(id, {
+      status: nextStatus,
+      publishedUrl: body.publishedUrl || null,
+      error: body.error || null,
+    });
+    return NextResponse.json({ ok: true, article: updated });
+  }
+
   if (action === "publish-now") {
     if (!["ready","failed"].includes(article.status)) return NextResponse.json({ error: "READY/FAILED 글만 발행할 수 있습니다." }, { status: 409 });
     const instruction = [
