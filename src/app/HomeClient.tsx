@@ -175,10 +175,10 @@ export default function Home() {
       )}
 
       {selectedStatus && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 font-mono" onClick={() => setSelectedStatus(null)}>
-          <div className="flex max-h-[70vh] w-full max-w-xl flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-4" onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between border-b-2 border-zinc-800 pb-2"><span className="text-sm font-bold text-zinc-100">{selectedStatus} 목록</span><button type="button" onClick={() => setSelectedStatus(null)} className="text-xs text-zinc-500">✕ 닫기</button></div>
-            <div className="overflow-y-auto">{statusItems.length ? statusItems.map((item, index) => <div key={`${item.title}-${index}`} className="grid grid-cols-[120px_1fr_90px] gap-2 border-b border-zinc-900 py-2 text-[11px]"><span className="font-bold text-zinc-200">{item.title}</span><span className="text-zinc-400">{item.detail}</span><span className="text-right text-zinc-600">{item.meta}</span></div>) : <div className="py-8 text-center text-zinc-600">표시할 항목이 없습니다</div>}</div>
+        <div className="fixed inset-0 z-50 flex min-h-0 items-center justify-center overflow-hidden bg-black/70 p-3 font-mono sm:p-6" onClick={() => setSelectedStatus(null)}>
+          <div className="flex max-h-[calc(100dvh-1.5rem)] min-h-0 w-full max-w-3xl flex-col gap-3 overflow-hidden border-2 border-zinc-700 bg-zinc-950 p-3 sm:max-h-[calc(100vh-3rem)] sm:p-4" onClick={(event) => event.stopPropagation()}>
+            <div className="flex shrink-0 items-center justify-between border-b-2 border-zinc-800 pb-2"><span className="text-sm font-bold text-zinc-100">{selectedStatus} 목록</span><button type="button" onClick={() => setSelectedStatus(null)} className="shrink-0 text-xs text-zinc-500">✕ 닫기</button></div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">{statusItems.length ? statusItems.map((item, index) => <div key={`${item.title}-${index}`} className="grid grid-cols-[minmax(96px,120px)_minmax(0,1fr)_auto] gap-2 border-b border-zinc-900 py-2 text-[11px]"><span className="min-w-0 break-words font-bold text-zinc-200">{item.title}</span><span className="min-w-0 break-words text-zinc-400">{item.detail}</span><span className="whitespace-nowrap text-right text-zinc-600">{item.meta}</span></div>) : <div className="py-8 text-center text-zinc-600">표시할 항목이 없습니다</div>}</div>
           </div>
         </div>
       )}
