@@ -37,9 +37,6 @@ export const departments: Department[] = [
     icon: "₿",
     agents: [
       { id: "c8", name: "업비트파견", task: "업비트 공개 시세·거래 API 연결 대기", status: "offline" },
-      { id: "c4", name: "호가감시원", task: "업비트 호가·스프레드 감시 대기", status: "offline" },
-      { id: "c11", name: "자산관리", task: "모의·실전 운용금과 보유자산 조회", status: "offline" },
-      { id: "c12", name: "수익실현", task: "모의·실전 완료 거래 손익·수수료 집계", status: "offline" },
       { id: "c_selection", name: "종목선정", task: "종목선정 근거 추가·삭제 · 모의/실전 공통", status: "active" },
       { id: "c_entry", name: "Jev 매수근거", task: "Jev 매수근거 근거 추가·삭제 · 모의/실전 공통", status: "active" },
       { id: "c_exit", name: "Jev 매도근거", task: "Jev 매도근거 근거 추가·삭제 · 모의/실전 공통", status: "active" },
@@ -59,9 +56,6 @@ export const departments: Department[] = [
     icon: "📈",
     agents: [
       { id: "t8", name: "나무플러그파견", task: "나무플러그 시세·주문 API 연결 대기", status: "offline" },
-      { id: "t4", name: "호가감시원", task: "주식 호가·스프레드 감시 대기", status: "offline" },
-      { id: "t11", name: "자산관리", task: "모의·실전 운용금과 보유자산 조회", status: "offline" },
-      { id: "t12", name: "수익실현", task: "모의·실전 완료 거래 손익·수수료 집계", status: "offline" },
       { id: "t_selection", name: "종목선정", task: "종목선정 근거 추가·삭제 · 모의/실전 공통", status: "active" },
       { id: "t_entry", name: "Jev 매수근거", task: "Jev 매수근거 근거 추가·삭제 · 모의/실전 공통", status: "active" },
       { id: "t_exit", name: "Jev 매도근거", task: "Jev 매도근거 근거 추가·삭제 · 모의/실전 공통", status: "active" },
@@ -104,5 +98,5 @@ export const projects: Project[] = [
   { id: "p2", name: "쿠팡 자동화", departmentId: "store", agentCount: 4, leadAgent: "가격감시자" },
   { id: "p3", name: "쇼츠 팩토리", departmentId: "shorts", agentCount: 6, leadAgent: "영상감독" },
   { id: "p4", name: "블로그 팩토리", departmentId: "blog", agentCount: 1, leadAgent: "네이버 블로거" },
-  { id: "p5", name: "업비트 현물 단타", departmentId: "coin", agentCount: 15, leadAgent: "Jev 매수근거" },
+  { id: "p5", name: "업비트 현물 단타", departmentId: "coin", agentCount: 12, leadAgent: "Jev 매수근거" },
 ];

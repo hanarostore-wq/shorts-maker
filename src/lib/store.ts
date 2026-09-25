@@ -159,7 +159,7 @@ function healState(state: State): State {
     }
   }
   const coinProject=state.projects.find(p=>p.id==='p5');
-  if(coinProject){coinProject.agentCount=14;coinProject.leadAgent='Jev 매수근거';}
+  if(coinProject){coinProject.agentCount=state.departments.find(d=>d.id==='coin')?.agents.length ?? 0;coinProject.leadAgent='Jev 매수근거';}
   return state;
 }
 
