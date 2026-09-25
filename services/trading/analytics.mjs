@@ -40,6 +40,15 @@ export class TradingAnalytics {
  CREATE INDEX IF NOT EXISTS episodes_query ON episodes(opened,mode,market,closed);
  CREATE TABLE IF NOT EXISTS scanner_events(id TEXT PRIMARY KEY,market TEXT,at INTEGER,kind TEXT,payload TEXT);
  CREATE INDEX IF NOT EXISTS scanner_period ON scanner_events(market,at);
+ CREATE TABLE IF NOT EXISTS market_snapshots(id TEXT PRIMARY KEY,market TEXT,at INTEGER NOT NULL,payload TEXT NOT NULL);
+ CREATE INDEX IF NOT EXISTS market_snapshot_period ON market_snapshots(market,at);
+ CREATE TABLE IF NOT EXISTS candidate_events(id TEXT PRIMARY KEY,market TEXT,at INTEGER NOT NULL,state TEXT,payload TEXT NOT NULL);
+ CREATE INDEX IF NOT EXISTS candidate_period ON candidate_events(market,at);
+ CREATE TABLE IF NOT EXISTS future_labels(id TEXT PRIMARY KEY,market TEXT,created_at INTEGER NOT NULL,payload TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS shadow_trades(id TEXT PRIMARY KEY,market TEXT,entry_at INTEGER NOT NULL,status TEXT,payload TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS market_regimes(id TEXT PRIMARY KEY,at INTEGER NOT NULL,payload TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS strategy_versions(version TEXT PRIMARY KEY,created_at INTEGER NOT NULL,payload TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS predictive_dataset(id TEXT PRIMARY KEY,market TEXT,created_at INTEGER,horizon_seconds INTEGER,payload TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS reports(id TEXT PRIMARY KEY,at INTEGER,query TEXT,result TEXT);
  PRAGMA user_version=1;`);
   this.lastSample=this.db.prepare('SELECT MAX(at) at FROM samples').get().at;this.lastAnalysis=this.db.prepare('SELECT MAX(at) at FROM reports').get().at;
@@ -50,7 +59,12 @@ export class TradingAnalytics {
  if(this.tails.has(feed.symbol)){this.tails.get(feed.symbol).end=Math.max(end,this.tails.get(feed.symbol).end);return;}const tail=this.feedFactory();for(const k of ['symbol','book','bookHistory','trades','candles','signalCandles','clockOffsetMs','clockVerified'])tail[k]=structuredClone(feed[k]);tail.markets=[{market:feed.symbol}];tail.connect(tail.generation);this.tails.set(feed.symbol,{feed:tail,end});}
  recordScanner(event){return this.safe(()=>{if(this.db.prepare('SELECT COUNT(*) n FROM scanner_events').get().n>=100000){this.error='시장 감시 기록 10만건 도달 · 기존 자료 보존, 새 감시 이력 저장 보류';return;}const payload=JSON.stringify(event),id=hash(payload);this.db.prepare('INSERT OR IGNORE INTO scanner_events VALUES(?,?,?,?,?)').run(id,event.market,event.at,event.kind||'transition',payload);});}
  scannerEvents(market,from=0,to=this.clock()){return this.db.prepare('SELECT payload FROM scanner_events WHERE market=? AND at>=? AND at<=? ORDER BY at DESC LIMIT 300').all(market,from,to).map(x=>JSON.parse(x.payload));}
- sample(at=this.clock()){const scanners=new Set(Object.values(this.workers).map(w=>w.feed.scanner).filter(Boolean));for(const scanner of scanners){for(const event of scanner.events.splice(0))this.recordScanner(event);}const feeds=new Map();for(const w of Object.values(this.workers))if(w.feed.book)feeds.set(w.feed.symbol,w.feed);for(const [symbol,t] of this.tails){if(at>t.end){t.feed.stop();this.tails.delete(symbol);}else if(!feeds.has(symbol))feeds.set(symbol,t.feed);}for(const feed of feeds.values()){const s=marketSample(feed,at);if(s)this.observe(s);}}
+ recordPredictive(scanner,at){const p=scanner.predictive;if(!p)return;for(const event of p.drainEvents()){const payload=json(event),id=hash(payload);if(event.kind==='candidate')this.db.prepare('INSERT OR IGNORE INTO candidate_events VALUES(?,?,?,?,?)').run(id,event.market,event.at,event.state,payload);else if(event.kind==='shadow_open'||event.kind==='shadow_close')this.db.prepare('INSERT OR REPLACE INTO shadow_trades VALUES(?,?,?,?,?)').run(event.id,event.market,event.entryAt,event.status,payload);else if(event.kind==='breadth')this.db.prepare('INSERT OR IGNORE INTO market_regimes VALUES(?,?,?)').run(id,event.at,payload);}
+ for(const label of p.labels.values())this.db.prepare('INSERT OR REPLACE INTO future_labels VALUES(?,?,?,?,?)').run(label.id,label.market,label.createdAt,json(label));
+ for(const row of p.datasets)this.db.prepare('INSERT OR REPLACE INTO predictive_dataset VALUES(?,?,?,?,?)').run(hash(json(row)),row.market,row.createdAt,row.horizonSeconds,json(row));
+ this.db.prepare('INSERT OR REPLACE INTO strategy_versions VALUES(?,?,?)').run(p.version,at,json({version:p.version,updatedAt:at,note:'deterministic shadow only; no live order'}));
+ for(const s of scanner.states.values())if(s.predictiveFeatures)this.db.prepare('INSERT OR REPLACE INTO market_snapshots VALUES(?,?,?,?)').run(hash(s.symbol+':'+at),s.symbol,at,json(s.predictiveFeatures));}
+ sample(at=this.clock()){const scanners=new Set(Object.values(this.workers).map(w=>w.feed.scanner).filter(Boolean));for(const scanner of scanners){for(const event of scanner.events.splice(0))this.recordScanner(event);this.recordPredictive(scanner,at);}const feeds=new Map();for(const w of Object.values(this.workers))if(w.feed.book)feeds.set(w.feed.symbol,w.feed);for(const [symbol,t] of this.tails){if(at>t.end){t.feed.stop();this.tails.delete(symbol);}else if(!feeds.has(symbol))feeds.set(symbol,t.feed);}for(const feed of feeds.values()){const s=marketSample(feed,at);if(s)this.observe(s);}}
  observe(s){this.lastObserved=s.at;this.observedFresh=s.fresh;const at=Math.floor(s.at/this.step)*this.step,rows=(this.rings.get(s.market)||[]).filter(x=>x.at>=at-this.pre);if(rows.at(-1)?.at!==at)rows.push({...s,at});this.rings.set(s.market,rows);for(const [m,r] of this.rings)if(r.at(-1)?.at<at-this.pre-this.post)this.rings.delete(m);
  if(this.db.prepare('SELECT 1 FROM fills WHERE market=? AND window_start<=? AND window_end>=? LIMIT 1').get(s.market,at,at))this.storeSample({...s,at});}
  storeSample(s){if(this.bytes()>this.maxBytes)throw Error('분석 저장 용량 한도');this.db.prepare('INSERT OR IGNORE INTO samples VALUES(?,?,?,?)').run(s.market,s.at,s.fresh?1:0,gzipSync(json(s)));this.lastSample=Math.max(this.lastSample||0,s.at);}

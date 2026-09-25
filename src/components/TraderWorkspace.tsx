@@ -12,6 +12,7 @@ type Payload = { ok: boolean; price?: number; candles?: Candle[]; orderbook?: { 
 type TickResponse = { ok: boolean; message?: string; error?: string; code?: string; jev?: { action: string; provider: string; confidence: number; probabilities: Record<string, number>; latencyMs: number; errorCode?: string; errorMessage?: string }; result?: { state: LoopState; action: string; battery: { provider: string; direction: string; buyConfidence: number; sellConfidence: number; latencyMs: number }; fills: unknown[]; orders: unknown[]; decisionReason: string } };
 type AccountPayload = { ok: boolean; cash?: number; tradingValue?: number; pnl?: number; updatedAt?: string; error?: string };
 type TickMeta = { action: string; provider: string; latencyMs: number; fills: number; orders: number; eventSeq: number };
+type WorkerState = { engine?: { strategy?: { scanner?: { predictive?: { breadth?: { upRatio?: number; btcReturn5m?: number; riskOn?: string }; markets?: Array<{ market: string; state?: string; features?: Record<string, unknown> }> } } } } };
 
 const won = (n = 0) => Math.round(n).toLocaleString("ko-KR");
 const commonMarkets = ["KRW-BTC", "KRW-ETH", "KRW-XRP", "KRW-SOL", "KRW-DOGE", "KRW-ADA", "KRW-AVAX", "KRW-LINK", "KRW-DOT", "KRW-TRX"];
@@ -42,7 +43,7 @@ export function TraderWorkspace({ mode }: { mode: "paper" | "live" }) {
   const [market, setMarket] = useState("KRW-BTC");
   const [markets, setMarkets] = useState<Market[]>(commonMarkets.map((m) => ({ market: m, korean_name: m.replace("KRW-", "") })));
   const [data, setData] = useState<Payload | null>(null); const [prices, setPrices] = useState<Record<string, number>>({}); const [flash, setFlash] = useState<string | null>(null);
-  const [status, setStatus] = useState("실시간 연결 준비"); const [hovered, setHovered] = useState<Candle | null>(null); const [loopsByMarket, setLoopsByMarket] = useState<Record<string, LoopState>>({}); const [tickMetaByMarket, setTickMetaByMarket] = useState<Record<string, TickMeta>>({}); const [notice, setNotice] = useState("PAPER · JEV 판단 기반 실시간 이벤트 루프 대기"); const [auto, setAuto] = useState(mode === "paper"); const [busy, setBusy] = useState(false); const [side, setSide] = useState<"buy" | "sell">("buy"); const busyRef = useRef(false); const [liveAccount, setLiveAccount] = useState<AccountPayload | null>(null); const [eventSeq, setEventSeq] = useState(0); const [clock, setClock] = useState(0);
+  const [status, setStatus] = useState("실시간 연결 준비"); const [hovered, setHovered] = useState<Candle | null>(null); const [loopsByMarket, setLoopsByMarket] = useState<Record<string, LoopState>>({}); const [tickMetaByMarket, setTickMetaByMarket] = useState<Record<string, TickMeta>>({}); const [notice, setNotice] = useState("PAPER · JEV 판단 기반 실시간 이벤트 루프 대기"); const [auto, setAuto] = useState(mode === "paper"); const [busy, setBusy] = useState(false); const [side, setSide] = useState<"buy" | "sell">("buy"); const busyRef = useRef(false); const [liveAccount, setLiveAccount] = useState<AccountPayload | null>(null); const [workerState, setWorkerState] = useState<WorkerState | null>(null); const [eventSeq, setEventSeq] = useState(0); const [clock, setClock] = useState(0);
   const [orderAmount, setOrderAmount] = useState("5000");
   const loop = loopsByMarket[market] || newLoopState();
   useEffect(() => { if (eventSeq > 0) setClock(Date.now()); }, [eventSeq]);
@@ -53,22 +54,50 @@ export function TraderWorkspace({ mode }: { mode: "paper" | "live" }) {
   useEffect(() => { void load(market); }, [load, market]);
   useEffect(() => { let stopped = false; let retry = 0; let stream: EventSource | null = null; let timer: ReturnType<typeof setTimeout> | null = null; const connect = () => { if (stopped) return; setStatus(retry ? `○ 실시간 재연결 중 ${retry}회` : "실시간 연결 중"); stream = new EventSource(`/api/coin/stream?market=${encodeURIComponent(market)}&codes=${encodeURIComponent(commonMarkets.join(","))}`); stream.onopen = () => { retry = 0; setStatus("● 실시간 중계 연결됨"); }; stream.onmessage = (e) => { try { const x = JSON.parse(e.data) as Record<string, unknown>; if (["relay_open", "relay_heartbeat"].includes(String(x.type))) return; if (x.type === "relay_error") { setNotice(`${String(x.code)} ${String(x.message)}`); return; } if (x.type === "ticker") { const code = String(x.code); const next = Number(x.trade_price); setPrices((p) => ({ ...p, [code]: next })); setFlash(code); window.setTimeout(() => setFlash((f) => f === code ? null : f), 260); if (code === market) { setData((p) => p ? { ...p, price: next } : p); setStatus(`● 실시간 수신 ${new Date().toLocaleTimeString("ko-KR")}`); setEventSeq((value) => value + 1); if (mode === "live") void refreshAccount(); } } else if (x.type === "orderbook" && x.code === market) { setData((p) => p ? { ...p, orderbook: { units: (x.orderbook_units as Unit[] | undefined)?.slice(0, 15) || [] } } : p); setEventSeq((value) => value + 1); } } catch { setNotice("[UPBIT_RELAY_PARSE_ERROR] 서버 중계 데이터 해석에 실패했습니다"); } }; stream.onerror = () => { if (stopped) return; setStatus("○ 서버 중계 재연결 대기"); setNotice("[UPBIT_RELAY_CONNECTION_RETRY] 서버 중계 연결이 끊겨 재연결합니다"); stream?.close(); retry = Math.min(retry + 1, 8); timer = setTimeout(connect, Math.min(1000 * 2 ** (retry - 1), 10000)); }; }; connect(); return () => { stopped = true; if (timer) clearTimeout(timer); stream?.close(); }; }, [market, mode, refreshAccount]);
   useEffect(() => { if (mode !== "live") return; void refreshAccount(); const timer = window.setInterval(() => void refreshAccount(), 2500); return () => window.clearInterval(timer); }, [mode, refreshAccount]);
+  useEffect(() => { let stopped = false; const read = async () => { try { const r = await fetch(`/api/coin/terminal/worker?mode=${mode}`, { cache: "no-store" }); if (!r.ok) return; const x = await r.json() as WorkerState; if (!stopped) setWorkerState(x); } catch { /* worker may be unavailable; UI stays explicit */ } }; void read(); const timer = window.setInterval(() => void read(), 5000); return () => { stopped = true; window.clearInterval(timer); }; }, [mode, eventSeq]);
 
   const runTick = useCallback(async () => { if (busyRef.current || !data?.price || !data.orderbook?.units?.[0] || mode !== "paper") return; busyRef.current = true; setBusy(true); const u = data.orderbook.units[0]; try { const r = await fetch("/api/coin/paper/tick", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ market, state: loop, input: { price: data.price, prices: data.candles?.map((c) => Number(c.trade_price)).reverse() || [], bestAsk: u.ask_price, bestBid: u.bid_price, askSize: u.ask_size, bidSize: u.bid_size, websocketHealthy: true, dataAgeMs: 0, allowedBuy: true, allowedSell: true, targetNotional: Number(orderAmount) || 5000 } }) }); const x = await r.json() as TickResponse; if (!x.ok || !x.result) throw new Error(x.error || `[${x.code || "JEV_PAPER_TICK_ERROR"}] 자동 판단 결과가 없습니다`); setLoopsByMarket((previous) => ({ ...previous, [market]: x.result!.state })); setTickMetaByMarket((previous) => ({ ...previous, [market]: { action: x.jev?.action || x.result!.action, provider: x.jev?.provider || x.result!.battery.provider, latencyMs: x.jev?.latencyMs || x.result!.battery.latencyMs, fills: x.result!.fills.length, orders: x.result!.orders.length, eventSeq } })); setNotice(`${x.jev?.provider === "JEV" ? "JEV" : "RULES_ONLY"} ${x.jev?.action || x.result.action} · 매수 ${(Number(x.jev?.probabilities?.BUY || x.result.battery.buyConfidence) * 100).toFixed(0)}% · 매도 ${(Number(x.jev?.probabilities?.SELL || x.result.battery.sellConfidence) * 100).toFixed(0)}% · ${x.result.fills.length ? `${x.result.fills.length}건 체결` : "지정가 대기"}${x.jev?.errorCode ? ` · [${x.jev.errorCode}]` : ""}`); } catch (e) { setNotice(e instanceof Error ? e.message : "[JEV_PAPER_TICK_ERROR] 자동 루프 실행에 실패했습니다"); } finally { busyRef.current = false; setBusy(false); } }, [data, eventSeq, loop, market, mode, orderAmount]);
   const runTickRef = useRef(runTick); useEffect(() => { runTickRef.current = runTick; }, [runTick]); useEffect(() => { if (!auto || mode !== "paper" || eventSeq === 0) return; const timer = window.setTimeout(() => void runTickRef.current(), 350); return () => window.clearTimeout(timer); }, [auto, mode, eventSeq]);
 
   const units = data?.orderbook?.units || []; const current = data?.price || prices[market]; const selected = hovered || data?.candles?.[0]; const spread = units[0] && current ? ((units[0].ask_price - units[0].bid_price) / current * 10000) : 0; const paperUnrealized = current ? loop.asset * current - loop.asset * loop.averageCost : 0; const displayedPnl = mode === "paper" ? loop.realizedPnl + paperUnrealized : Number(liveAccount?.pnl || 0);
   const predictiveSnapshot = useMemo<PredictiveSnapshot | null>(() => {
-    if (!data || !current) return null;
-    const candles = data.candles || [];
-    const latest = Number(candles[0]?.trade_price || current);
-    const at = candles[0]?.candle_date_time_kst ? Date.parse(candles[0].candle_date_time_kst) : 0;
-    const prior = (offset: number) => Number(candles[offset]?.trade_price || latest);
-    const returnPct = (offset: number) => prior(offset) ? ((latest / prior(offset)) - 1) * 100 : 0;
-    const bidSize = Number(units[0]?.bid_size || 0), askSize = Number(units[0]?.ask_size || 0);
-    const imbalance = bidSize + askSize > 0 ? (bidSize - askSize) / (bidSize + askSize) : 0;
-    return { market, asOf: clock || (Number.isFinite(at) ? at : 0), price: latest, return5s: returnPct(1), return30s: returnPct(2), return2m: returnPct(3), return5m: returnPct(5), return15m: returnPct(15), turnoverAcceleration: Number(candles[0]?.candle_acc_trade_volume || 0) > Number(candles[1]?.candle_acc_trade_volume || 0) ? 70 : 35, turnoverPercentile: 60, buyFlowPercentile: imbalance > 0 ? 60 + imbalance * 30 : 45, buyFlowDelta: imbalance, orderFlowImbalance: imbalance, spreadPercentile: Math.min(100, spread * 2), spreadBps: spread, depthImbalance: imbalance, vwapDistancePct: 0, volatilityCompression: 55, relativeStrength: 55, btcReturn: market === "KRW-BTC" ? returnPct(5) : 0, marketBreadth: 50, recentRisePct: returnPct(5), recent5sRisePct: returnPct(1), upperWickPct: 0, turnoverDeceleration: 0, pullbackDepthPct: 0, breakoutDistancePct: 0, liquidityPercentile: 60 };
-  }, [clock, current, data, market, spread, units]);
+    const scanner = workerState?.engine?.strategy?.scanner?.predictive;
+    const actual = scanner?.markets?.find((item) => item.market === market)?.features;
+    if (actual) {
+      const returns = actual.returns as Record<string, number | null> | undefined;
+      return {
+        market,
+        asOf: Number(actual.asOf || 0),
+        price: Number(actual.price || current || 0),
+        return5s: Number(returns?.['5s'] || 0) / 100,
+        return30s: Number(returns?.['30s'] || 0) / 100,
+        return2m: Number(returns?.['2m'] || 0) / 100,
+        return5m: Number(returns?.['5m'] || 0) / 100,
+        return15m: Number(returns?.['15m'] || 0) / 100,
+        turnoverPercentile: Number(actual.turnoverPercentile ?? NaN),
+        buyFlowPercentile: Number(actual.buyFlowPercentile ?? NaN),
+        buyFlowDelta: Number(actual.buyFlow ?? 0) - 0.5,
+        orderFlowImbalance: Number(actual.ofi ?? NaN),
+        spreadPercentile: Number(actual.spreadPercentile ?? NaN),
+        spreadBps: Number(actual.spread ?? NaN),
+        depthImbalance: Number(actual.ofi ?? NaN),
+        vwapDistancePct: Number(actual.vwapDistance ?? NaN) / 100,
+        volatilityCompression: Number(actual.volatilityCompression ?? NaN) * 100,
+        relativeStrength: Number(actual.relativeStrength ?? NaN),
+        btcReturn: Number(scanner.breadth?.btcReturn5m ?? NaN) / 100,
+        marketBreadth: Number(scanner.breadth?.upRatio ?? NaN) * 100,
+        recentRisePct: Number(returns?.['5m'] || 0) / 100,
+        recent5sRisePct: Number(returns?.['5s'] || 0) / 100,
+        upperWickPct: Number(actual.upperWick ?? NaN) * 100,
+        pullbackDepthPct: Number(actual.pullbackDepth ?? NaN) * 100,
+        breakoutDistancePct: Number(actual.breakoutDistance ?? NaN) / 100,
+        liquidityPercentile: Number(actual.liquidityPercentile ?? NaN),
+        state: (scanner.markets?.find((item) => item.market === market)?.state as PredictiveSnapshot['state']) || undefined,
+        strategyType: actual.strategyType as PredictiveSnapshot['strategyType'],
+      };
+    }
+    return null;
+  }, [current, market, workerState]);
   return <div className="flex h-[min(92vh,980px)] min-h-[660px] w-[calc(100vw-1rem)] max-w-[1700px] min-w-0 flex-col overflow-hidden border border-[#3b4652] bg-[#090c10] text-[12px] text-zinc-200 shadow-2xl">
     <header className="flex flex-wrap items-center gap-3 border-b border-[#2a333d] bg-[#11161c] px-3 py-2"><b className="text-[15px] text-white">{mode === "paper" ? "모의매매원" : "실제매매원"}</b><span className={mode === "paper" ? "text-amber-400" : "text-red-400"}>{mode === "paper" ? "PAPER" : "LIVE 잠금"}</span><span className="text-emerald-400">{status}</span>{mode === "paper" && <label className="ml-2 flex items-center gap-2 text-zinc-300"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> JEV 자동판단</label>}<span className="text-zinc-500">{mode === "paper" ? "실시간 지정가 체결 시뮬레이션" : "3단계 승인 전 실제 주문 차단"}</span><div className="ml-auto flex gap-1"><button className="border border-zinc-700 px-2 py-1">1분</button><button className="border border-zinc-700 px-2 py-1">5분</button><button className="border border-zinc-700 px-2 py-1">15분</button><button className="border border-zinc-700 px-2 py-1">지표</button><button className="border border-zinc-700 px-2 py-1">전체화면</button></div></header>
     <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px_240px]">

@@ -21,11 +21,12 @@ const r=sortMarketRows(rankMarkets(rows),'value');assert.equal(r[0].market,'KRW-
 test('recent activity sorting compares KRW turnover instead of coin units',()=>{
 const r=sortMarketRows([{market:'A',activity:{ready:true,recentKrw:100},ticker:{acc_trade_volume_24h:1e9}},{market:'B',activity:{ready:true,recentKrw:1000},ticker:{acc_trade_volume_24h:1}},{market:'C',activity:{ready:false}}],'recent');assert.deepEqual(r.map(x=>x.market),['B','A','C']);
 });
-test('formatted inputs preserve order amounts and reject invalid financial input',()=>{
+test('formatted inputs truncate below ten won and reject invalid financial input',()=>{
 for(const n of [10000,50000,100000,500000,1000000,3000000,1000000000])assert.equal(parseMoney(groupedMoneyInput(n)),n);
+assert.equal(parseMoney('12,345'),12340);assert.equal(parseMoney('9'),0);
 for(const n of ['', '1e6','-10000','NaN','10,00','999999999999999999999'])assert.ok(Number.isNaN(parseMoney(n)));
 assert.equal(groupedMoneyInput('0001234567'),'1,234,567');
 });
-test('Korean money uses the same amount as comma notation including full turnover',()=>{
-assert.equal(moneyLabel(3000000,0),'3,000,000원 (3백만원)');assert.equal(moneyLabel(68001000000,0),'68,001,000,000원 (680억 1백만원)');assert.equal(koreanMoney(0),'0원');assert.equal(moneyLabel(-12345,0),'-12,345원 (-1만 2천3백45원)');
+test('money labels use ten-won truncation without Korean side labels',()=>{
+assert.equal(moneyLabel(3000009,0),'3,000,000원');assert.equal(moneyLabel(68001000009,0),'68,001,000,000원');assert.equal(koreanMoney(0),'0원');assert.equal(moneyLabel(-12345,0),'-12,350원');
 });

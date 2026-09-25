@@ -1,0 +1,64 @@
+/* Control-room system for embedded trading staff views. */
+.hq-workspace {
+  --nav: #0b1220;
+  --blue: #3d8bfd;
+  --up: #39d98a;
+  --down: #ff6b7a;
+  --ink: #e6edf7;
+  --muted: #8b9ab0;
+  --line: #26364d;
+  --bg: #070b12;
+  --green: #39d98a;
+  min-height: 100vh;
+  background: #070b12;
+  color: var(--ink);
+  font-family: "JetBrains Mono", "Malgun Gothic", monospace;
+}
+.hq-workspace .nav { background: #0b1220; border-bottom: 1px solid #26364d; color: #e6edf7; }
+.hq-workspace .nav nav button { color: #93a4bb; }
+.hq-workspace .nav nav .nav-active { color: #fff; border-bottom-color: #39d98a; }
+.hq-workspace .status-strip { background: #0d1625; border-color: #26364d; color: #8b9ab0; }
+.hq-workspace .status-strip b { color: #dce8f6; }
+.hq-workspace .shell { background: #070b12; }
+.hq-workspace .account-bar,
+.hq-workspace .panel,
+.hq-workspace .market-list,
+.hq-workspace .strategy-panel,
+.hq-workspace .analysis-panel,
+.hq-workspace .order-panel,
+.hq-workspace .orderbook-panel { background: #0d1625; border-color: #26364d; color: #e6edf7; box-shadow: 0 12px 30px #0008; }
+.hq-workspace .account-bar > div > span,
+.hq-workspace .panel-title > span,
+.hq-workspace dt,
+.hq-workspace .muted { color: #8b9ab0; }
+.hq-workspace input,
+.hq-workspace textarea,
+.hq-workspace select { background: #070b12; color: #e6edf7; border-color: #31445f; }
+.hq-workspace button { color: #dce8f6; }
+.hq-workspace button:hover { filter: none; border-color: #39d98a; color: #fff; }
+.hq-workspace .outline,
+.hq-workspace .chart-toolbar button,
+.hq-workspace .order-tabs button,
+.hq-workspace .amount-buttons button,
+.hq-workspace .percent-buttons button { background: #111e31; border: 1px solid #31445f; color: #b8c9dd; }
+.hq-workspace .outline:hover,
+.hq-workspace .chart-toolbar button.active,
+.hq-workspace .order-tabs button.active,
+.hq-workspace .amount-buttons button:hover,
+.hq-workspace .percent-buttons button:hover { background: #12332f; border-color: #39d98a; color: #eafff6; }
+.hq-workspace .market-heading,
+.hq-workspace .price-summary,
+.hq-workspace .chart-toolbar,
+.hq-workspace .chart-footer { border-color: #26364d; }
+.hq-workspace .price-summary strong,
+.hq-workspace .account-bar strong { color: #f3f8ff; }
+.hq-workspace .up { color: #39d98a !important; }
+.hq-workspace .down { color: #ff6b7a !important; }
+.hq-workspace .mid-price { color: #7dd3fc; background: #102338; border-color: #2e5c7c; }
+.hq-workspace .workspace-live-notice { background: #301921; border-color: #8d3548; color: #ffb6c0; }
+.hq-workspace .workspace-mode-gate { background: #070b12f2; }
+.hq-workspace .workspace-mode-gate > div { background: #0d1625; border-color: #3b526f; box-shadow: 0 20px 60px #000b; }
+@media (max-width: 700px) {
+  .hq-workspace .account-bar { align-items: stretch; }
+  .hq-workspace .account-bar > div { min-width: calc(50% - 10px); }
+}
