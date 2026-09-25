@@ -1,14 +1,12 @@
-import {randomUUID,createHash,timingSafeEqual} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
+import {tradingAccessError} from '@/lib/terminal/device-auth.mjs';
 import {askJev} from '@/lib/terminal/jev.mjs';
 import {getSharedRedis} from '@/lib/store';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
 export async function GET(){return Response.json({configured:Boolean(process.env.TYPESAFE_API_KEY)},{headers:{'Cache-Control':'no-store'}});}
 export async function POST(request:Request){
- const operator=process.env.TRADING_OPERATOR_TOKEN;
- const hash=(x:string)=>createHash('sha256').update(x).digest();
- if(!operator||operator.length<32||!timingSafeEqual(hash(request.headers.get('x-trading-operator')||''),hash(operator)))return Response.json({error:'매매 제어 인증이 필요합니다.'},{status:401});
- if(request.headers.get('origin')!==new URL(request.url).origin)return Response.json({error:'운영본부 화면에서만 판단을 요청할 수 있습니다.'},{status:403});
+ const denied=tradingAccessError(request);if(denied)return denied;
  try{
  const text=await request.text();if(text.length>24000)return Response.json({error:'판단 입력 크기 초과'},{status:413});
  const {state,prompt}=JSON.parse(text);if(!state||state.execution?.mode!=='paper'||!/^KRW-[A-Z0-9]+$/.test(state.market?.market)||!Number.isFinite(state.market?.asOf)||Math.abs(Date.now()-state.market.asOf)>10000||typeof prompt!=='string'||prompt.length>4000)return Response.json({error:'현재 모의 시장 데이터와 분석 문맥을 확인하세요.'},{status:400});

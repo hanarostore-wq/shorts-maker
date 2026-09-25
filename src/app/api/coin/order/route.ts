@@ -1,3 +1,4 @@
+import {tradingAccessError} from '@/lib/terminal/device-auth.mjs';
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { evaluateCoinOrder, type CoinMode, type CoinSide } from "@/lib/coinRisk";
@@ -29,6 +30,7 @@ async function upbit(path: string, query: URLSearchParams) {
 }
 
 export async function POST(request: Request) {
+  const denied=tradingAccessError(request);if(denied)return denied;
   try {
     const body = await request.json();
     const mode = (body.mode || "paper") as CoinMode;

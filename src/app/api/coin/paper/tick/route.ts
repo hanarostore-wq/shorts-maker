@@ -1,3 +1,4 @@
+import {tradingAccessError} from '@/lib/terminal/device-auth.mjs';
 import { NextResponse } from "next/server";
 import { runLoopTick, type LoopInput, type LoopState } from "@/lib/jevLoopEngine";
 import { askJev } from "@/lib/typesafeJev";
@@ -12,6 +13,7 @@ type TickBody = {
 };
 
 export async function POST(request: Request) {
+  const denied=tradingAccessError(request);if(denied)return denied;
   try {
     const body = await request.json() as TickBody;
     const market = String(body.market || "KRW-BTC");

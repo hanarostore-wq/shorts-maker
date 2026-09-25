@@ -1,5 +1,5 @@
 import {loadUpbitCredentials} from '@/lib/coinCredentials';
-import {timingSafeEqual,createHash} from 'node:crypto';
+import {tradingAccessError} from '@/lib/terminal/device-auth.mjs';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
 // This is a server-to-server bridge. Never send the worker credential to the browser.
@@ -7,12 +7,7 @@ async function proxy(request:Request,method:'GET'|'POST'){
   const endpoint=process.env.TRADING_WORKER_URL;
   const key=process.env.TRADING_WORKER_TOKEN;
   if(!endpoint||!key)return Response.json({error:'메인 PC 연결 설정이 아직 완료되지 않았습니다. 매매를 시작하지 않았습니다.'},{status:503});
-  // Operator authentication must be configured before exposing remote control.
-  const operator=process.env.TRADING_OPERATOR_TOKEN;
-  const supplied=request.headers.get('x-trading-operator')||'';
-  const hash=(x:string)=>createHash('sha256').update(x).digest();
-  if(!operator||operator.length<32||!timingSafeEqual(hash(supplied),hash(operator)))return Response.json({error:'매매 제어 인증이 필요합니다.'},{status:401});
-  if(method==='POST'&&request.headers.get('origin')!==new URL(request.url).origin)return Response.json({error:'운영본부 화면의 명령만 허용합니다.'},{status:403});
+  const denied=tradingAccessError(request);if(denied)return denied;
   try{
     const base=new URL(endpoint);
     const loopback=['localhost','127.0.0.1'].includes(base.hostname);
