@@ -34,14 +34,14 @@ export function AgentDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 font-mono"
+      className="control-room-modal fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-2 py-2"
       onClick={onClose}
     >
       <div
-        className={`flex max-h-[96vh] w-[calc(100vw-1rem)] ${["c7", "c13", "t7", "t13"].includes(agent.id) ? "max-w-[1600px]" : ["tradingEvidence","tradingAnalytics"].includes(tool||"") ? "max-w-5xl" : "max-w-lg"} flex-col gap-3 overflow-hidden border-2 border-zinc-700 bg-zinc-950 p-2 sm:p-4`}
+        className={`control-room-scroll flex max-h-[96vh] w-[calc(100vw-1rem)] ${["c7", "c13", "t7", "t13"].includes(agent.id) ? "max-w-[1600px]" : ["tradingEvidence","tradingAnalytics"].includes(tool||"") ? "max-w-5xl" : "max-w-lg"} flex-col gap-3 overflow-y-auto border border-[var(--control-line-strong)] bg-[var(--control-bg)] p-3 shadow-2xl sm:p-4`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b-2 border-zinc-800 pb-2">
+        <div className="flex items-center justify-between border-b border-[var(--control-line)] pb-2">
           <span className="text-sm font-bold text-zinc-100">{agent.name}</span>
           <button
             onClick={onClose}
@@ -50,7 +50,7 @@ export function AgentDetailModal({
             ✕ 닫기
           </button>
         </div>
-        <p className="text-[11px] text-zinc-500">{agent.task}</p>
+        <p className="text-[11px] leading-6 text-[var(--control-muted)]">{agent.task}</p>
 
         {tool === "approvals" && <ApprovalInbox />}
         {tool === "tasks" && <TaskConsole departments={departments} />}
