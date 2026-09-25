@@ -1,6 +1,7 @@
 "use client";
 import {TradingAnalyticsPanel} from "./TradingAnalyticsPanel";
-import { NaverBlogPanel } from "./NaverBlogPanel";\nimport { BlogResearchPanel } from "./BlogResearchPanel";
+import { NaverBlogPanel } from "./NaverBlogPanel";
+import { BlogResearchPanel } from "./BlogResearchPanel";
 
 
 import type { Agent } from "@/lib/types";
@@ -66,7 +67,8 @@ export function AgentDetailModal({
         {tool === "assetManagement" && <AssetManagementPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
         {tool === "profitRealization" && <ProfitRealizationPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
         {tool === "liveTrading" && <LiveTradingPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
-        {tool === "blogResearch" && <BlogResearchPanel />}\n        {tool === "naverBlog" && <NaverBlogPanel />}
+        {tool === "blogResearch" && <BlogResearchPanel />}
+        {tool === "naverBlog" && <NaverBlogPanel />}
         {tool === "shortsStudio" && (
           <div className="flex flex-col gap-3 rounded border border-indigo-800/60 bg-indigo-950/20 p-4">
             <div className="flex items-center justify-between">
