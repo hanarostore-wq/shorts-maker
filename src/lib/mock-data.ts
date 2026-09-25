@@ -93,10 +93,7 @@ export const departments: Department[] = [
     name: "블로그부서",
     icon: "✍️",
     agents: [
-      { id: "b1", name: "키워드조사원", task: "키워드 리서치 - 아직 연동 안 됨", status: "offline" },
-      { id: "b2", name: "글쓰기작가", task: "포스트 작성 - 아직 연동 안 됨", status: "offline" },
-      { id: "b3", name: "SEO점검원", task: "검색최적화 점검 - 아직 연동 안 됨", status: "offline" },
-      { id: "b4", name: "발행담당", task: "발행/스케줄링 - 아직 연동 안 됨", status: "offline" },
+      { id: "b_naver", name: "네이버 블로거", task: "READY 콘텐츠를 일정에 맞춰 네이버 블로그에 배포·결과 기록", status: "standby" },
     ],
   },
 ];
@@ -106,6 +103,6 @@ export const projects: Project[] = [
   { id: "p1", name: "스마트스토어 자동화", departmentId: "store", agentCount: 5, leadAgent: "상품소싱이" },
   { id: "p2", name: "쿠팡 자동화", departmentId: "store", agentCount: 4, leadAgent: "가격감시자" },
   { id: "p3", name: "쇼츠 팩토리", departmentId: "shorts", agentCount: 6, leadAgent: "영상감독" },
-  { id: "p4", name: "블로그 팩토리", departmentId: "blog", agentCount: 4, leadAgent: "글쓰기작가" },
+  { id: "p4", name: "블로그 팩토리", departmentId: "blog", agentCount: 1, leadAgent: "네이버 블로거" },
   { id: "p5", name: "업비트 현물 단타", departmentId: "coin", agentCount: 15, leadAgent: "Jev 매수근거" },
 ];
