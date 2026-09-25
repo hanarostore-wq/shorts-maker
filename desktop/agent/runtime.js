@@ -2,6 +2,7 @@ const { WebContentsView, session } = require("electron");
 const { CAPTURE_SOURCE } = require("./capture");
 const { planTask, siteOf } = require("./planner");
 const { runBrowserAgent } = require("./browserAgent");
+const { publishNaverBlog } = require("./naverBlogPublisher");
 
 // 관제실에서 작업을 하나씩 꺼내와 실제 브라우저로 수행하는 워커.
 //
@@ -162,7 +163,36 @@ async function runWithBrain(controlUrl, partition, task, log, startUrl) {
 }
 
 async function runTask(controlUrl, partition, task, log, startUrl) {
-  // AI 판단이 기본 경로다. 키가 없으면 주소가 적힌 수집 지시만 처리한다.
+  // 네이버 블로거는 추가 AI API 비용 없이 전용 결정론적 워커가 처리한다.
+  if (task.agentId === "b_naver" && String(task.instruction || "").includes("[NAVER_BLOG_PUBLISH]")) {
+    const view = createWorkerView(partition);
+    try {
+      const result = await publishNaverBlog({
+        view,
+        instruction: task.instruction,
+        log: (message) => log(`작업 ${task.id}: ${message}`),
+      });
+      const status = result.status === "done" ? "done" : result.status === "needs_human" ? "waiting_approval" : "failed";
+      await callApi(controlUrl, "/api/agent/claim", "PATCH", { taskId: task.id, status, error: status === "done" ? null : result.message });
+      await callApi(controlUrl, "/api/blog/naver", "PATCH", {
+        id: result.contentId,
+        action: "publish-result",
+        status: result.status,
+        publishedUrl: result.publishedUrl || null,
+        error: status === "done" ? null : result.message,
+      });
+      log(`작업 ${task.id}: ${result.message}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await callApi(controlUrl, "/api/agent/claim", "PATCH", { taskId: task.id, status: "failed", error: message });
+      log(`작업 ${task.id} 실패: ${message}`);
+    } finally {
+      view.webContents.close();
+    }
+    return;
+  }
+
+  // 그 밖의 일반 브라우저 업무는 기존 AI/주소 기반 경로를 유지한다.
   if (process.env.ANTHROPIC_API_KEY) {
     return runWithBrain(controlUrl, partition, task, log, startUrl);
   }
