@@ -167,14 +167,6 @@ export default function Home() {
             <StatCounter label="이상발생" value={counts.anomaly} tone="red" onClick={() => setSelectedStatus("이상발생")} />
             <StatCounter label="오늘 완료" value={completedEntries.length} tone="green" onClick={() => setSelectedStatus("오늘 완료")} />
           </div>
-          {selectedStatus && (
-            <div className="relative z-30 w-full max-w-3xl self-start pt-1" onClick={(event) => event.stopPropagation()}>
-              <div className="flex max-h-[min(70dvh,38rem)] min-h-0 flex-col gap-3 overflow-hidden border-2 border-zinc-700 bg-zinc-950 p-3 shadow-2xl shadow-black/60 sm:p-4">
-                <div className="flex shrink-0 items-center justify-between border-b-2 border-zinc-800 pb-2"><span className="text-sm font-bold text-zinc-100">{selectedStatus} 목록</span><button type="button" onClick={() => setSelectedStatus(null)} className="shrink-0 text-xs text-zinc-500 hover:text-zinc-200">✕ 닫기</button></div>
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">{statusItems.length ? statusItems.map((item, index) => <div key={`${item.title}-${index}`} className="grid grid-cols-[minmax(96px,120px)_minmax(0,1fr)_auto] gap-2 border-b border-zinc-900 py-2 text-[11px]"><span className="min-w-0 break-words font-bold text-zinc-200">{item.title}</span><span className="min-w-0 break-words text-zinc-400">{item.detail}</span><span className="whitespace-nowrap text-right text-zinc-600">{item.meta}</span></div>) : <div className="py-8 text-center text-zinc-600">표시할 항목이 없습니다</div>}</div>
-              </div>
-            </div>
-          )}
         </div>
       </header>
 
@@ -217,6 +209,15 @@ export default function Home() {
           departments={state.departments}
           onClose={() => setSelectedAgent(null)}
         />
+      )}
+
+      {selectedStatus && (
+        <div className="fixed inset-0 z-50 bg-transparent font-mono" onClick={() => setSelectedStatus(null)}>
+          <div className="pointer-events-auto absolute left-3 top-14 flex max-h-[calc(100dvh-4.5rem)] min-h-0 w-[min(48rem,calc(100vw-1.5rem))] flex-col gap-3 overflow-hidden border-2 border-zinc-700 bg-zinc-950 p-3 shadow-2xl shadow-black/60 sm:left-8 sm:top-16 sm:max-h-[calc(100vh-5rem)] sm:p-4" onClick={(event) => event.stopPropagation()}>
+            <div className="flex shrink-0 items-center justify-between border-b-2 border-zinc-800 pb-2"><span className="text-sm font-bold text-zinc-100">{selectedStatus} 목록</span><button type="button" onClick={() => setSelectedStatus(null)} className="shrink-0 text-xs text-zinc-500 hover:text-zinc-200">✕ 닫기</button></div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">{statusItems.length ? statusItems.map((item, index) => <div key={`${item.title}-${index}`} className="grid grid-cols-[minmax(96px,120px)_minmax(0,1fr)_auto] gap-2 border-b border-zinc-900 py-2 text-[11px]"><span className="min-w-0 break-words font-bold text-zinc-200">{item.title}</span><span className="min-w-0 break-words text-zinc-400">{item.detail}</span><span className="whitespace-nowrap text-right text-zinc-600">{item.meta}</span></div>) : <div className="py-8 text-center text-zinc-600">표시할 항목이 없습니다</div>}</div>
+          </div>
+        </div>
       )}
 
     </div>
