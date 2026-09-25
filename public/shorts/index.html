@@ -593,6 +593,13 @@
                 gemini: ''
             }
         };
+        const WORKSPACE_STORAGE_KEY = 'shorts_studio_workspace_v1';
+        let workspaceRestored = false;
+
+        function saveCurrentStep(step) {
+            state.currentStep = step;
+            queueWorkspaceSave();
+        }
 
         const viewTitles = {
             'search': 'Search & Discover',
@@ -620,7 +627,7 @@
                 updateApiStatus();
             }
             // 관제실에서 직원 클릭 시 해당 단계로 즉시 이동
-            if (event.data?.type === 'navigate-step' && event.data.step) {
+            if (event.data?.type === 'navigate-step' && event.data.step && !(event.data.preserveWorkspace && workspaceRestored)) {
                 navigate(event.data.step);
             }
         });
@@ -645,7 +652,7 @@
         });
 
         function navigate(step) {
-            state.currentStep = step;
+            saveCurrentStep(step);
             window.parent.postMessage({ type: 'shorts-step-changed', step }, window.location.origin);
             
             navItems.forEach(item => {
@@ -1110,7 +1117,7 @@
                 
                 tr.innerHTML = `
                     <td>
-                        <input type="checkbox" class="row-check" value="${item.id}">
+                        <input type="checkbox" class="row-check" value="${item.id}" ${searchState.selectedVideoIds.has(item.id) ? 'checked' : ''}>
                     </td>
                     <td style="display:flex; gap:12px; align-items:center;">
                         <div style="position:relative; width:110px; height:62px; flex-shrink:0;">
@@ -1149,6 +1156,7 @@
             rowChecks.forEach(cb => {
                 cb.addEventListener('change', updateAnalyzeButton);
             });
+            updateAnalyzeButton();
         }
 
         function updateAnalyzeButton() {
@@ -1201,6 +1209,7 @@
                 analyzeState.analyzedVideos = selectedVideos;
                 analyzeState.analysisResult = analysisResult;
                 renderAnalysis(analysisResult, selectedVideos);
+                queueWorkspaceSave();
                 
                 analyzeLoading.style.display = 'none';
                 analyzeResultsContainer.style.display = 'block';
@@ -1309,6 +1318,79 @@
         const ideationState = { ideas: [], selectedIdea: null };
         const scriptState = { script: null, duration: 60, tone: '몰입감 있고 긴박한', target: '대중' };
         const promptState = { prompts: [], bgmPrompt: null };
+
+        let workspaceSaveTimer = null;
+        function queueWorkspaceSave() {
+            if (workspaceSaveTimer) clearTimeout(workspaceSaveTimer);
+            workspaceSaveTimer = setTimeout(persistWorkspaceState, 150);
+        }
+
+        function persistWorkspaceState() {
+            workspaceSaveTimer = null;
+            try {
+                localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify({
+                    version: 1,
+                    savedAt: new Date().toISOString(),
+                    state: { currentStep: state.currentStep },
+                    search: {
+                        query: inputSearchQuery.value,
+                        dateFrom: inputDateFrom.value,
+                        dateTo: inputDateTo.value,
+                        duration: selectDuration.value,
+                        minViews: inputMinViews.value,
+                        maxSubs: inputMaxSubs.value,
+                        allResults: searchState.allResults,
+                        results: searchState.results,
+                        selectedVideoIds: Array.from(searchState.selectedVideoIds)
+                    },
+                    analyze: analyzeState,
+                    ideation: ideationState,
+                    script: scriptState,
+                    prompts: promptState
+                }));
+            } catch (err) {
+                console.debug('[Shorts persistence] 저장 실패', err);
+            }
+        }
+
+        function restoreWorkspaceState() {
+            try {
+                const raw = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+                if (!raw) return;
+                const saved = JSON.parse(raw);
+                if (!saved || saved.version !== 1) return;
+
+                if (saved.search) {
+                    inputSearchQuery.value = saved.search.query || '';
+                    inputDateFrom.value = saved.search.dateFrom || inputDateFrom.value;
+                    inputDateTo.value = saved.search.dateTo || inputDateTo.value;
+                    selectDuration.value = saved.search.duration || selectDuration.value;
+                    inputMinViews.value = saved.search.minViews || '';
+                    inputMaxSubs.value = saved.search.maxSubs || '';
+                    searchState.allResults = Array.isArray(saved.search.allResults) ? saved.search.allResults : [];
+                    searchState.results = Array.isArray(saved.search.results) ? saved.search.results : [];
+                    searchState.selectedVideoIds = new Set(Array.isArray(saved.search.selectedVideoIds) ? saved.search.selectedVideoIds : []);
+                }
+                if (saved.analyze) Object.assign(analyzeState, saved.analyze);
+                if (saved.ideation) Object.assign(ideationState, saved.ideation);
+                if (saved.script) Object.assign(scriptState, saved.script);
+                if (saved.prompts) Object.assign(promptState, saved.prompts);
+
+                workspaceRestored = true;
+                if (searchState.allResults.length || searchState.results.length) renderResults();
+                if (analyzeState.analysisResult) renderAnalysis(analyzeState.analysisResult, analyzeState.analyzedVideos || []);
+                if (ideationState.ideas.length) renderIdeas();
+                if (scriptState.script) renderScript();
+                if (promptState.prompts.length || promptState.bgmPrompt) renderPrompts(promptState);
+
+                const validSteps = ['search', 'analyze', 'ideate', 'select', 'script', 'prompts'];
+                const savedStep = saved.state?.currentStep;
+                if (validSteps.includes(savedStep)) navigate(savedStep);
+            } catch (err) {
+                console.debug('[Shorts persistence] 복원 실패', err);
+                try { localStorage.removeItem(WORKSPACE_STORAGE_KEY); } catch (ignored) { /* 저장소 접근 불가 */ }
+            }
+        }
 
         async function analyzeWithGemini(videos, commentsMap) {
             const apiKey = state.apiKeys.gemini;
@@ -1528,6 +1610,7 @@ Return ONLY a valid JSON object matching this schema (pure JSON, no markdown bac
                 const ideasData = await callGemini(apiKey, prompt, true);
                 ideationState.ideas = ideasData.ideas || [];
                 renderIdeas();
+                queueWorkspaceSave();
                 logToControlTower('v1', `쇼츠 신규 바이럴 6개 아이디어 발굴 완료`);
             } catch (e) {
                 console.error(e);
@@ -1715,6 +1798,7 @@ Return ONLY a valid JSON object matching this schema (pure JSON, no markdown bac
                 const scriptData = await callGemini(apiKey, prompt, true);
                 scriptState.script = scriptData.scenes || [];
                 renderScript();
+                queueWorkspaceSave();
                 logToControlTower('v1', `쇼츠 ${duration}초 대본 (${scriptState.script.length}씬) 작성 완료 (1문장 원칙 엄수)`);
             } catch(e) {
                 console.error(e);
@@ -1848,6 +1932,7 @@ Return ONLY a valid JSON object matching this schema (pure JSON, no markdown bac
                 promptState.prompts = promptData.prompts || [];
                 promptState.bgmPrompt = promptData.bgmPrompt || null;
                 renderPrompts(promptData);
+                queueWorkspaceSave();
                 logToControlTower('v3', `쇼츠 Midjourney v6 및 Suno BGM 마스터 프롬프트 생성 완료`);
             } catch(e) {
                 console.error(e);
@@ -2098,6 +2183,11 @@ Return ONLY a valid JSON object matching this schema (pure JSON, no markdown bac
 
         const btnDownloadAllMd = document.getElementById('btn-download-all-md');
         if (btnDownloadAllMd) btnDownloadAllMd.addEventListener('click', exportProjectMarkdown);
+
+        document.addEventListener('input', queueWorkspaceSave);
+        document.addEventListener('change', queueWorkspaceSave);
+        window.addEventListener('beforeunload', persistWorkspaceState);
+        restoreWorkspaceState();
     </script>
 </body>
 </html>

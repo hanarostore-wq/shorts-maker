@@ -33,7 +33,7 @@ export function ShortsStudioModal({
   }, [onClose]);
 
   const navigateFrame = useCallback((step: string) => {
-    frameRef.current?.contentWindow?.postMessage({ type: "navigate-step", step }, window.location.origin);
+    frameRef.current?.contentWindow?.postMessage({ type: "navigate-step", step, preserveWorkspace: true }, window.location.origin);
   }, []);
 
   useEffect(() => {
