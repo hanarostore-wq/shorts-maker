@@ -300,12 +300,12 @@ export async function reportCompletion(input: {
   // 상태별로 새 줄을 쌓으면 과거 "빌드 중"이 현재 상태처럼 보여 혼동되므로
   // 관제실에는 Vercel의 최신 상태를 하나의 로그 줄로 유지한다.
   const replaceIndex = input.incidentKey === "vercel"
-    ? state.log.findIndex((item) => item.agentId === agent.id && /Vercel|빌드|배포/.test(item.message))
+    ? state.log.findIndex((item) => item.agentId === agent.id && /Vercel|빌드|배포|대기열|INITIALIZING/.test(item.message))
     : -1;
   if (replaceIndex >= 0) {
     const previous = state.log[replaceIndex];
     state.log = state.log.filter((item, index) =>
-      index === replaceIndex || !(item.agentId === agent.id && /Vercel|빌드|배포/.test(item.message)),
+      index === replaceIndex || !(item.agentId === agent.id && /Vercel|빌드|배포|대기열|INITIALIZING/.test(item.message)),
     );
     state.log[replaceIndex] = {
       ...previous,
