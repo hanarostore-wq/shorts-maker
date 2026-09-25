@@ -91,15 +91,6 @@ export function ShortsStudioModal({
           </div>
 
           <div className={styles.actions}>
-            <a
-              href={frameSrc}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.actionBtn}
-              title="새 탭에서 전체 화면으로 열기"
-            >
-              <span>↗</span> 새 창 열기
-            </a>
             <button
               type="button"
               className={styles.closeBtn}

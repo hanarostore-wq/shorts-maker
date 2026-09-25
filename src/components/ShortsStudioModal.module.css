@@ -14,9 +14,9 @@
 .badge { border: 1px solid #80652a; border-radius: 3px; padding: 4px 8px; background: rgba(245,196,81,.06); color: var(--control-amber); font-family: var(--font-geist-mono), monospace; font-size: 10px; letter-spacing: .06em; }
 .status { color: var(--control-muted); font-size: 11px; line-height: 1.6; }
 .actions { display: flex; align-items: center; gap: 8px; }
-.actionBtn, .closeBtn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; border: 1px solid var(--control-line-strong); border-radius: 3px; padding: 7px 12px; background: #18222d; color: var(--control-text); font-size: 12px; font-weight: 650; cursor: pointer; text-decoration: none; transition: background .16s ease, border-color .16s ease; }
-.actionBtn:hover, .closeBtn:hover { border-color: var(--control-cyan); background: #1d3038; color: #fff; }
+.closeBtn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; border: 1px solid var(--control-line-strong); border-radius: 3px; padding: 7px 12px; background: #18222d; color: var(--control-text); font-size: 12px; font-weight: 650; cursor: pointer; text-decoration: none; transition: background .16s ease, border-color .16s ease; }
+.closeBtn:hover { border-color: var(--control-cyan); background: #1d3038; color: #fff; }
 .closeBtn:hover { border-color: var(--control-red); background: #351a20; }
 .content { position: relative; flex: 1; min-height: 0; min-width: 0; background: var(--control-bg); }
 .frame { display: block; height: 100%; width: 100%; border: 0; background: var(--control-bg); }
-@media (max-width: 640px) { .dialog { width: calc(100vw - 12px); height: calc(100dvh - 12px); }.header { align-items: flex-start; padding: 8px; }.heading { gap: 6px; font-size: 13px; }.actions { flex-shrink: 0; flex-direction: column; align-items: stretch; }.actionBtn, .closeBtn { justify-content: center; min-height: 34px; padding-inline: 9px; font-size: 11px; } }
+@media (max-width: 640px) { .dialog { width: calc(100vw - 12px); height: calc(100dvh - 12px); }.header { align-items: flex-start; padding: 8px; }.heading { gap: 6px; font-size: 13px; }.actions { flex-shrink: 0; flex-direction: column; align-items: stretch; }.closeBtn { justify-content: center; min-height: 34px; padding-inline: 9px; font-size: 11px; } }

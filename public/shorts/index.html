@@ -74,126 +74,6 @@
             background: #3E5485;
         }
 
-        /* Sidebar */
-        .sidebar {
-            width: 260px;
-            background-color: var(--bg-sidebar);
-            border-right: 1px solid var(--border-subtle);
-            display: flex;
-            flex-direction: column;
-            padding: 24px 16px;
-            color: var(--text-primary);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            flex-shrink: 0;
-            position: relative;
-            z-index: 100;
-        }
-
-        body.sidebar-collapsed .sidebar {
-            margin-left: -260px;
-        }
-
-        .btn-toggle-sidebar {
-            background: var(--bg-surface);
-            border: 1px solid var(--border-light);
-            color: var(--text-primary);
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-size: 16px;
-            transition: all 0.2s ease;
-            flex-shrink: 0;
-        }
-
-        .btn-toggle-sidebar:hover {
-            background: var(--bg-surface-elevated);
-            color: var(--primary);
-            border-color: var(--primary);
-            transform: scale(1.05);
-        }
-
-        .sidebar-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(4px);
-            z-index: 999;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        @media (max-width: 900px) {
-            .sidebar {
-                position: fixed;
-                top: 0;
-                left: 0;
-                height: 100vh;
-                z-index: 1000;
-                margin-left: -260px;
-                box-shadow: 4px 0 25px rgba(0, 0, 0, 0.6);
-            }
-
-            body.sidebar-open .sidebar {
-                margin-left: 0;
-            }
-
-            body.sidebar-open .sidebar-overlay {
-                display: block;
-                opacity: 1;
-            }
-        }
-
-        .logo {
-            font-size: 20px;
-            font-weight: 700;
-            margin-bottom: 32px;
-            padding: 0 8px;
-        }
-
-        .nav {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .nav-item {
-            background: none;
-            border: 1px solid transparent;
-            color: var(--text-secondary);
-            text-align: left;
-            padding: 12px 14px;
-            border-radius: 10px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .nav-item:hover {
-            color: #FFFFFF;
-            background-color: rgba(255, 255, 255, 0.04);
-            border-color: rgba(255, 255, 255, 0.06);
-        }
-
-        .nav-item.active {
-            color: #FFFFFF;
-            background: var(--sidebar-active-bg);
-            border-color: rgba(99, 102, 241, 0.4);
-            box-shadow: 0 0 15px rgba(99, 102, 241, 0.15);
-        }
-
         /* Main Content */
         .main-content {
             flex: 1;
@@ -404,45 +284,11 @@
     <link rel="stylesheet" href="/shorts/control-room.css" />
 </head>
 <body>
-    <!-- Sidebar Overlay for mobile -->
-    <div class="sidebar-overlay" id="sidebar-overlay"></div>
-
-    <!-- Sidebar -->
-    <aside class="sidebar" id="sidebar">
-        <div class="logo" style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div>
-                <div style="font-size: 19px; font-weight: 800; letter-spacing: -0.5px; background: linear-gradient(135deg, #A5B4FC, #818CF8, #C084FC); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">남다른AI</div>
-                <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-top: 4px; letter-spacing: -0.2px;">Shorts 분석기 · 관제실</div>
-            </div>
-            <button id="btn-sidebar-collapse" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 15px; padding: 4px;" title="사이드바 접기 (Ctrl+B)">◀</button>
-        </div>
-        <nav class="nav">
-            <button class="nav-item active" data-step="search"><span>🔍</span> 01. Search</button>
-            <button class="nav-item" data-step="analyze"><span>📊</span> 02. Analyze</button>
-            <button class="nav-item" data-step="ideate"><span>💡</span> 03. Ideate</button>
-            <button class="nav-item" data-step="select"><span>🎯</span> 04. Select Topic</button>
-            <button class="nav-item" data-step="script"><span>📝</span> 05. Script</button>
-            <button class="nav-item" data-step="prompts"><span>🎨</span> 06. Visual Prompts</button>
-        </nav>
-
-        <div style="margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px;">
-            <a href="/" id="btn-back-hq" style="display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-decoration: none; padding: 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-subtle); transition: all 0.2s;">
-                🏢 운영본부 관제실 복귀
-            </a>
-            <div style="font-size: 10px; color: var(--text-muted); text-align: center;">
-                쇼츠부서 5명 전원 자동 연동 활성
-            </div>
-        </div>
-    </aside>
-
     <!-- Main Content -->
     <main class="main-content">
         <!-- Header -->
         <header class="header">
             <div style="display: flex; align-items: center; gap: 14px;">
-                <button class="btn-toggle-sidebar" id="btn-toggle-sidebar" title="사이드바 열기/접기 (Ctrl+B)">
-                    ☰
-                </button>
                 <h1 id="page-title">Search & Discover</h1>
             </div>
             <div class="header-actions" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
@@ -765,9 +611,6 @@
         const inputYtKey = document.getElementById('yt-api-key');
         const inputGeminiKey = document.getElementById('gemini-api-key');
         const apiStatus = document.getElementById('api-status');
-        const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
-        const btnSidebarCollapse = document.getElementById('btn-sidebar-collapse');
-        const sidebarOverlay = document.getElementById('sidebar-overlay');
 
         // Optional postMessage bridge to parent control tower
         window.addEventListener('message', (event) => {
@@ -793,61 +636,11 @@
                 console.debug('[Control Tower Log]', err);
             }
         }
-
-        // --- Sidebar Collapsible Logic ---
-        function isMobileView() {
-            return window.innerWidth <= 900;
-        }
-
-        const savedSidebarCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
-        if (savedSidebarCollapsed && !isMobileView()) {
-            document.body.classList.add('sidebar-collapsed');
-        }
-
-        function toggleSidebar() {
-            if (isMobileView()) {
-                document.body.classList.toggle('sidebar-open');
-            } else {
-                document.body.classList.toggle('sidebar-collapsed');
-                const isCollapsed = document.body.classList.contains('sidebar-collapsed');
-                localStorage.setItem('sidebar_collapsed', isCollapsed);
-            }
-        }
-
-        function closeSidebarMobile() {
-            if (isMobileView()) {
-                document.body.classList.remove('sidebar-open');
-            }
-        }
-
-        if (btnToggleSidebar) btnToggleSidebar.addEventListener('click', toggleSidebar);
-
-        if (btnSidebarCollapse) {
-            btnSidebarCollapse.addEventListener('click', () => {
-                if (isMobileView()) {
-                    document.body.classList.remove('sidebar-open');
-                } else {
-                    document.body.classList.add('sidebar-collapsed');
-                    localStorage.setItem('sidebar_collapsed', 'true');
-                }
-            });
-        }
-
-        if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebarMobile);
-
-        window.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
-                e.preventDefault();
-                toggleSidebar();
-            }
-        });
-
         // Navigation Logic
         navItems.forEach(item => {
             item.addEventListener('click', (e) => {
                 const step = e.currentTarget.getAttribute('data-step');
                 navigate(step);
-                closeSidebarMobile();
             });
         });
 
