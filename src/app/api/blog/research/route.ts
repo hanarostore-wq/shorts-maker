@@ -10,8 +10,9 @@ import {
   upsertBlogResearch,
 } from "@/lib/blogStore";
 
-const DATALAB_URL = "https://openapi.naver.com/v1/datalab/search";
-const SEARCH_URL = "https://openapi.naver.com/v1/search/blog.json";
+const API_HUB_BASE_URL = "https://naverapihub.apigw.ntruss.com";
+const DATALAB_URL = `${API_HUB_BASE_URL}/search-trend/v1/search`;
+const SEARCH_URL = `${API_HUB_BASE_URL}/search/v1/blog`;
 const MAX_KEYWORDS = 200;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -21,14 +22,14 @@ function clamp(value: number) { return Math.max(0, Math.min(100, Math.round(valu
 function dateString(daysAgo: number) { const date = new Date(); date.setUTCDate(date.getUTCDate() - daysAgo); return date.toISOString().slice(0, 10); }
 
 async function fetchDataLab(credentials: { clientId: string; clientSecret: string }, keywords: string[]) {
-  const response = await fetch(DATALAB_URL, { method: "POST", headers: { "X-Naver-Client-Id": credentials.clientId, "X-Naver-Client-Secret": credentials.clientSecret, "Content-Type": "application/json" }, body: JSON.stringify({ startDate: dateString(90), endDate: dateString(0), timeUnit: "date", keywordGroups: keywords.map((keyword) => ({ groupName: keyword, keywords: [keyword] })) }), cache: "no-store" });
+  const response = await fetch(DATALAB_URL, { method: "POST", headers: { "X-NCP-APIGW-API-KEY-ID": credentials.clientId, "X-NCP-APIGW-API-KEY": credentials.clientSecret, "Content-Type": "application/json" }, body: JSON.stringify({ startDate: dateString(90), endDate: dateString(0), timeUnit: "date", keywordGroups: keywords.map((keyword) => ({ groupName: keyword, keywords: [keyword] })) }), cache: "no-store" });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`NAVER_DATALAB_${response.status}: ${body?.errorMessage || "DataLab 요청 실패"}`);
   return Array.isArray(body.results) ? body.results as Array<{ title: string; data: Array<{ period: string; ratio: number }> }> : [];
 }
 
 async function fetchSearch(credentials: { clientId: string; clientSecret: string }, keyword: string) {
-  const response = await fetch(`${SEARCH_URL}?query=${encodeURIComponent(keyword)}&display=10&sort=date`, { headers: { "X-Naver-Client-Id": credentials.clientId, "X-Naver-Client-Secret": credentials.clientSecret }, cache: "no-store" });
+  const response = await fetch(`${SEARCH_URL}?query=${encodeURIComponent(keyword)}&display=10&sort=date&format=json`, { headers: { "X-NCP-APIGW-API-KEY-ID": credentials.clientId, "X-NCP-APIGW-API-KEY": credentials.clientSecret }, cache: "no-store" });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`NAVER_SEARCH_${response.status}: ${body?.errorMessage || "Blog Search 요청 실패"}`);
   return { total: Number(body.total || 0), items: Array.isArray(body.items) ? body.items as Array<{ title?: string; link?: string; description?: string; pubDate?: string }> : [] };
