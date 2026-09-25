@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { Agent } from "@/lib/types";
 import { CoinSimulationPanel } from "./CoinSimulationPanel";
 import { UpbitConnectionPanel } from "./UpbitConnectionPanel";
+import { StockTradingPanel } from "./StockTradingPanel";
 import { AssetManagementPanel, LiveTradingPanel, ProfitRealizationPanel } from "./TradingAccountPanels";
 
 type Kind = "coin" | "stock";
@@ -54,7 +55,7 @@ export function TradingRolePanel({ kind, agent }: { kind: Kind; agent: Agent }) 
   if (agent.id === (kind === "coin" ? "c4" : "t4")) return <OrderbookOnlyPanel kind={kind} />;
   if (agent.id === (kind === "coin" ? "c5" : "t5")) return <AssetManagementPanel asset={kind} />;
   if (agent.id === (kind === "coin" ? "c7" : "t7")) return <CoinSimulationPanel />;
-  if (agent.id === (kind === "coin" ? "c8" : "t8")) return kind === "coin" ? <UpbitConnectionPanel /> : <CompactRolePanel kind={kind} agent={agent} />;
+  if (agent.id === (kind === "coin" ? "c8" : "t8")) return kind === "coin" ? <UpbitConnectionPanel /> : <StockTradingPanel agent={agent} />;
   if (agent.id === (kind === "coin" ? "c11" : "t11")) return <AssetManagementPanel asset={kind} />;
   if (agent.id === (kind === "coin" ? "c12" : "t12")) return <ProfitRealizationPanel asset={kind} />;
   if (agent.id === (kind === "coin" ? "c13" : "t13")) return <LiveTradingPanel asset={kind} />;
