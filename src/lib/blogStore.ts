@@ -265,6 +265,19 @@ function opportunityScore(scores: Pick<BlogResearchItem, "demandScore" | "gapSco
 
 export async function listBlogResearch() { return readResearch(); }
 
+export async function dedupeBlogResearch() {
+  const items = await readResearch();
+  const kept = new Map<string, BlogResearchItem>();
+  for (const item of items) {
+    const key = `${item.blogId}:${item.masterTopic.trim().toLowerCase()}`;
+    const previous = kept.get(key);
+    if (!previous || (item.status === "approved" && previous.status !== "approved") || item.opportunityScore > previous.opportunityScore) kept.set(key, item);
+  }
+  const next = [...kept.values()];
+  if (next.length !== items.length) await writeResearch(next);
+  return { removed: items.length - next.length, items: next };
+}
+
 export async function upsertBlogResearch(input: Partial<BlogResearchItem> & Pick<BlogResearchItem, "keyword" | "masterTopic">) {
   const items = await readResearch();
   const id = input.id || `RESEARCH-${Date.now()}`;
@@ -328,7 +341,7 @@ export async function selectTopBlogResearch(limit = 100) {
 }
 
 export async function getBlogResearchDashboard() {
-  const items = await readResearch();
+  const items = (await dedupeBlogResearch()).items;
   return {
     items: [...items].sort((a, b) => b.opportunityScore - a.opportunityScore || b.updatedAt.localeCompare(a.updatedAt)),
     counts: {

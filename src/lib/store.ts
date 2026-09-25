@@ -171,7 +171,7 @@ function healState(state: State): State {
   const coinProject=state.projects.find(p=>p.id==='p5');
   if(coinProject){coinProject.agentCount=state.departments.find(d=>d.id==='coin')?.agents.length ?? 0;coinProject.leadAgent='Jev 매수근거';}
   const blogProject=state.projects.find(p=>p.id==='p4');
-  if(blogProject){blogProject.agentCount=3;blogProject.leadAgent='READY 관리자';}
+  if(blogProject){blogProject.agentCount=4;blogProject.leadAgent='READY 관리자';}
   return state;
 }
 

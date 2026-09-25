@@ -1,0 +1,19 @@
+"use client";
+import { useCallback, useEffect, useState } from "react";
+
+type Dashboard = { configured: boolean; ok?: boolean; error?: string; account?: { name: string; displayName: string } | null; totals?: { estimatedEarnings: string; pageViews: string; impressions: string; clicks: string; ctr: string; rpm: string } | null; rows?: Array<{ date: string; estimatedEarnings: string; pageViews: string; impressions: string; clicks: string; ctr: string; rpm: string }> };
+const money = (value?: string) => value ? `${Number(value).toLocaleString("ko-KR")} USD` : "-";
+export function AdsensePanel() {
+  const [data, setData] = useState<Dashboard | null>(null); const [busy, setBusy] = useState(false); const [message, setMessage] = useState("");
+  const load = useCallback(async () => { setBusy(true); try { const response = await fetch("/api/blog/adsense/report", { cache: "no-store" }); const result = await response.json(); setData(result); if (!response.ok) setMessage(result.error || "AdSense 조회 실패"); } catch (error) { setMessage(error instanceof Error ? error.message : "AdSense 조회 실패"); } finally { setBusy(false); } }, []);
+  // 외부 AdSense 보고서 조회를 시작하는 초기 동기화 호출이다.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void load(); }, [load]);
+  return <div className="flex flex-col gap-3">
+    <div className="rounded border border-amber-900 bg-amber-950/20 p-3 text-[11px] text-zinc-300"><div className="font-bold text-amber-300">애드센스 분석관 · Google AdSense</div><div className="mt-1">Google OAuth로 연결된 AdSense 계정의 예상 수익·페이지뷰·노출·클릭·CTR·RPM을 조회합니다. 비밀번호와 refresh token은 브라우저에 저장하지 않습니다.</div></div>
+    {!data?.configured && <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3"><div className="text-xs text-zinc-300">Google AdSense 계정이 연결되지 않았습니다.</div><div className="mt-1 text-[10px] text-zinc-500">서버에 Google OAuth Client ID/Secret과 Redirect URI가 설정되어야 합니다.</div><a href="/api/blog/adsense/oauth/start" className="mt-3 inline-block border border-amber-700 px-3 py-1.5 text-[11px] text-amber-300">Google AdSense 연결</a></div>}
+    {data?.configured && data.account && <><div className="flex items-center justify-between rounded border border-emerald-900 bg-emerald-950/20 p-3 text-[11px]"><span className="text-emerald-300">연결됨 · {data.account.displayName}</span><button disabled={busy} onClick={() => void load()} className="border border-zinc-700 px-2 py-1 text-zinc-300">새로고침</button></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{[["예상 수익",money(data.totals?.estimatedEarnings)],["페이지뷰",data.totals?.pageViews||"-"],["노출수",data.totals?.impressions||"-"],["클릭수",data.totals?.clicks||"-"],["CTR",data.totals?.ctr||"-"],["RPM",money(data.totals?.rpm)]].map(([label,value])=><div key={label} className="rounded border border-zinc-800 bg-zinc-900/50 p-3"><div className="text-[10px] text-zinc-500">{label}</div><div className="mt-1 text-sm font-bold text-zinc-100">{value}</div></div>)}</div><div className="max-h-[42vh] overflow-y-auto rounded border border-zinc-800"><div className="grid grid-cols-7 gap-1 border-b border-zinc-800 p-2 text-[9px] text-zinc-500"><span>날짜</span><span>수익</span><span>페이지뷰</span><span>노출</span><span>클릭</span><span>CTR</span><span>RPM</span></div>{(data.rows||[]).map((row)=><div key={row.date} className="grid grid-cols-7 gap-1 border-b border-zinc-900 p-2 text-[9px] text-zinc-400"><span>{row.date}</span><span>{money(row.estimatedEarnings)}</span><span>{row.pageViews}</span><span>{row.impressions}</span><span>{row.clicks}</span><span>{row.ctr}</span><span>{money(row.rpm)}</span></div>)}</div></>}
+    {data?.configured && !data.account && <div className="text-xs text-amber-300">AdSense 계정은 연결됐지만 조회 가능한 계정이 없습니다.</div>}
+    {message && <div className="border border-red-900 p-2 text-[10px] text-red-300">{message}</div>}
+  </div>;
+}

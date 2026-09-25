@@ -88,10 +88,11 @@ export const departments: Department[] = [
     icon: "✍️",
     agents: [
 
-      { id: "b_research", name: "소재 조사원", task: "블로그별 소재 발굴·검색수요·콘텐츠 공백·Opportunity 분석·READY 공급", status: "standby" },
+      { id: "b_research", name: "소재 조사원", task: "네이버 DataLab/Search 분석·중복 제거·블로그 적합도·Opportunity Score·MASTER TOPIC·상위 100개 주제 저장", status: "standby" },
       { id: "b_ready", name: "READY 관리자", task: "GPT 완성글 적재·필드 검증·블로그 배정·READY 수량·체크 선택 관리", status: "standby" },
 
       { id: "b_naver", name: "네이버 블로거", task: "READY 콘텐츠를 일정에 맞춰 네이버 블로그에 배포·결과 기록", status: "standby" },
+      { id: "b_adsense", name: "애드센스 분석관", task: "Google OAuth 연결·AdSense 수익·페이지뷰·CTR·RPM·블로그별 성과 분석", status: "standby" },
     ],
   },
 ];
@@ -102,7 +103,7 @@ export const projects: Project[] = [
   { id: "p2", name: "쿠팡 자동화", departmentId: "store", agentCount: 4, leadAgent: "가격감시자" },
   { id: "p3", name: "쇼츠 팩토리", departmentId: "shorts", agentCount: 6, leadAgent: "영상감독" },
 
-  { id: "p4", name: "블로그 팩토리", departmentId: "blog", agentCount: 3, leadAgent: "READY 관리자" },
+  { id: "p4", name: "블로그 팩토리", departmentId: "blog", agentCount: 4, leadAgent: "READY 관리자" },
   { id: "p5", name: "업비트 현물 단타", departmentId: "coin", agentCount: 12, leadAgent: "Jev 매수근거" },
 
 ];

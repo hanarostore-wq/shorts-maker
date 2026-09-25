@@ -3,6 +3,7 @@ import {TradingAnalyticsPanel} from "./TradingAnalyticsPanel";
 import { NaverBlogPanel } from "./NaverBlogPanel";
 import { BlogReadyPanel } from "./BlogReadyPanel";
 import { BlogResearchPanel } from "./BlogResearchPanel";
+import { AdsensePanel } from "./AdsensePanel";
 
 
 
@@ -73,6 +74,7 @@ export function AgentDetailModal({
         {tool === "blogReady" && <BlogReadyPanel />}
         {tool === "blogResearch" && <BlogResearchPanel />}
         {tool === "naverBlog" && <NaverBlogPanel />}
+        {tool === "adsense" && <AdsensePanel />}
         {tool === "shortsStudio" && (
           <div className="control-room-panel flex flex-col gap-3 p-4">
             <div className="flex items-center justify-between">

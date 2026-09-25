@@ -23,7 +23,8 @@ export type AgentTool =
   | "shortsStudio"
   | "blogResearch"
   | "blogReady"
-  | "naverBlog";
+  | "naverBlog"
+  | "adsense";
 
 
 export const AGENT_TOOLS: Record<string, AgentTool> = {
@@ -66,6 +67,7 @@ export const AGENT_TOOLS: Record<string, AgentTool> = {
   b_research: "blogResearch",
   b_ready: "blogReady",
   b_naver: "naverBlog",
+  b_adsense: "adsense",
 
 
 };

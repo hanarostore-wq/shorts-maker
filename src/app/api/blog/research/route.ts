@@ -27,8 +27,17 @@ function discoverKeywords() {
   return [...new Set(AUTO_TOPIC_BASES.flatMap((base) => AUTO_VARIANTS.map((variant) => `${base} ${variant}`)))].slice(0, MAX_KEYWORDS);
 }
 function masterTopicFor(keyword: string) {
-  const base = keyword.replace(/\s+(추천|비교|사용법|관리 방법|구매 전 체크리스트)$/, "").trim();
-  return `${base} 선택과 관리의 핵심 가이드`;
+  const matched = keyword.match(/^(.*)\s+(추천|비교|사용법|관리 방법|구매 전 체크리스트)$/);
+  if (!matched) return `${keyword} 핵심 가이드`;
+  const [, base, variant] = matched;
+  const topicByVariant: Record<string, string> = {
+    추천: `${base} 추천 기준과 핵심 가이드`,
+    비교: `${base} 비교와 선택 기준`,
+    사용법: `${base} 사용법과 관리 핵심`,
+    "관리 방법": `${base} 관리 방법 핵심 가이드`,
+    "구매 전 체크리스트": `${base} 구매 전 체크리스트`,
+  };
+  return topicByVariant[variant] || `${base} ${variant} 핵심 가이드`;
 }
 
 function cleanKeyword(value: unknown) { return String(value || "").trim().replace(/\s+/g, " "); }
@@ -98,7 +107,9 @@ export async function POST(request: Request) {
   if (action === "discover") {
     try {
       const keywords = discoverKeywords();
-      return NextResponse.json({ ok: true, mode: "automatic", profileKeywords: AUTO_PROFILE_TERMS, ...(await collectCandidates({ keywords, blogId: String(body.blogId || "b_naver_main"), profileKeywords: AUTO_PROFILE_TERMS })) });
+      const collected = await collectCandidates({ keywords, blogId: String(body.blogId || "b_naver_main"), profileKeywords: AUTO_PROFILE_TERMS });
+      const selection = await selectTopBlogResearch(100);
+      return NextResponse.json({ ok: true, mode: "automatic", profileKeywords: AUTO_PROFILE_TERMS, ...collected, selected: selection });
     } catch (error) {
       const message = error instanceof Error ? error.message : "자동 소재 발굴 실패";
       return NextResponse.json({ ok: false, code: message.split(":")[0], error: message }, { status: 502 });
