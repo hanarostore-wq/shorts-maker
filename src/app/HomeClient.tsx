@@ -159,6 +159,7 @@ export default function Home() {
       <ShortsStudioModal
         isOpen={isShortsAgentSelected}
         initialStep={shortsStep}
+        targetAgentId={liveSelectedAgent?.id}
         targetAgentName={liveSelectedAgent?.name}
         targetAgentTask={liveSelectedAgent?.task}
         onClose={() => setSelectedAgent(null)}
