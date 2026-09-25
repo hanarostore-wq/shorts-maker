@@ -17,7 +17,13 @@ export function DepartmentFloor({
 }) {
   const finance=useTradingFinance(department.id);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const activeCount = department.agents.filter((a) => a.id.endsWith("_analytics") ? finance.data?.status?.state === "업무중" : a.status === "active").length;
+  const runtime=department.id==='coin'?finance.data?.runtime:null;
+  const activeCount = department.agents.filter((a) => {
+    if (department.id==='coin' && a.id==='c7') return runtime?.mode==='paper' && Boolean(runtime.running);
+    if (department.id==='coin' && a.id==='c13') return runtime?.mode==='live' && Boolean(runtime.running);
+    if (a.id.endsWith("_analytics")) return finance.data?.status?.state === "업무중" || Boolean(runtime?.running);
+    return a.status === "active";
+  }).length;
   const utilization = Math.round((activeCount / department.agents.length) * 100);
 
   const handleDrop = (targetId: string) => {
@@ -58,6 +64,26 @@ export function DepartmentFloor({
       <div className="grid content-start grid-cols-5 gap-1.5 sm:grid-cols-8">
         {department.agents.map((agent) => {
           const clickable = isAgentClickable(agent.id);
+          const isTradingStaff=agent.id==='c7'||agent.id==='c13';
+          const isTradingAnalytics=agent.id==='c_analytics';
+          const runtimeAgent=isTradingStaff||isTradingAnalytics;
+          const runtimeStatus=runtimeAgent
+            ? isTradingAnalytics
+              ? (runtime?.running?'active':'standby')
+              : (runtime?.mode===(agent.id==='c7'?'paper':'live')&&runtime.running?'active':'standby')
+            : null;
+          const runtimeTask=runtimeAgent
+            ? isTradingAnalytics
+              ? (runtime?.running?'자동매매 거래 근거·시장 자료·손익 분석 업무중':'자동매매 정지 · 매매분석 대기')
+              : agent.id==='c7'
+                ? (runtime?.mode==='paper'&&runtime.running?'모의 자동매매 업무중':'모의 자동매매 대기')
+                : (runtime?.mode==='live'&&runtime.running?'실전 자동매매 업무중':'실전 자동매매 대기')
+            : null;
+          const displayAgent=runtimeStatus
+            ? {...agent,status:runtimeStatus as Agent["status"],task:runtimeTask||agent.task}
+            : agent.id.endsWith('_analytics')
+              ? {...agent,status:(finance.data?.status?.error?'standby':finance.data?.status?.state==='업무중'?'active':'standby') as Agent["status"],task:finance.data?.status?.error?'⚠ '+finance.data.status.error:finance.data?.status?.task||'거래 근거·시장 자료·손익 분석 대기'}
+              : agent;
           return (
             <div
               key={agent.id}
@@ -69,7 +95,7 @@ export function DepartmentFloor({
               className={`cursor-grab select-none ${draggingId === agent.id ? "opacity-40" : ""}`}
             >
               <AgentSeat
-                agent={agent.id.endsWith('_analytics')?{...agent,status:finance.data?.status?.error?'standby':finance.data?.status?.state==='업무중'?'active':'standby',task:finance.data?.status?.error?'⚠ '+finance.data.status.error:finance.data?.status?.task||'거래 근거·시장 자료·손익 분석 대기'}:agent}
+                agent={displayAgent}
                 onClick={clickable ? () => onAgentClick(agent) : undefined}
               />
             </div>

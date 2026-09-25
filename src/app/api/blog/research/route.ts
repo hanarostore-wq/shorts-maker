@@ -5,6 +5,7 @@ import {
   getBlogResearchDashboard,
   listBlogResearch,
   patchBlogResearch,
+  removeBlogResearch,
   selectTopBlogResearch,
   upsertBlogResearch,
 } from "@/lib/blogStore";
@@ -141,4 +142,13 @@ export async function PATCH(request: Request) {
   if (!item) return NextResponse.json({ error: "소재 후보를 찾을 수 없습니다." }, { status: 404 });
   if (body.action === "approve" || body.action === "reject") return NextResponse.json({ ok: true, item: await patchBlogResearch(id, { status: body.action === "approve" ? "approved" : "rejected" }) });
   return NextResponse.json({ error: "지원하지 않는 action입니다." }, { status: 400 });
+}
+
+export async function DELETE(request: Request) {
+  const body = await request.json().catch(() => ({}));
+  const id = String(body?.id || "");
+  if (!id) return NextResponse.json({ error: "id는 필수입니다." }, { status: 400 });
+  const removed = await removeBlogResearch(id);
+  if (!removed) return NextResponse.json({ error: "소재 후보를 찾을 수 없습니다." }, { status: 404 });
+  return NextResponse.json({ ok: true, id });
 }

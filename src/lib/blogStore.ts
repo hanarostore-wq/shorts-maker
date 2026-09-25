@@ -326,6 +326,14 @@ export async function patchBlogResearch(id: string, patch: Partial<Pick<BlogRese
   return items[index];
 }
 
+export async function removeBlogResearch(id: string) {
+  const items = await readResearch();
+  const next = items.filter((item) => item.id !== id);
+  if (next.length === items.length) return false;
+  await writeResearch(next);
+  return true;
+}
+
 export async function selectTopBlogResearch(limit = 100) {
   const items = await readResearch();
   const eligible = items.filter((item) => item.status === "candidate" || item.status === "approved").sort((a, b) => b.opportunityScore - a.opportunityScore);
