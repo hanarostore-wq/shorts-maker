@@ -8,6 +8,7 @@ import {
   selectTopBlogResearch,
   upsertBlogResearch,
 } from "@/lib/blogStore";
+import { mirrorBlogResearchToGithub } from "@/lib/blogSharedSync";
 
 const API_HUB_BASE_URL = "https://naverapihub.apigw.ntruss.com";
 const DATALAB_URL = `${API_HUB_BASE_URL}/search-trend/v1/search`;
@@ -109,7 +110,8 @@ export async function POST(request: Request) {
       const keywords = discoverKeywords();
       const collected = await collectCandidates({ keywords, blogId: String(body.blogId || "b_naver_main"), profileKeywords: AUTO_PROFILE_TERMS });
       const selection = await selectTopBlogResearch(100);
-      return NextResponse.json({ ok: true, mode: "automatic", profileKeywords: AUTO_PROFILE_TERMS, ...collected, selected: selection });
+      const sync = await mirrorBlogResearchToGithub(await listBlogResearch());
+      return NextResponse.json({ ok: true, mode: "automatic", profileKeywords: AUTO_PROFILE_TERMS, ...collected, selected: selection, sharedStorage: sync });
     } catch (error) {
       const message = error instanceof Error ? error.message : "자동 소재 발굴 실패";
       return NextResponse.json({ ok: false, code: message.split(":")[0], error: message }, { status: 502 });
@@ -119,7 +121,11 @@ export async function POST(request: Request) {
     try { return NextResponse.json({ ok: true, ...(await collectCandidates({ keywords: Array.isArray(body.keywords) ? body.keywords.map(cleanKeyword).filter(Boolean) : [], blogId: String(body.blogId || "b_naver_main"), profileKeywords: Array.isArray(body.profileKeywords) ? body.profileKeywords.map(cleanKeyword).filter(Boolean) : [] })) }); }
     catch (error) { const message = error instanceof Error ? error.message : "소재 수집 실패"; return NextResponse.json({ ok: false, code: message.split(":")[0], error: message }, { status: 502 }); }
   }
-  if (action === "select-top-100") return NextResponse.json({ ok: true, selected: await selectTopBlogResearch(100) });
+  if (action === "select-top-100") {
+    const selected = await selectTopBlogResearch(100);
+    const sync = await mirrorBlogResearchToGithub(await listBlogResearch());
+    return NextResponse.json({ ok: true, selected, sharedStorage: sync });
+  }
   if (action === "upsert") {
     if (!body.keyword || !body.masterTopic) return NextResponse.json({ error: "keyword/masterTopic은 필수입니다." }, { status: 400 });
     return NextResponse.json({ ok: true, item: await upsertBlogResearch({ id: body.id, blogId: body.blogId, keyword: String(body.keyword), masterTopic: String(body.masterTopic), sourceUrl: body.sourceUrl, sourceTitle: body.sourceTitle, notes: body.notes, demandScore: body.demandScore, gapScore: body.gapScore, fitScore: body.fitScore, freshnessScore: body.freshnessScore, status: body.status }) });

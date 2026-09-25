@@ -40,13 +40,13 @@ export function BlogResearchPanel() {
       const response = await fetch("/api/blog/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "discover", blogId: "b_naver_main" }) });
       const result = await response.json();
       if (!response.ok || !result.ok) throw new Error(`[${result.code || "NAVER_RESEARCH_ERROR"}] ${result.error || "소재 조사 실패"}`);
-      setMessage(`후보 발굴 완료 · 중복 제거 ${result.unique}개 · 공용 저장소 저장 ${result.results?.length || 0}개${result.errors?.length ? ` · 실패 ${result.errors.length}개` : ""}`); await load();
+      setMessage(`후보 발굴 완료 · 중복 제거 ${result.unique}개 · Redis 저장 ${result.results?.length || 0}개 · GitHub ${result.sharedStorage?.status || "미확인"}${result.errors?.length ? ` · 실패 ${result.errors.length}개` : ""}`); await load();
     } catch (error) { setMessage(error instanceof Error ? error.message : "소재 조사 실패"); }
     finally { setBusy(false); }
   };
   const selectTop = async () => {
     setBusy(true); setMessage("Opportunity Score 상위 100개 선정 중");
-    try { const response = await fetch("/api/blog/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "select-top-100" }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error || "선정 실패"); setMessage(`공용 저장소에 글 작성 대상 ${result.selected?.length || 0}개를 저장했습니다.`); await load(); }
+    try { const response = await fetch("/api/blog/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "select-top-100" }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error || "선정 실패"); setMessage(`Redis 저장 ${result.selected?.length || 0}개 · GitHub 미러링 ${result.sharedStorage?.status || "미확인"}`); await load(); }
     catch (error) { setMessage(error instanceof Error ? error.message : "상위 100개 선정 실패"); }
     finally { setBusy(false); }
   };
