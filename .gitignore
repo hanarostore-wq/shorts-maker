@@ -41,3 +41,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local trading analysis; never commit market series or private trade data
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+/TRADING-ANALYTICS/data/
+/TRADING-ANALYTICS/reports/

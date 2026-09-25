@@ -1,4 +1,6 @@
 "use client";
+import {TradingAnalyticsPanel} from "./TradingAnalyticsPanel";
+
 
 import type { Agent } from "@/lib/types";
 import type { Department } from "@/lib/types";
@@ -35,7 +37,7 @@ export function AgentDetailModal({
       onClick={onClose}
     >
       <div
-        className={`flex max-h-[96vh] w-[calc(100vw-1rem)] ${["c7", "c13", "t7", "t13"].includes(agent.id) ? "max-w-[1600px]" : tool === "tradingEvidence" ? "max-w-3xl" : "max-w-lg"} flex-col gap-3 overflow-hidden border-2 border-zinc-700 bg-zinc-950 p-2 sm:p-4`}
+        className={`flex max-h-[96vh] w-[calc(100vw-1rem)] ${["c7", "c13", "t7", "t13"].includes(agent.id) ? "max-w-[1600px]" : ["tradingEvidence","tradingAnalytics"].includes(tool||"") ? "max-w-5xl" : "max-w-lg"} flex-col gap-3 overflow-hidden border-2 border-zinc-700 bg-zinc-950 p-2 sm:p-4`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b-2 border-zinc-800 pb-2">
@@ -55,6 +57,7 @@ export function AgentDetailModal({
         {tool === "storage" && <SharedStoragePanel />}
         {tool === "sourcingWorker" && <SourcingWorkerPanel />}
         {tool === "sourcingManagement" && <SourcingManagementPanel />}
+        {tool === "tradingAnalytics" && <TradingAnalyticsPanel asset={agent.id.startsWith("c")?"coin":"stock"} />}
         {tool === "tradingEvidence" && <TradingEvidencePanel asset={agent.id.startsWith("c")?"coin":"stock"} category={agent.id.split("_")[1]} />}
         {tool === "coinTrading" && <TradingRolePanel kind="coin" agent={agent} />}
         {agent.id === "c8" && <UpbitReportDashboard />}

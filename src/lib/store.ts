@@ -89,10 +89,14 @@ function healState(state: State): State {
     if (!fresh) continue;
     if (department.id === 'coin' || department.id === 'stock') {
       const allowed = new Map(fresh.agents.map(a => [a.id,a]));
+      // One-time roster migration; later drag order remains user-owned.
+      const migrateAnalyticsOrder=!department.agents.some(a=>a.id.endsWith('_analytics'));
+
       department.agents = department.agents.filter(a => allowed.has(a.id)).map(a => {
         const current=allowed.get(a.id)!;
-        return a.id.includes('_') ? structuredClone(current) : {...a,name:current.name};
+        return a.id.includes('_') ? structuredClone(current) : {...a,name:current.name,...(['c11','c12','t11','t12'].includes(a.id)?{task:current.task}:{})};
       });
+      if(migrateAnalyticsOrder){const byId=new Map(department.agents.map(a=>[a.id,a]));department.agents=fresh.agents.map(a=>byId.get(a.id)||structuredClone(a));}
     }
     const existingIds = new Set(department.agents.map((agent) => agent.id));
     for (const freshAgent of fresh.agents) {

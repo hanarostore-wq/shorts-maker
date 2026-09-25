@@ -1,3 +1,4 @@
+import {tradeContext} from '../analytics.mjs';
 import Decimal from "../../../public/trading/vendor/decimal.mjs";
 import { randomUUID } from "node:crypto";
 import { D, validateBook, riskCheck, applyFill } from "./core.mjs";
@@ -365,6 +366,7 @@ export class TrackingExecutor {
         try {
           applyFill(l, s.side, fill, {
             reason: "현재가 추적 " + s.attempts + "차",
+            analytics:tradeContext(e,{reason:"사용자 현재가 추적 주문",cause:"manual"}),
           });
           this.record(fill, s.id);
           e.save();
@@ -383,6 +385,7 @@ export class TrackingExecutor {
         at: Date.now(),
         reason: "현재가 추적 " + s.attempts + "차",
         decisionId: null,
+        analytics:tradeContext(e,{reason:"사용자 현재가 추적 주문",cause:"manual"}),
         trackingId: s.id,
         status: "sending",
       };

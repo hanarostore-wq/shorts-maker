@@ -241,8 +241,10 @@ export function applyFill(l, side, fill, meta = {}) {
     side,
     ...fill,
     realized: realized.toString(),
+    remainingQuantity: l.quantity,
     reason: meta.reason || "수동 주문",
     decisionId: meta.decisionId || null,
+    ...(meta.analytics?{analytics:structuredClone(meta.analytics)}:{}),
   };
   l.history.push(row);
   return row;

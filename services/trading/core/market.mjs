@@ -88,6 +88,7 @@ export class MarketFeed {
   async select(symbol) {
     if (!this.markets.some((m) => m.market === symbol))
       throw Error("지원하지 않는 원화 마켓");
+    this.onBeforeSelect?.(symbol);
     this.symbol = symbol;
     this.generation++;
     const gen = this.generation;

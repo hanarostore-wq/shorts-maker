@@ -1,3 +1,4 @@
+import {tradeContext,marketSample} from '../analytics.mjs';
 import {defaultPolicy,evidenceDecision,investmentPlan} from './evidence.mjs';
 import { randomUUID, createHash } from "node:crypto";
 import {
@@ -96,6 +97,7 @@ export class Engine {
       accountHash: this.accountHash,
       tracking: this.tracker?.state || null,
     });
+    this.analytics?.sync(this);
   }
   event(text) {
     this.events.unshift({ at: Date.now(), text });
@@ -460,6 +462,7 @@ export class Engine {
     const gen = this.generation,
       epoch = this.judgmentEpoch,
       mode = this.mode;
+    const decisionInput=marketSample(this.feed);
     this.analysisBusy = true;
     this.lastAnalysis = Date.now();
     try {
@@ -491,12 +494,13 @@ export class Engine {
         return;
       }
       this.decision = d;
+      this.decisionInput=decisionInput;
       const l = this.ledger();
       this.action = l
         ? evidenceDecision(this.policy,d.answers,Number(l.quantity)>0,this.config.entryScore,this.config.weaknessExitScore)
         : { side: "hold", reason: "모의 시작금을 설정하세요." };
       if (this.running && this.action.side === 'sell' && this.config.strategyEnabled) {
-        this.safety.request(this.action.reason);
+        this.safety.request(this.action.reason, "jev");
         await this.safety.tick(current);
       } else if (this.running && this.action.side !== "hold")
         await this.order(
@@ -745,9 +749,10 @@ export class Engine {
           slippageBps: cfg.slippageBps,
           allowPartial: emergency && side === 'sell',
         });
+        const context = emergency && l.exitIntent?.analytics ? l.exitIntent.analytics : tradeContext(this,{automatic,reason});
         const before = structuredClone(l);
         try {
-          applyFill(l, side, fill, { reason, decisionId });
+          applyFill(l, side, fill, { reason, decisionId, analytics:context });
           this.save();
         } catch (e) {
           Object.assign(l, before);
@@ -780,6 +785,7 @@ export class Engine {
           at: Date.now(),
           reason,
           decisionId,
+          analytics: emergency && l.exitIntent?.analytics ? l.exitIntent.analytics : tradeContext(this,{automatic,reason}),
           status: "sending",
         };
         this.save();
@@ -860,7 +866,7 @@ export class Engine {
             fee: String(order.paid_fee),
             price: funds.div(q).toNumber(),
           },
-          { id: p.identifier, reason: p.reason, decisionId: p.decisionId },
+          { id: p.identifier, reason: p.reason, decisionId: p.decisionId, analytics:p.analytics },
         );
       }
       l.pending = null;

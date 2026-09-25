@@ -10,10 +10,10 @@ const texts = {
  sizing:['서로 다른 상승 근거가 일치하고 거래 물량이 충분할수록 투자 비율을 높인다.'],
  risk:['가격 급변이나 불리한 매수세, 거래 물량 부족 위험이 크면 신규 매수를 피한다.']
 };
-export function defaultPolicy(){return {revision:0,rules:Object.entries(texts).flatMap(([category,rows])=>rows.map((text,i)=>({id:category+'_'+i,category,text}))),sizing:{minPct:5,maxPct:25,riskPct:0.25}};}
+export function defaultPolicy(){return {revision:0,rules:Object.entries(texts).flatMap(([category,rows])=>rows.map((text,i)=>({id:category+'_'+i,category,text,version:1}))),sizing:{minPct:5,maxPct:25,riskPct:0.25}};}
 export function validatePolicy(value){
  if(!value||!Array.isArray(value.rules)||value.rules.length>40)throw Error('근거 저장 실패: 전체 40개 이내로 입력하세요.');
- const ids=new Set();const rules=value.rules.map(r=>{if(!r||typeof r.id!=='string'||!/^\w{1,64}$/.test(r.id)||ids.has(r.id)||!Object.hasOwn(categories,r.category)||typeof r.text!=='string'||!r.text.trim()||r.text.trim().length>300||/[\r\n\x00-\x1f]/.test(r.text))throw Error('근거 저장 실패: 중복 없는 항목에 한 줄 300자 이내로 입력하세요.');ids.add(r.id);return {id:r.id,category:r.category,text:r.text.trim()};});
+ const ids=new Set();const rules=value.rules.map(r=>{if(!r||typeof r.id!=='string'||!/^\w{1,64}$/.test(r.id)||ids.has(r.id)||!Object.hasOwn(categories,r.category)||typeof r.text!=='string'||!r.text.trim()||r.text.trim().length>300||/[\r\n\x00-\x1f]/.test(r.text))throw Error('근거 저장 실패: 중복 없는 항목에 한 줄 300자 이내로 입력하세요.');ids.add(r.id);return {id:r.id,category:r.category,text:r.text.trim(),version:Number.isSafeInteger(r.version)&&r.version>0?r.version:1};});
  const s=value.sizing;if(!s||![s.minPct,s.maxPct,s.riskPct].every(x=>typeof x==='number'&&Number.isFinite(x))||s.minPct<1||s.maxPct>100||s.minPct>s.maxPct||s.riskPct<0.05||s.riskPct>2)throw Error('투자비용 저장 실패: 투자 비율 1~100%, 1회 손실 예산 0.05~2% 범위를 확인하세요.');
  return {revision:Number.isSafeInteger(value.revision)?value.revision:0,rules,sizing:{minPct:s.minPct,maxPct:s.maxPct,riskPct:s.riskPct}};
 }

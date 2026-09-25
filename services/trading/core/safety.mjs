@@ -1,3 +1,4 @@
+import {tradeContext} from '../analytics.mjs';
 import { D, markLedger, validateBook } from './core.mjs';
 
 // These are execution rules, not AI opinions. Stop prices are triggers, not guaranteed fills.
@@ -31,11 +32,11 @@ export function safetySignal(ledger, f, config, now = Date.now()) {
 
 export class SafetyEngine {
   constructor(engine) { this.engine=engine; this.busy=false; this.lastAttempt=0; this.status='정지'; }
-  request(reason) {
+  request(reason, cause="strategy_exit") {
     const e=this.engine,l=e.ledger();
     if (!l || (Number(l.quantity)<=0 && !l.pending)) return;
     if (!l.exitIntent || l.exitIntent.phase==='complete') {
-      l.exitIntent={reason,at:Date.now(),phase:'requested'};
+      l.exitIntent={reason,at:Date.now(),phase:'requested',analytics:tradeContext(e,{automatic:cause==='jev',reason,cause})};
       // Fence in-flight AI answers and buys before the first asynchronous exit step.
       e.generation++;
       e.decision=null;
@@ -55,7 +56,7 @@ export class SafetyEngine {
     const before=JSON.stringify(l.riskState);
     const trigger=safetySignal(l,f,e.config);
     if (before!==JSON.stringify(l.riskState)) e.save();
-    if (trigger) this.request(trigger);
+    if (trigger) this.request(trigger, trigger.includes('손절')||trigger.includes('절대 손실')?'hard_stop':'risk');
     const intent=l.exitIntent;
     if (!intent || intent.phase==='complete') {this.status='실시간 위험 감시 중';return;}
     this.status=intent.reason+' · 청산 진행 중';

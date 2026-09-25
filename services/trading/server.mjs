@@ -1,3 +1,4 @@
+import {TradingAnalytics} from './analytics.mjs';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,6 +28,7 @@ for(const mode of ['paper','live']){
  workers[mode]={feed,store,engine,controller};
 }
 const policies=new PolicyStore(dir,workers);
+let analytics;try{analytics=new TradingAnalytics(path.join(dir,'analytics'));analytics.attach(workers);}catch{const error='매매분석 DB 열기 실패: 저장 공간·권한·DB 파일을 확인하세요. 원장 기록은 유지됩니다.';const unavailable=()=>{throw Error(error);};analytics={status:()=>({state:'대기중',collection:'이상',error,total:null,lastData:null,lastAnalysis:null}),summary:()=>null,query:unavailable,detail:unavailable,report:unavailable,close:()=>{}};}
 const recovery=setInterval(()=>{for(const w of Object.values(workers))void w.controller.resume();},1000);
 const send=(res,status,value)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(value));};
 const digest=value=>createHash('sha256').update(value).digest();
@@ -39,13 +41,15 @@ const server=http.createServer(async(req,res)=>{
     const mode=url.searchParams.get('mode')||'paper';
     if(!['paper','live'].includes(mode))return send(res,400,{error:'모의·실전 구분 오류'});
     const {controller}=workers[mode];
+    if(req.method==='GET'&&url.pathname==='/analytics') {const q=Object.fromEntries(url.searchParams);if(q.asset==='stock')return send(res,200,{status:{state:'대기중',collection:'미연결',total:0,fills:0,lastData:null,lastAnalysis:null,error:null},rows:[],total:0,note:'주식 실행 엔진 연결 대기'});if(q.action==='status')return send(res,200,{status:analytics.status(),paper:analytics.summary('paper'),live:analytics.summary('live')});if(q.id)return send(res,200,analytics.detail(q.id));return send(res,200,{...analytics.query(q),status:analytics.status()});}
     if(req.method==='GET'&&url.pathname==='/policy')return send(res,200,policies.get(url.searchParams.get('asset')||'coin'));
     if(req.method==='GET'&&url.pathname==='/state')return send(res,200,controller.snapshot());
     if(req.method==='GET'&&url.pathname==='/export')return send(res,200,controller.export());
-    if(req.method==='POST'&&['/command','/credentials','/policy'].includes(url.pathname)){
+    if(req.method==='POST'&&['/command','/credentials','/policy','/analytics/report'].includes(url.pathname)){
       if(!req.headers['content-type']?.startsWith('application/json'))return send(res,415,{error:'JSON 명령만 허용됩니다.'});
       let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>16000)return send(res,413,{error:'매매 명령 크기 초과'});}
       const parsed=JSON.parse(raw);
+      if(url.pathname==='/analytics/report'){if(parsed.asset==='stock')throw Error('주식 실행 엔진 연결 대기');return send(res,200,analytics.report(parsed));}
       if(url.pathname==='/policy')return send(res,200,policies.update(url.searchParams.get('asset')||'coin',parsed.policy,parsed.revision));
       if(url.pathname==='/credentials'){
         const {access,secret}=parsed;
@@ -70,7 +74,7 @@ let closing=false;
 function shutdown(){
   if(closing)return;closing=true;
   // Preserve the user's desired mode across service restarts, but stop this process.
-  for(const w of Object.values(workers)){w.controller.quiesce();clearInterval(w.engine.timer);w.feed.stop();}clearInterval(recovery);server.close();
+  for(const w of Object.values(workers)){w.controller.quiesce();clearInterval(w.engine.timer);w.feed.stop();}clearInterval(recovery);analytics.close();server.close();
   if(fs.existsSync(lockfile)&&fs.readFileSync(lockfile,'utf8')===String(process.pid))fs.unlinkSync(lockfile);
 }
 process.on('SIGINT',shutdown);process.on('SIGTERM',shutdown);

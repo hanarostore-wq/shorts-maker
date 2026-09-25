@@ -1,5 +1,6 @@
 "use client";
 
+import {DepartmentFinance,useTradingFinance} from "./DepartmentFinance";
 import { useState } from "react";
 import type { Agent, Department } from "@/lib/types";
 import { AgentSeat } from "./AgentSeat";
@@ -14,8 +15,9 @@ export function DepartmentFloor({
   onAgentClick: (agent: Agent) => void;
   onReorder: (departmentId: string, agentIds: string[]) => void;
 }) {
+  const finance=useTradingFinance(department.id);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const activeCount = department.agents.filter((a) => a.status === "active").length;
+  const activeCount = department.agents.filter((a) => a.id.endsWith("_analytics") ? finance.data?.status?.state === "업무중" : a.status === "active").length;
   const utilization = Math.round((activeCount / department.agents.length) * 100);
 
   const handleDrop = (targetId: string) => {
@@ -32,11 +34,12 @@ export function DepartmentFloor({
 
   return (
     <div className="flex min-h-[280px] flex-col gap-2 border-2 border-zinc-700 bg-zinc-950 p-3">
-      <div className="flex items-center justify-between border-b-2 border-zinc-800 pb-2">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 border-b-2 border-zinc-800 pb-2">
         <div className="flex items-center gap-2">
           <span className="text-lg">{department.icon}</span>
           <span className="text-sm font-bold text-zinc-100">{department.name}</span>
         </div>
+        <DepartmentFinance asset={department.id} data={finance.data} message={finance.message}/>
         <span className="font-mono text-sm font-bold text-emerald-400">
           {department.agents.length}명 근무
         </span>
@@ -66,7 +69,7 @@ export function DepartmentFloor({
               className={`cursor-grab select-none ${draggingId === agent.id ? "opacity-40" : ""}`}
             >
               <AgentSeat
-                agent={agent}
+                agent={agent.id.endsWith('_analytics')?{...agent,status:finance.data?.status?.error?'standby':finance.data?.status?.state==='업무중'?'active':'standby',task:finance.data?.status?.error?'⚠ '+finance.data.status.error:finance.data?.status?.task||'거래 근거·시장 자료·손익 분석 대기'}:agent}
                 onClick={clickable ? () => onAgentClick(agent) : undefined}
               />
             </div>
