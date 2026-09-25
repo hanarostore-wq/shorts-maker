@@ -35,3 +35,11 @@ PC 독립 실행부의 별도300000원 PAPER에서 공개289개종목·모의100
 ## 브라우저 등록 기억 / 2026-09-25
 사용자 요청: 인증키 유지, 처음 등록한 PC의 브라우저 기억, 미등록 인터넷 접속에서는 매매 차단. 운영체제 하드웨어 식별 대신 HttpOnly·Secure·SameSite=Strict 서명 쿠키를 사용한다. 원본 인증키는 localStorage/쿠키에 저장하지 않는다. 등록 쿠키 유효기간1년, 정상 화면 재접속 시 갱신. 쿠키/사이트 데이터 삭제, 다른 브라우저/시크릿 창, 인증키 변경 시 재등록 필요. 등록 지우기는 현재 브라우저 쿠키를 삭제하며 이미 실행 중인 PC 매매는 유지한다.
 등록 API는 같은 출처 POST와 올바른 인증키를 모두 요구한다. worker·기존 coin/order·paper/tick·judgment의 서버 인증 검사 통합, 인증 없는 직접 주문401/다른 출처403. 기존 API 키 헤더 방식은 서버 검증 도구 호환용으로 유지. 익명 주문 허용 없음.
+
+## Editable trading evidence / 2026-09-25
+Eight evidence roles per asset: selection, Jev entry, Jev exit, trend, flow, liquidity, sizing, risk. Replaces text-only c/t1,2,3,5,6,9,10; retains functional c/t4,7,8,11,12,13. Existing roster healed by ID; history retained.
+PC evidence-policies.json is atomic, revision checked, and coin applies to paper/live together. Stock policy is stored separately with explicit pending engine status. Updates rejected while decision/order/transition is in flight. Authentication required.
+Rules become independent Choice questions (supported/opposed/unknown) within the existing Jev request. Removed rules disappear from subsequent requests. Missing entry/sizing or unavailable evidence blocks buys. Entry aggregates equal category weights; exit uses any qualifying exit criterion. Thresholds remain per-mode configuration. No assumption of calibrated profitability.
+Leader scan: every 2s while flat and no order/tracking/exit intent. Both modes. Live confirms old baseline, target chance and test order before switch. No actual order issued by market selection. Existing paid-call interval retained across switches.
+Sizing default editable range5–25%, risk budget0.25% of allocated equity, not total exchange account. This is research configuration, not an optimized recommendation. Effective amount min of target cash ratio, fee-adjusted cash, position room, stop-distance risk budget and10% visible ask notional; below minimum holds. Stop prices not guaranteed fills. Existing maxPosition and dailyLoss retained.
+Hard execution/risk limits remain separate from removable semantic rules. Selection rules judge the ranked candidate; ranking algorithm remains fixed turnover40/growth35/return25 and shown. External data does not auto-connect from a typed sentence.

@@ -5,6 +5,7 @@ import {createHash,timingSafeEqual} from 'node:crypto';
 import {Engine} from './core/engine.mjs';
 import {MarketFeed} from './core/market.mjs';
 import {Store} from './core/store.mjs';
+import {PolicyStore} from './policies.mjs';
 import {TradingController} from './controller.mjs';
 import {readSecrets,writeSecrets} from './windows-secrets.mjs';
 
@@ -25,6 +26,7 @@ for(const mode of ['paper','live']){
  const controller=new TradingController(engine,feed,store,{mode,credentials:()=>liveCredentials});
  workers[mode]={feed,store,engine,controller};
 }
+const policies=new PolicyStore(dir,workers);
 const recovery=setInterval(()=>{for(const w of Object.values(workers))void w.controller.resume();},1000);
 const send=(res,status,value)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(value));};
 const digest=value=>createHash('sha256').update(value).digest();
@@ -37,12 +39,14 @@ const server=http.createServer(async(req,res)=>{
     const mode=url.searchParams.get('mode')||'paper';
     if(!['paper','live'].includes(mode))return send(res,400,{error:'모의·실전 구분 오류'});
     const {controller}=workers[mode];
+    if(req.method==='GET'&&url.pathname==='/policy')return send(res,200,policies.get(url.searchParams.get('asset')||'coin'));
     if(req.method==='GET'&&url.pathname==='/state')return send(res,200,controller.snapshot());
     if(req.method==='GET'&&url.pathname==='/export')return send(res,200,controller.export());
-    if(req.method==='POST'&&['/command','/credentials'].includes(url.pathname)){
+    if(req.method==='POST'&&['/command','/credentials','/policy'].includes(url.pathname)){
       if(!req.headers['content-type']?.startsWith('application/json'))return send(res,415,{error:'JSON 명령만 허용됩니다.'});
       let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>16000)return send(res,413,{error:'매매 명령 크기 초과'});}
       const parsed=JSON.parse(raw);
+      if(url.pathname==='/policy')return send(res,200,policies.update(url.searchParams.get('asset')||'coin',parsed.policy,parsed.revision));
       if(url.pathname==='/credentials'){
         const {access,secret}=parsed;
         if(typeof access!=='string'||typeof secret!=='string'||!access||!secret||access.length>1000||secret.length>1000)throw Error('업비트 연결키 형식 오류');

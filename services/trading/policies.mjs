@@ -1,0 +1,9 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {defaultPolicy,validatePolicy} from './core/evidence.mjs';
+export class PolicyStore {
+ constructor(dir,workers){this.file=path.join(dir,'evidence-policies.json');this.workers=workers;this.data=fs.existsSync(this.file)?JSON.parse(fs.readFileSync(this.file,'utf8')):{coin:defaultPolicy(),stock:defaultPolicy()};for(const a of ['coin','stock'])this.data[a]=validatePolicy(this.data[a]);this.apply();}
+ apply(){for(const w of Object.values(this.workers)){w.engine.policy=structuredClone(this.data.coin);}}
+ get(asset){if(!['coin','stock'].includes(asset))throw Error('지원하지 않는 자산');return {policy:this.data[asset],appliedModes:asset==='coin'?['paper','live']:[],status:asset==='coin'?'모의·실전 같은 근거 적용':'저장 가능 · 주식 모의·실전 실행 엔진 연결 대기'};}
+ update(asset,input,revision){this.get(asset);if(revision!==this.data[asset].revision)throw Error('다른 창에서 근거가 변경됐습니다. 새로 불러온 뒤 수정하세요.');const next=validatePolicy(input);if(asset==='coin'&&Object.values(this.workers).some(w=>w.controller.busy||w.controller.recovering||w.engine.analysisBusy||w.engine.orderBusy||w.engine.scanning||w.engine.tracker.busy||w.engine.tracker.state?.active||w.engine.safety.busy||w.engine.ledger()?.pending))throw Error('판단·주문 처리 중입니다. 완료 후 저장하세요. 현재 근거는 유지됩니다.');next.revision=revision+1;const data={...this.data,[asset]:next};const tmp=this.file+'.tmp';const fd=fs.openSync(tmp,'w',0o600);try{fs.writeFileSync(fd,JSON.stringify(data,null,2));fs.fsyncSync(fd);}finally{fs.closeSync(fd);}fs.renameSync(tmp,this.file);this.data=data;if(asset==='coin'){this.apply();for(const w of Object.values(this.workers)){w.engine.generation++;w.engine.decision=null;w.engine.investment=null;w.engine.event('매매 근거 버전 '+next.revision+' · 모의·실전 동시 적용');}}return this.get(asset);}
+}

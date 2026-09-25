@@ -269,7 +269,7 @@
                     <dd id="feeHint">—</dd>
                   </div>
                   <div>
-                    <dt>자동 1회 / 최대 보유 한도</dt>
+                    <dt>자동 투자방식 / 최대 보유 한도</dt>
                     <dd id="limitHint">—</dd>
                   </div>
                 </dl>
@@ -337,7 +337,8 @@
     <article><h3>③ 가지고 있을 때</h3><strong id="holdState"></strong><p id="holdDetail"></p><small>흐름이 약해지면 청산 검토 · 1분 봉 마감을 기다리지 않음</small></article>
     <article><h3>④ 위험 감시·청산 확인</h3><strong id="safetyState" role="status"></strong><p id="safetyDetail"></p><small>전송과 체결은 다름 · 잔량 0 확인 전까지 청산 미완료</small></article>
   </div>
-  <details class="strategy-help"><summary>관찰 근거와 쉬운 설명</summary><dl id="strategyMetrics"></dl><p>ATR은 최근 1분마다 가격이 평소 얼마나 흔들렸는지, EMA는 최근 가격에 더 무게를 둔 평균, VWAP은 실제 거래금액을 반영한 평균 가격입니다. RSI·MACD·가격 띠는 상승 힘과 방향을 참고하는 자료이며 하나만으로 매매를 결정하지 않습니다.</p><p>점수는 연구용 참고 수치이며 수익 확률이 아닙니다. 종목 순위는 최근 원화 거래금액·증가 속도·상승 흐름을 비교합니다. 모의 자동 탐색은 보유가 없을 때 최소 60초 간격으로 종목을 바꾸며, 매수 전 선택 종목의 실제 호가·체결과 Jev 판단을 다시 확인합니다. 실전은 종목별 주문 테스트를 위해 자동 전환하지 않습니다.</p><p>Jev는 설정된 간격으로, 위험 감시는 새 호가·체결과 0.5초 보완 검사로 작동합니다. 종료 버튼을 누르면 모든 자동 주문이 멈추고 보유자산은 유지됩니다. 프로그램이나 인터넷이 꺼지면 자동 보호 주문을 실행할 수 없습니다.</p></details>
+  <article style="padding:12px"><h3>⑤ 투자비용</h3><p id="investmentDetail"></p><details><summary>이번 Jev 판단에 사용한 근거별 결과</summary><ul id="evidenceResults"></ul></details></article>
+  <details class="strategy-help"><summary>관찰 근거와 쉬운 설명</summary><dl id="strategyMetrics"></dl><p>ATR은 최근 1분마다 가격이 평소 얼마나 흔들렸는지, EMA는 최근 가격에 더 무게를 둔 평균, VWAP은 실제 거래금액을 반영한 평균 가격입니다. RSI·MACD·가격 띠는 상승 힘과 방향을 참고하는 자료이며 하나만으로 매매를 결정하지 않습니다.</p><p>점수는 연구용 참고 수치이며 수익 확률이 아닙니다. 종목 순위는 최근 원화 거래금액·증가 속도·상승 흐름을 비교합니다. 모의·실전 모두 보유와 미처리 주문이 없을 때 약 2초 간격으로 1위를 확인합니다. 실전은 새 종목의 잔고·거래 상태·주문 테스트 확인 후 전환합니다. 순위 변경은 Jev 호출 간격을 초기화하지 않습니다.</p><p>Jev는 설정된 간격으로, 위험 감시는 새 호가·체결과 0.5초 보완 검사로 작동합니다. 종료 버튼을 누르면 모든 자동 주문이 멈추고 보유자산은 유지됩니다. 프로그램이나 인터넷이 꺼지면 자동 보호 주문을 실행할 수 없습니다.</p></details>
 </section>
 <section class="panel" id="historyPanel">
             <div class="panel-title">

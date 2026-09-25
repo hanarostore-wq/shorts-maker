@@ -1,3 +1,4 @@
+import {evidenceQuestions} from './evidence.mjs';
 import { randomUUID } from "node:crypto";
 export function questions(prompt = "", horizonSeconds = 60) {
   const scope =
@@ -94,8 +95,8 @@ export function questions(prompt = "", horizonSeconds = 60) {
     },
   };
 }
-export function validateAnswers(a) {
-  for (const [key, q] of Object.entries(questions())) {
+export function validateAnswers(a, qs=questions()) {
+  for (const [key, q] of Object.entries(qs)) {
     const v = a?.[key];
     if (!v || v.type !== q.type) throw Error("Jev 응답 형식 오류: " + key);
     const prob = (x) =>
@@ -137,6 +138,7 @@ export function validateAnswers(a) {
 export async function askJev(key, state, prompt, fetcher = fetch) {
   if (!key) throw Error("TypeSafe API 키를 먼저 연결하세요.");
   const startedAt = Date.now();
+  const qs={...questions(prompt,state.horizonSeconds||60),...(state.evidencePolicy?evidenceQuestions(state.evidencePolicy,state.botPosition?.quantity>0):{})};
   const r = await fetcher("https://api.typesafe.ai/v1/systemone", {
     method: "POST",
     headers: {
@@ -146,7 +148,7 @@ export async function askJev(key, state, prompt, fetcher = fetch) {
     body: JSON.stringify({
       model: "jev-1.13.0",
       state,
-      questions: questions(prompt, state.horizonSeconds || 60),
+      questions: qs,
     }),
     signal: AbortSignal.timeout(4500),
   });
@@ -164,7 +166,7 @@ export async function askJev(key, state, prompt, fetcher = fetch) {
     market: state.market.market,
     model: body.model,
     latencyMs: Date.now() - startedAt,
-    answers: validateAnswers(body.answers),
+    answers: validateAnswers(body.answers, qs),
     usage: body.usage || null,
     source: "TypeSafe 직접 API",
     horizonSeconds: state.horizonSeconds || 5,

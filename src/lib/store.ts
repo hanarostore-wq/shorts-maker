@@ -87,6 +87,13 @@ function healState(state: State): State {
   for (const department of state.departments) {
     const fresh = initialDepartments.find((d) => d.id === department.id);
     if (!fresh) continue;
+    if (department.id === 'coin' || department.id === 'stock') {
+      const allowed = new Map(fresh.agents.map(a => [a.id,a]));
+      department.agents = department.agents.filter(a => allowed.has(a.id)).map(a => {
+        const current=allowed.get(a.id)!;
+        return a.id.includes('_') ? structuredClone(current) : {...a,name:current.name};
+      });
+    }
     const existingIds = new Set(department.agents.map((agent) => agent.id));
     for (const freshAgent of fresh.agents) {
       if (!existingIds.has(freshAgent.id)) {
@@ -147,6 +154,8 @@ function healState(state: State): State {
       sharedStorageAgent.task = "⚠ 공유저장소 미연결 - Redis 환경변수 확인 필요";
     }
   }
+  const coinProject=state.projects.find(p=>p.id==='p5');
+  if(coinProject){coinProject.agentCount=14;coinProject.leadAgent='Jev 매수근거';}
   return state;
 }
 

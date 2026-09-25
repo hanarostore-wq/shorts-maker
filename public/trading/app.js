@@ -102,7 +102,7 @@ const configLabels = {
   trailAtrMultiplier: ["오른 가격을 따라갈 손절 여유 (배수)", 0.1],
   crashBps: ["최근 5초 급락 시 청산 (%)", 0.01],
   pendingTimeoutSeconds: ["미체결 주문 취소 확인 시작 (초)", 1],
-  orderKrw: ["자동매매가 한 번에 살 금액 (원)", 1],
+  orderKrw: ["기본 주문 테스트 금액 (원) · 자동투자는 근거별 비율 사용", 1],
   maxPositionKrw: ["코인을 가지고 있을 최대 금액 (원)", 1],
   dailyLossKrw: ["하루 손실 한도 (원)", 1],
   maxDrawdownPct: ["자산이 최고점에서 줄어들면 멈춤 (%)", 0.1],
@@ -135,14 +135,17 @@ $("configFields").innerHTML = Object.entries(configLabels)
 function renderStrategy() {
   const e=state.engine,s=e.features?.strategy, risk=e.safety, intent=risk?.intent;
   const labels={ENTRY:'매수 기회',WATCH:'관찰 중',HOLD:'보유 유지',WEAKEN:'상승 힘 약해짐',EXIT:'청산 중'};
-  $('strategyMode').textContent=e.strategy?.enabled?'1분 흐름 전략 · 연구 설정':'기존 고정 목표 방식';
+  $('strategyMode').textContent='직원별 편집 근거 · 모의/실전 공통';
   $('entryState').textContent=labels[e.action.state] || (e.account?.mark?.quantity>0?'보유 감시':'진입 대기');
   $('entryDetail').textContent=s?.ready?'가격 흐름 '+fixed(s.groups.trend*100,0)+' · 매수세 '+fixed(s.groups.flow*100,0)+' · 순간 힘 '+fixed(s.groups.impulse*100,0)+'점':s?.reason||'시장 자료 준비 중';
   $('holdState').textContent=s?.ready?'흐름 약화 '+fixed(s.weakness*100,0)+' / 100점':'흐름 확인 대기';
-  $('holdDetail').textContent=e.strategy?.enabled?'고정 이익률 매도 없음 · 상승 힘이 유지되면 보유':'설정된 이익률·시간 기준 적용';
+  $('holdDetail').textContent='Jev 매도근거와 별도 위험 감시로 보유·청산 판단';
   $('safetyState').textContent=risk?.status||'정지';
   $('safetyDetail').textContent=intent&&intent.phase!=='complete'?'남은 봇 수량 '+fixed(e.account?.quantity,8)+' · '+intent.reason:risk?.risk?'현재 손절 기준 '+moneyLabel(risk.risk.stopNet/(1-e.config.feePct/100))+' · 수수료 반영':'최대 손실 '+e.config.stopLossPct+'% · Jev와 별도 감시';
-  $('scanState').textContent=e.strategy?.scanning?'새 종목 자료 준비 중':e.strategy?.autoScan?(e.mode==='paper'?'모의 자동 탐색 ON':'실전 후보 표시 · 종목 변경은 직접 선택'):'자동 탐색 OFF';
+  $('scanState').textContent=e.strategy?.scanning?'새 종목 자료 준비 중':e.strategy?.autoScan?(Number(e.account?.quantity)>0?'보유 중 · 현재 종목 유지':e.account?.pending||e.tracking?.active?'주문 확인 중 · 현재 종목 유지':'1위 자동 따라가기 ON · 포지션 없을 때 전환'):'자동 탐색 OFF';
+  const inv=e.investment;
+  $('investmentDetail').textContent=inv?'주문가능 '+moneyLabel(inv.availableKrw,0)+' · 목표 '+fixed(inv.targetPct,1)+'% → 적용 '+fixed(inv.ratioPct,1)+'% · '+moneyLabel(inv.amount,0)+' · '+inv.reason:'매수 조건을 충족하면 주문가능 원화와 근거별 비율로 계산합니다.';
+  $('evidenceResults').replaceChildren(...(e.action.evidence||[]).map(r=>{const li=document.createElement('li');li.textContent=r.text+' — '+({supported:'충족',opposed:'반대',unknown:'자료 부족'}[r.status]||'대기')+' · 충족 판단 '+fixed(r.support*100,1)+'%';return li;}));
   const candidates=e.strategy?.candidates||[];
   $('scanCandidates').innerHTML=candidates.length?candidates.slice(0,5).map((x,i)=>'<li>'+ (i+1)+'. '+esc(x.name)+' <b>'+fixed(x.score,0)+'점</b> · 최근 1분 '+moneyLabel(x.activity.recentKrw,0)+'</li>').join(''):'<li>시장 자료 약 2분 수집 중 · 최신 시세·투자유의 제외 조건 적용</li>';
   $('strategyMetrics').innerHTML=s?.ready?[
@@ -243,7 +246,7 @@ function render() {
       ? e.config.feePct + "% / " + (e.config.slippageBps / 100).toFixed(3) + "%"
       : "업비트 실제 수수료";
   $("limitHint").textContent =
-    moneyLabel(e.config.orderKrw, 0) + " / " + moneyLabel(e.config.maxPositionKrw, 0);
+    "근거별 비율 투자 / " + moneyLabel(e.config.maxPositionKrw, 0);
   $("submitOrder").textContent =
     (e.mode === "paper" ? "모의 " : "실전 ") +
     (side === "buy" ? "추적 매수" : "추적 매도");
