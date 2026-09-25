@@ -142,12 +142,13 @@ function renderStrategy() {
   $('holdDetail').textContent='Jev 매도근거와 별도 위험 감시로 보유·청산 판단';
   $('safetyState').textContent=risk?.status||'정지';
   $('safetyDetail').textContent=intent&&intent.phase!=='complete'?'남은 봇 수량 '+fixed(e.account?.quantity,8)+' · '+intent.reason:risk?.risk?'현재 손절 기준 '+moneyLabel(risk.risk.stopNet/(1-e.config.feePct/100))+' · 수수료 반영':'최대 손실 '+e.config.stopLossPct+'% · Jev와 별도 감시';
-  $('scanState').textContent=e.strategy?.scanning?'새 종목 자료 준비 중':e.strategy?.autoScan?(Number(e.account?.quantity)>0?'보유 중 · 현재 종목 유지':e.account?.pending||e.tracking?.active?'주문 확인 중 · 현재 종목 유지':'1위 자동 따라가기 ON · 포지션 없을 때 전환'):'자동 탐색 OFF';
+  $('scanState').textContent=e.strategy?.scanning?'새 종목 자료 준비 중':e.strategy?.autoScan?(Number(e.account?.quantity)>0?'보유 중 · 현재 종목 유지':e.account?.pending||e.tracking?.active?'주문 확인 중 · 현재 종목 유지':'전 종목 감시 ON · 강한 후보 정밀판단'):'자동 탐색 OFF';
   const inv=e.investment;
   $('investmentDetail').textContent=inv?'주문가능 '+moneyLabel(inv.availableKrw,0)+' · 목표 '+fixed(inv.targetPct,1)+'% → 적용 '+fixed(inv.ratioPct,1)+'% · '+moneyLabel(inv.amount,0)+' · '+inv.reason:'매수 조건을 충족하면 주문가능 원화와 근거별 비율로 계산합니다.';
   $('evidenceResults').replaceChildren(...(e.action.evidence||[]).map(r=>{const li=document.createElement('li');li.textContent=r.text+' — '+({supported:'충족',opposed:'반대',unknown:'자료 부족'}[r.status]||'대기')+' · 충족 판단 '+fixed(r.support*100,1)+'%';return li;}));
   const candidates=e.strategy?.candidates||[];
-  $('scanCandidates').innerHTML=candidates.length?candidates.slice(0,5).map((x,i)=>'<li>'+ (i+1)+'. '+esc(x.name)+' <b>'+fixed(x.score,0)+'점</b> · 최근 1분 '+moneyLabel(x.activity.recentKrw,0)+'</li>').join(''):'<li>시장 자료 약 2분 수집 중 · 최신 시세·투자유의 제외 조건 적용</li>';
+  const scanner=e.strategy?.scanner;if(scanner)$('scanState').textContent+=' · 전체 '+scanner.total+'종목 / 강한 후보 '+scanner.strong+'개 · '+scanner.status;
+  $('scanCandidates').innerHTML=candidates.length?candidates.slice(0,5).map((x,i)=>'<li>'+ (i+1)+'. '+esc(x.name)+' <b>'+fixed(x.score,0)+'점</b> '+esc(({MONITOR:'감시',WARMING:'관심 증가',CANDIDATE:'후보',ENTRY_READY:'정밀판단 대상',POSITION:'보유'})[x.state]||'')+' · 최근 1분 '+moneyLabel(x.activity.recentKrw,0)+'</li>').join(''):'<li>시장 자료 약 2분 수집 중 · 최신 시세·투자유의 제외 조건 적용</li>';
   $('strategyMetrics').innerHTML=s?.ready?[
     ['최근 1분 거래금액',moneyLabel(s.turnover60s,0)],
     ['완성된 봉 거래금액 증가',fixed(s.turnoverGrowth)+'배'],

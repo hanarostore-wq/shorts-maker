@@ -1,3 +1,4 @@
+import {MarketScanner} from './core/scanner.mjs';
 import {TradingAnalytics} from './analytics.mjs';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -21,8 +22,9 @@ try {fs.writeFileSync(lockfile,String(process.pid),{flag:'wx',mode:0o600});}
 catch {throw Error('동일 데이터 폴더의 실행 잠금이 있습니다. 기존 실행 여부를 확인하세요. 자동으로 중복 실행하지 않습니다.');}
 let liveCredentials={access:process.env.UPBIT_ACCESS_KEY||'',secret:process.env.UPBIT_SECRET_KEY||''};
 const workers={};
+const scanner=new MarketScanner();
 for(const mode of ['paper','live']){
- const feed=new MarketFeed();const store=new Store(path.join(dir,mode));const engine=new Engine(feed,store);
+ const feed=new MarketFeed();scanner.attach(feed);const store=new Store(path.join(dir,mode));const engine=new Engine(feed,store);
  engine.mode=mode;engine.jevKey=process.env.TYPESAFE_API_KEY||'';
  const controller=new TradingController(engine,feed,store,{mode,credentials:()=>liveCredentials});
  workers[mode]={feed,store,engine,controller};
@@ -41,7 +43,7 @@ const server=http.createServer(async(req,res)=>{
     const mode=url.searchParams.get('mode')||'paper';
     if(!['paper','live'].includes(mode))return send(res,400,{error:'모의·실전 구분 오류'});
     const {controller}=workers[mode];
-    if(req.method==='GET'&&url.pathname==='/analytics') {const q=Object.fromEntries(url.searchParams);if(q.asset==='stock')return send(res,200,{status:{state:'대기중',collection:'미연결',total:0,fills:0,lastData:null,lastAnalysis:null,error:null},rows:[],total:0,note:'주식 실행 엔진 연결 대기'});if(q.action==='status')return send(res,200,{status:analytics.status(),paper:analytics.summary('paper'),live:analytics.summary('live')});if(q.id)return send(res,200,analytics.detail(q.id));return send(res,200,{...analytics.query(q),status:analytics.status()});}
+    if(req.method==='GET'&&url.pathname==='/analytics') {const q=Object.fromEntries(url.searchParams);if(q.asset==='stock')return send(res,200,{status:{state:'대기중',collection:'미연결',total:0,fills:0,lastData:null,lastAnalysis:null,error:null},rows:[],total:0,note:'주식 실행 엔진 연결 대기'});if(q.action==='scanner')return send(res,200,{scanner:scanner.snapshot(),events:analytics.scannerEvents?.(q.market||'',Number(q.from)||0)||[]});if(q.action==='status')return send(res,200,{status:analytics.status(),paper:analytics.summary('paper'),live:analytics.summary('live')});if(q.id)return send(res,200,analytics.detail(q.id));return send(res,200,{...analytics.query(q),status:analytics.status()});}
     if(req.method==='GET'&&url.pathname==='/policy')return send(res,200,policies.get(url.searchParams.get('asset')||'coin'));
     if(req.method==='GET'&&url.pathname==='/state')return send(res,200,controller.snapshot());
     if(req.method==='GET'&&url.pathname==='/export')return send(res,200,controller.export());
@@ -74,7 +76,7 @@ let closing=false;
 function shutdown(){
   if(closing)return;closing=true;
   // Preserve the user's desired mode across service restarts, but stop this process.
-  for(const w of Object.values(workers)){w.controller.quiesce();clearInterval(w.engine.timer);w.feed.stop();}clearInterval(recovery);analytics.close();server.close();
+  for(const w of Object.values(workers)){w.controller.quiesce();clearInterval(w.engine.timer);w.feed.stop();}clearInterval(recovery);scanner.stop();analytics.close();server.close();
   if(fs.existsSync(lockfile)&&fs.readFileSync(lockfile,'utf8')===String(process.pid))fs.unlinkSync(lockfile);
 }
 process.on('SIGINT',shutdown);process.on('SIGTERM',shutdown);

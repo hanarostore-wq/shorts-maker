@@ -64,6 +64,7 @@ export class MarketFeed {
       );
       const rows = await this.rest("/v1/ticker/all?quote_currencies=KRW");
       for (const x of rows) { this.tickers[x.market] = x; this.activity.observe(x); }
+      this.scanner?.start(this);
       await this.select(this.symbol);
       this.refreshTimer = setInterval(() => this.refreshTickers(), 30000);
     } catch (e) {
@@ -101,6 +102,7 @@ export class MarketFeed {
     clearTimeout(this.retry);
     this.status = "시세 연결 중";
     this.onChange();
+    this.scanner?.hydrate(this);
     this.connect(gen);
     await Promise.all([this.loadCandles(this.units), this.loadSignalCandles()]);
     try {
@@ -161,7 +163,7 @@ export class MarketFeed {
         JSON.stringify([
           { ticket: randomUUID() },
           { type: "ticker", codes: this.markets.map((x) => x.market) },
-          { type: "trade", codes: [this.symbol] },
+          { type: "trade", codes: this.scanner ? [] : [this.symbol] },
           { type: "orderbook", codes: [this.symbol] },
         ]),
       );

@@ -19,7 +19,7 @@ export function marketSample(feed,at=Date.now()){
 }
 export function tradeContext(e,{automatic=false,reason='수동 주문',cause,at=Date.now()}={}){
  const action=e.action||{},d=e.decision;const rows=automatic?(action.evidence||[]):[];
- return {schema:1,at,policyRevision:e.policy?.revision??null,cause:cause||(automatic?'jev':'manual'),reason:String(reason).slice(0,600),
+ return {schema:1,at,scanner:automatic&&e.scannerTrace?structuredClone(e.scannerTrace):null,policyRevision:e.policy?.revision??null,cause:cause||(automatic?'jev':'manual'),reason:String(reason).slice(0,600),
  decisionId:automatic&&d?.id?hash(d.id):null,model:automatic?d?.model||null:null,stateAsOf:automatic?d?.stateAsOf||null:null,
  decision:automatic?{side:action.side||'hold',score:number(action.score)}:null,
  evidence:rows.map(r=>({id:r.id,version:r.version||1,category:r.category,staff:categories[r.category],text:r.text,status:r.status,support:number(r.support),unknown:number(r.unknown)})),
@@ -38,6 +38,8 @@ export class TradingAnalytics {
  CREATE TABLE IF NOT EXISTS samples(market TEXT, at INTEGER, fresh INTEGER NOT NULL, payload BLOB NOT NULL, PRIMARY KEY(market,at));
  CREATE TABLE IF NOT EXISTS episodes(id TEXT PRIMARY KEY,ledger TEXT NOT NULL,mode TEXT NOT NULL,market TEXT NOT NULL,opened INTEGER NOT NULL,closed INTEGER,quantity REAL NOT NULL,buy_funds REAL NOT NULL,buy_fees REAL NOT NULL,sell_funds REAL NOT NULL,sell_fees REAL NOT NULL,realized REAL NOT NULL,complete_basis INTEGER NOT NULL);
  CREATE INDEX IF NOT EXISTS episodes_query ON episodes(opened,mode,market,closed);
+ CREATE TABLE IF NOT EXISTS scanner_events(id TEXT PRIMARY KEY,market TEXT,at INTEGER,kind TEXT,payload TEXT);
+ CREATE INDEX IF NOT EXISTS scanner_period ON scanner_events(market,at);
  CREATE TABLE IF NOT EXISTS reports(id TEXT PRIMARY KEY,at INTEGER,query TEXT,result TEXT);
  PRAGMA user_version=1;`);
   this.lastSample=this.db.prepare('SELECT MAX(at) at FROM samples').get().at;this.lastAnalysis=this.db.prepare('SELECT MAX(at) at FROM reports').get().at;
@@ -46,7 +48,9 @@ export class TradingAnalytics {
  attach(workers){this.workers=workers;for(const w of Object.values(workers)){w.engine.analytics=this;this.sync(w.engine);w.feed.onBeforeSelect=symbol=>this.safe(()=>this.retain(w.feed,symbol));}this.timer=setInterval(()=>this.safe(()=>this.sample()),this.step);this.timer.unref?.();}
  retain(feed,next){if(next===feed.symbol)return;const end=this.db.prepare('SELECT MAX(window_end) n FROM fills WHERE market=?').get(feed.symbol).n;if(!end||end<this.clock())return;
  if(this.tails.has(feed.symbol)){this.tails.get(feed.symbol).end=Math.max(end,this.tails.get(feed.symbol).end);return;}const tail=this.feedFactory();for(const k of ['symbol','book','bookHistory','trades','candles','signalCandles','clockOffsetMs','clockVerified'])tail[k]=structuredClone(feed[k]);tail.markets=[{market:feed.symbol}];tail.connect(tail.generation);this.tails.set(feed.symbol,{feed:tail,end});}
- sample(at=this.clock()){const feeds=new Map();for(const w of Object.values(this.workers))if(w.feed.book)feeds.set(w.feed.symbol,w.feed);for(const [symbol,t] of this.tails){if(at>t.end){t.feed.stop();this.tails.delete(symbol);}else if(!feeds.has(symbol))feeds.set(symbol,t.feed);}for(const feed of feeds.values()){const s=marketSample(feed,at);if(s)this.observe(s);}}
+ recordScanner(event){return this.safe(()=>{if(this.db.prepare('SELECT COUNT(*) n FROM scanner_events').get().n>=100000){this.error='시장 감시 기록 10만건 도달 · 기존 자료 보존, 새 감시 이력 저장 보류';return;}const payload=JSON.stringify(event),id=hash(payload);this.db.prepare('INSERT OR IGNORE INTO scanner_events VALUES(?,?,?,?,?)').run(id,event.market,event.at,event.kind||'transition',payload);});}
+ scannerEvents(market,from=0,to=this.clock()){return this.db.prepare('SELECT payload FROM scanner_events WHERE market=? AND at>=? AND at<=? ORDER BY at DESC LIMIT 300').all(market,from,to).map(x=>JSON.parse(x.payload));}
+ sample(at=this.clock()){const scanners=new Set(Object.values(this.workers).map(w=>w.feed.scanner).filter(Boolean));for(const scanner of scanners){for(const event of scanner.events.splice(0))this.recordScanner(event);}const feeds=new Map();for(const w of Object.values(this.workers))if(w.feed.book)feeds.set(w.feed.symbol,w.feed);for(const [symbol,t] of this.tails){if(at>t.end){t.feed.stop();this.tails.delete(symbol);}else if(!feeds.has(symbol))feeds.set(symbol,t.feed);}for(const feed of feeds.values()){const s=marketSample(feed,at);if(s)this.observe(s);}}
  observe(s){this.lastObserved=s.at;this.observedFresh=s.fresh;const at=Math.floor(s.at/this.step)*this.step,rows=(this.rings.get(s.market)||[]).filter(x=>x.at>=at-this.pre);if(rows.at(-1)?.at!==at)rows.push({...s,at});this.rings.set(s.market,rows);for(const [m,r] of this.rings)if(r.at(-1)?.at<at-this.pre-this.post)this.rings.delete(m);
  if(this.db.prepare('SELECT 1 FROM fills WHERE market=? AND window_start<=? AND window_end>=? LIMIT 1').get(s.market,at,at))this.storeSample({...s,at});}
  storeSample(s){if(this.bytes()>this.maxBytes)throw Error('분석 저장 용량 한도');this.db.prepare('INSERT OR IGNORE INTO samples VALUES(?,?,?,?)').run(s.market,s.at,s.fresh?1:0,gzipSync(json(s)));this.lastSample=Math.max(this.lastSample||0,s.at);}

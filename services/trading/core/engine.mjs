@@ -419,6 +419,7 @@ export class Engine {
   judgmentState(f, l) {
     return {
       market: f,
+      scanner: this.scannerTrace || this.feed.scanner?.context(f.market) || null,
       evidencePolicy: this.policy,
       horizonSeconds: this.config.horizonSeconds,
       strategy: {version:1, mode:this.config.strategyEnabled ? "one-minute-flow" : "legacy", rules:"Combine independent evidence by regime. A high RSI alone is not a veto. Strong flow can remain HOLD above fixed profit targets. Hard risk rules override all AI opinions."},
@@ -451,7 +452,7 @@ export class Engine {
     this.calls.outputTokens =
       (this.calls.outputTokens || 0) + (Number(d.usage?.output_tokens) || 0);
     this.calls.responses = (this.calls.responses || 0) + 1;
-    this.store.log({ kind: "jev", mode: this.mode, ...d });
+    this.store.log({ kind: "jev", mode: this.mode, ...d, scanner:this.scannerTrace||null });
     this.save();
   }
   async analyze() {
@@ -462,6 +463,7 @@ export class Engine {
     const gen = this.generation,
       epoch = this.judgmentEpoch,
       mode = this.mode;
+    if(this.feed.scanner)this.scannerTrace={...this.feed.scanner.context(this.feed.symbol),trigger:this.scannerTrace?.trigger||'정기 판단',jevStartedAt:Date.now(),policyRevision:this.policy.revision};
     const decisionInput=marketSample(this.feed);
     this.analysisBusy = true;
     this.lastAnalysis = Date.now();
@@ -472,6 +474,7 @@ export class Engine {
         this.judgmentState(f, this.ledger()),
         this.prompt,
       );
+      if(this.scannerTrace)this.scannerTrace.jevCompletedAt=Date.now();
       this.recordDecision(d);
       if (
         gen !== this.generation ||
@@ -499,6 +502,8 @@ export class Engine {
       this.action = l
         ? evidenceDecision(this.policy,d.answers,Number(l.quantity)>0,this.config.entryScore,this.config.weaknessExitScore)
         : { side: "hold", reason: "모의 시작금을 설정하세요." };
+      if(this.scannerTrace){this.scannerTrace.judgment=this.action.side;this.scannerTrace.orderDecisionAt=Date.now();this.analytics?.recordScanner?.({kind:'jev',market:this.feed.symbol,at:Date.now(),mode:this.mode,...this.scannerTrace});}
+      if(this.action.side==='buy'&&this.feed.scanner&&this.config.autoScan){const c=this.feed.scanner.context(this.feed.symbol);if(!c||c.metrics?.lateRisk||c.state!=='ENTRY_READY')this.action={...this.action,side:'hold',reason:'후보 약화/추격 위험 · 매수 보류'};}
       if (this.running && this.action.side === 'sell' && this.config.strategyEnabled) {
         this.safety.request(this.action.reason, "jev");
         await this.safety.tick(current);
@@ -556,6 +561,7 @@ export class Engine {
       await this.reconcile();
     }
     if (!this.running && !this.judgmentRunning) return;
+    await this.scanMarket();
     const f = features(this.feed),
       l = this.ledger();
     if (!f || f.bookAgeMs > 3000) {
@@ -576,10 +582,18 @@ export class Engine {
       !this.analysisBusy &&
       !this.orderBusy &&
       !this.tracker.busy &&
-      Date.now() - this.lastAnalysis >= this.config.intervalSeconds * 1000 &&
+      (this.feed.scanner && this.config.autoScan && !Number(l?.quantity) || Date.now() - this.lastAnalysis >= this.config.intervalSeconds * 1000) &&
       Date.now() >= this.coolUntil
     )
-      await this.analyze();
+      await this.analyzeCandidate();
+  }
+  async analyzeCandidate() {
+    const scanner=this.feed.scanner,l=this.ledger();
+    if(!scanner||!this.config.autoScan||Number(l?.quantity)>0)return this.analyze();
+    const lease=scanner.acquire(this.mode,this.feed.symbol,{periodic:Date.now()-this.lastAnalysis>=this.config.intervalSeconds*1000});
+    if(!lease){this.action={side:'hold',reason:'시장 전체 감시 · 후보/재판단 간격 확인 중'};return;}
+    this.scannerTrace={...lease.context,trigger:lease.reason,jevStartedAt:Date.now(),policyRevision:this.policy.revision};
+    try{await this.analyze();}finally{scanner.release(lease);}
   }
   async monitor() {
     const f=features(this.feed), l=this.ledger();
@@ -600,11 +614,11 @@ export class Engine {
   async scanMarket() {
     const l=this.ledger();
     if(!this.running||!this.config.autoScan||!l||this.scanning||this.analysisBusy||this.orderBusy||this.tracker.busy||this.tracker.state?.active||this.safety.busy||this.paper?.pending||this.live?.pending||Number(this.paper?.quantity)>0||Number(this.live?.quantity)>0||(l.exitIntent&&l.exitIntent.phase!=='complete')||Date.now()-this.lastScan<2000)return;
-    this.candidates=scanCandidates(this.feed);this.lastScan=Date.now();
-    const target=this.candidates[0];if(!target||target.market===this.feed.symbol)return;
+    this.candidates=this.feed.scanner?.candidates()||scanCandidates(this.feed);this.lastScan=Date.now();
+    const target=this.feed.scanner?this.feed.scanner.pick(this.feed.symbol,this.mode):this.candidates[0];if(!target||target.market===this.feed.symbol)return;
     const epoch=this.judgmentEpoch,mode=this.mode,old=this.feed.symbol;this.scanning=true;this.generation++;this.decision=null;this.investment=null;
     const gen=this.generation;const check=()=>{if(!this.running||epoch!==this.judgmentEpoch||gen!==this.generation||mode!==this.mode)throw Error('종목 전환 중 정지 또는 설정 변경');};
-    this.action={side:'hold',reason:'최신 1위로 전환 준비 · '+target.name};
+    this.action={side:'hold',reason:'선행 후보로 전환 준비 · '+target.name};
     try{
       let chance;
       if(mode==='live'){
@@ -621,7 +635,7 @@ export class Engine {
       l.market=this.feed.symbol;l.riskState=null;l.exitIntent=null;
       if(mode==='live'){this.chance=chance;l.exchangeBaseline=D(chance.ask_account.balance).plus(chance.ask_account.locked||0).toString();this.liveTest={at:Date.now(),market:l.market};}
       // Keep lastAnalysis/coolUntil: changing rank never bypasses the paid-call interval.
-      this.save();this.event('1위 자동 따라가기 · '+target.name);this.action={side:'hold',reason:'1위 '+target.name+' · 매수근거 확인 대기'};
+      this.save();this.event('시장 후보 전환 · '+target.name);this.action={side:'hold',reason:'후보 '+target.name+' · 매수근거 확인 대기'};
     }catch(err){
       // feed.select changes symbol before awaiting history; keep ledger consistent but lock on incomplete transition.
       if(this.feed.symbol!==old){l.market=this.feed.symbol;this.armed=false;this.stop();this.save();}
@@ -644,9 +658,11 @@ export class Engine {
     if (!l) throw Error("계좌 시작금을 먼저 설정하세요.");
     if (this.scanning) throw Error('종목 전환 중');
     const blockBuy = () => {
+      if(automatic&&side==='buy'&&this.feed.scanner&&this.config.autoScan){const c=this.feed.scanner.context(this.feed.symbol);if(!c||Date.now()-c.asOf>2000||c.metrics?.lateRisk||c.state!=='ENTRY_READY')throw Error('주문 직전 후보 신선도/추격 위험 재검사 실패');}
       if (side === 'buy' && l.exitIntent && l.exitIntent.phase !== 'complete') throw Error('청산 진행 중 · 신규 매수 금지');
     };
     blockBuy();
+    if(automatic&&side==='buy'&&Number(l.quantity)>0)throw Error('단일 포지션 유지 · 추가 진입 금지');
     if (l.market !== this.feed.symbol) throw Error("계좌 종목 불일치");
     if (this.mode === "live" && !this.armed) throw Error("실전 주문 잠금 상태");
     if (!automatic && this.running)
@@ -919,7 +935,7 @@ export class Engine {
       decision: this.decision,
       action: this.action,
       safety: this.safety.snapshot(),
-      strategy: {enabled:!!this.config.strategyEnabled, autoScan:!!this.config.autoScan, scanning:this.scanning, candidates:scanCandidates(this.feed), lastScan:this.lastScan},
+      strategy: {enabled:!!this.config.strategyEnabled, autoScan:!!this.config.autoScan, scanning:this.scanning, candidates:this.feed.scanner?.candidates().slice(0,10)||scanCandidates(this.feed), scanner:this.feed.scanner?{...this.feed.scanner.snapshot(),heldMarket:Number(l?.quantity)>0?l.market:null}:null, lastScan:this.lastScan},
       calls: this.calls,
       usageSummary: {
         balance: null,
