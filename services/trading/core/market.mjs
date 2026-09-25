@@ -163,7 +163,7 @@ export class MarketFeed {
         JSON.stringify([
           { ticket: randomUUID() },
           { type: "ticker", codes: this.markets.map((x) => x.market) },
-          { type: "trade", codes: this.scanner ? [] : [this.symbol] },
+          ...(this.scanner ? [] : [{ type: "trade", codes: [this.symbol] }]),
           { type: "orderbook", codes: [this.symbol] },
         ]),
       );
