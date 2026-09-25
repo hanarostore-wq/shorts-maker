@@ -678,7 +678,7 @@ window.addEventListener('storage', e => {
 });
 applyTheme(savedTheme, false);
 function drawChart() {
-  if (state) tradingChart.update(state.market);
+  if (state) tradingChart.update(state.market, state.engine);
 }
 $("search").oninput = renderMarkets;
 $('sortMarkets').onchange = () => {

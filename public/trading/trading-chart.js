@@ -13,6 +13,8 @@ const $ = (id) => document.getElementById(id),
 export class TradingChart {
   constructor() {
     this.key = "";
+    this.positionLines = [];
+    this.positionKey = "";
     this.data = [];
     this.lines = {};
     this.drawings = [];
@@ -64,6 +66,7 @@ export class TradingChart {
       },
     });
     this.candles = this.chart.addSeries(CandlestickSeries, {
+      autoscaleInfoProvider: original => this.positionScale(original),
       upColor: "#f23645",
       downColor: "#1674ff",
       borderVisible: false,
@@ -71,6 +74,7 @@ export class TradingChart {
       wickDownColor: "#1674ff",
     });
     this.closeLine = this.chart.addSeries(LineSeries, {
+      autoscaleInfoProvider: original => this.positionScale(original),
       color: "#1674ff",
       lineWidth: 2,
       visible: false,
@@ -185,7 +189,8 @@ export class TradingChart {
       fmt(c.volume ?? this.data.find((x) => x.time === time)?.volume ?? 0) +
       "개 · 봉 아래 막대";
   }
-  update(m) {
+  update(m, engine) {
+    this.updatePosition(m.symbol, engine);
     this.market = m;
     const key = m.symbol + "|" + m.units;
     const changed = key !== this.key;
@@ -255,6 +260,32 @@ export class TradingChart {
     }
     this.legend(last);
     this.refreshIndicators();
+  }
+  positionScale(original) {
+    const info=original();
+    if(!info?.priceRange||!Number.isFinite(this.positionPrice))return info;
+    return {...info,priceRange:{minValue:Math.min(info.priceRange.minValue,this.positionPrice),maxValue:Math.max(info.priceRange.maxValue,this.positionPrice)}};
+  }
+  updatePosition(symbol, engine) {
+    const account=engine?.account,quantity=Number(account?.quantity),cost=Number(account?.cost);
+    const price=Number(account?.mark?.averagePrice ?? (cost/quantity));
+    const valid=!!account?.market&&quantity>0&&Number.isFinite(quantity)&&cost>0&&Number.isFinite(cost)&&price>0&&Number.isFinite(price);
+    const key=valid?[engine.mode,symbol,account.market,quantity,cost,price].join('|'):'';
+    if(key===this.positionKey)return;
+    for(const {series,line} of this.positionLines)series.removePriceLine(line);
+    this.positionLines=[];this.positionKey=key;this.positionPrice=valid&&account.market===symbol?price:null;
+    let label=$('chartPosition');
+    if(!label){label=document.createElement('div');label.id='chartPosition';label.style.cssText='color:#f5bd4f;white-space:normal;overflow-wrap:anywhere;font-weight:600';label.setAttribute('role','status');$('chartVolumeLegend')?.parentElement?.appendChild(label);}
+    label.textContent='';
+    if(!valid)return;
+    const invested=cost.toLocaleString('ko-KR',{maximumFractionDigits:0});
+    label.textContent=(engine.mode==='live'?'실전':'모의')+' 보유 '+account.market.replace('KRW-','')+' · 평균 매수가 '+fmt(price)+'원 · 투자금 '+invested+'원';
+    label.title='현재 남아 있는 보유분의 매수 원가입니다. 매수 수수료를 포함하며 부분 매도 후 남은 원가로 갱신됩니다.';
+    if(account.market!==symbol){label.textContent+=' · 다른 종목 차트 보는 중';return;}
+    for(const series of [this.candles,this.closeLine]){
+      const line=series.createPriceLine({price,color:'#f5bd4f',lineWidth:2,lineStyle:LineStyle.Dashed,axisLabelVisible:true,title:'내 매수 '+fmt(price)+'원 · 투자 '+invested+'원'});
+      this.positionLines.push({series,line});
+    }
   }
   line(key, data, color, pane = 0) {
     if (!this.lines[key])
