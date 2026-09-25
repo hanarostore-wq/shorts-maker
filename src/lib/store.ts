@@ -93,6 +93,28 @@ function healState(state: State): State {
         department.agents.push(structuredClone(freshAgent));
       }
     }
+
+    // 쇼츠부서는 직원 이름·업무·상태를 항상 최신 mock-data 기준으로 강제 동기화한다.
+    // (Upstash Redis에 구버전 데이터가 남아 있어도 관제실 화면이 항상 최신을 보여주도록)
+    if (department.id === "shorts") {
+      // 순서도 fresh 기준으로 재정렬
+      const byId = new Map(department.agents.map((a) => [a.id, a]));
+      const reordered = fresh.agents
+        .map((fa) => {
+          const existing = byId.get(fa.id);
+          if (existing) {
+            // 이름·task·status를 fresh 기준으로 덮어쓴다
+            existing.name = fa.name;
+            existing.task = fa.task;
+            existing.status = fa.status;
+            return existing;
+          }
+          return structuredClone(fa);
+        });
+      // fresh에 없는 구버전 직원은 제거
+      department.agents = reordered;
+    }
+
     for (const agent of department.agents) {
       if (agent.id === "s6" && agent.name === "서버관리원") {
         agent.name = "쿠팡파견";
