@@ -7,6 +7,8 @@ import { ActivityLog } from "@/components/ActivityLog";
 import { AutoSync } from "@/components/AutoSync";
 import { UpbitTerminalModal } from "@/components/UpbitTerminalModal";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
+import { ShortsStudioModal } from "@/components/ShortsStudioModal";
+import { SHORTS_AGENT_STEP_MAP } from "@/lib/agentIntegrations";
 import type { Agent, Department, Project } from "@/lib/types";
 import type { LogEntry } from "@/lib/store";
 
@@ -40,8 +42,6 @@ export default function Home() {
     const timer = setInterval(load, 4000);
 
     // 다른 탭/창을 보다가 돌아왔을 때 새로고침 없이 바로 최신 상태를 보여준다.
-    // (브라우저는 화면에서 벗어난 탭의 setInterval을 느리게/멈추게 만들기 때문에
-    // 그 사이에 놓친 변경사항을 탭이 다시 보일 때 즉시 한 번 더 가져온다.)
     const onVisible = () => {
       if (document.visibilityState === "visible") load();
     };
@@ -83,7 +83,6 @@ export default function Home() {
     : allAgents.filter((agent) => selectedStatus === "이상발생" ? agent.task.startsWith("⚠") : selectedStatus === "업무중" ? agent.status === "active" : selectedStatus === "대기" ? agent.status === "standby" : selectedStatus === "휴면" ? agent.status === "idle" : agent.status === "offline").map((agent) => ({ title: agent.name, detail: agent.task, meta: agent.status }));
 
   const handleReorder = (departmentId: string, agentIds: string[]) => {
-    // 화면엔 바로 반영하고, 저장은 뒤에서 조용히 진행한다.
     setState((prev) => {
       if (!prev) return prev;
       return {
@@ -105,6 +104,9 @@ export default function Home() {
       body: JSON.stringify({ departmentId, agentIds }),
     }).catch(() => null);
   };
+
+  const isShortsAgentSelected = Boolean(liveSelectedAgent && liveSelectedAgent.id.startsWith("v"));
+  const shortsStep = liveSelectedAgent?.id ? (SHORTS_AGENT_STEP_MAP[liveSelectedAgent.id] || "search") : "search";
 
   return (
     <div className="flex flex-1 flex-col gap-3 bg-black px-4 py-6 font-mono sm:px-8">
@@ -150,14 +152,27 @@ export default function Home() {
         <ActivityLog log={state.log} />
       </section>
 
+      {/* 업비트 터미널 모달 */}
       <UpbitTerminalModal mode={liveSelectedAgent?.id === "c7" ? "paper" : liveSelectedAgent?.id === "c13" ? "live" : null} onClose={() => setSelectedAgent(null)} />
-      {liveSelectedAgent && !["c7", "c13"].includes(liveSelectedAgent.id) && (
+      
+      {/* 쇼츠부서 남다른AI Shorts 분석기 모달 (선택된 직원의 전용 단계로 즉시 오픈) */}
+      <ShortsStudioModal
+        isOpen={isShortsAgentSelected}
+        initialStep={shortsStep}
+        targetAgentName={liveSelectedAgent?.name}
+        targetAgentTask={liveSelectedAgent?.task}
+        onClose={() => setSelectedAgent(null)}
+      />
+
+      {/* 기타 일반 직원 상세 모달 */}
+      {liveSelectedAgent && !["c7", "c13"].includes(liveSelectedAgent.id) && !liveSelectedAgent.id.startsWith("v") && (
         <AgentDetailModal
           agent={liveSelectedAgent}
           departments={state.departments}
           onClose={() => setSelectedAgent(null)}
         />
       )}
+
       {selectedStatus && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 font-mono" onClick={() => setSelectedStatus(null)}>
           <div className="flex max-h-[70vh] w-full max-w-xl flex-col gap-3 border-2 border-zinc-700 bg-zinc-950 p-4" onClick={(event) => event.stopPropagation()}>

@@ -14,19 +14,19 @@ import { UpbitReportDashboard } from "./UpbitReportDashboard";
 import { AssetManagementPanel, LiveTradingPanel, ProfitRealizationPanel } from "./TradingAccountPanels";
 import { TradingRolePanel } from "./TradingRolePanel";
 
-
 export function AgentDetailModal({
   agent,
   departments,
   onClose,
+  onOpenShortsStudio,
 }: {
   agent: Agent;
   departments: Department[];
   onClose: () => void;
+  onOpenShortsStudio?: (agentName: string) => void;
 }) {
   const platforms = getAgentPlatforms(agent.id);
   const tool = getAgentTool(agent.id);
-
 
   return (
     <div
@@ -60,6 +60,43 @@ export function AgentDetailModal({
         {tool === "assetManagement" && <AssetManagementPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
         {tool === "profitRealization" && <ProfitRealizationPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
         {tool === "liveTrading" && <LiveTradingPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
+        {tool === "shortsStudio" && (
+          <div className="flex flex-col gap-3 rounded border border-indigo-800/60 bg-indigo-950/20 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-indigo-300">
+                🎬 남다른AI Shorts 분석기 스튜디오
+              </span>
+              <span className="rounded bg-indigo-900/50 px-2 py-0.5 text-[10px] font-semibold text-indigo-200">
+                쇼츠부서 팩토리
+              </span>
+            </div>
+            <p className="text-xs text-zinc-400">
+              유튜브 바이럴 알고리즘 분석, 11대 성공 메커니즘, 6대 아이디어 도출, 1문장 대본 및 미드저니/Suno 프롬프트를 통합 제작합니다.
+            </p>
+            <div className="flex gap-2 pt-2">
+              {onOpenShortsStudio && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenShortsStudio(agent.name);
+                  }}
+                  className="flex flex-1 items-center justify-center gap-2 rounded bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-500 cursor-pointer"
+                >
+                  🚀 분석기 모달 전체화면 실행
+                </button>
+              )}
+              <a
+                href="/shorts/index.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1 rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800 hover:text-white"
+              >
+                ↗ 새 탭
+              </a>
+            </div>
+          </div>
+        )}
         {platforms.length > 0 && <IntegrationPanel platforms={platforms} />}
         {tool === null && platforms.length === 0 && (
           <p className="text-[11px] text-zinc-600">

@@ -17,7 +17,8 @@ export type AgentTool =
   | "stockTrading"
   | "assetManagement"
   | "profitRealization"
-  | "liveTrading";
+  | "liveTrading"
+  | "shortsStudio";
 
 export const AGENT_TOOLS: Record<string, AgentTool> = {
   o5: "storage",
@@ -52,6 +53,21 @@ export const AGENT_TOOLS: Record<string, AgentTool> = {
   t11: "assetManagement",
   t12: "profitRealization",
   t13: "liveTrading",
+  v1: "shortsStudio",
+  v2: "shortsStudio",
+  v3: "shortsStudio",
+  v4: "shortsStudio",
+  v5: "shortsStudio",
+  v6: "shortsStudio",
+};
+
+export const SHORTS_AGENT_STEP_MAP: Record<string, string> = {
+  v5: "search",
+  v2: "analyze",
+  v4: "ideate",
+  v6: "select",
+  v1: "script",
+  v3: "prompts",
 };
 
 export function getAgentPlatforms(agentId: string): Platform[] {

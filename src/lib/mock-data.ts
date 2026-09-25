@@ -76,11 +76,12 @@ export const departments: Department[] = [
     name: "쇼츠부서",
     icon: "🎬",
     agents: [
-      { id: "v1", name: "대본작가", task: "쇼츠 대본 초안 - 아직 연동 안 됨", status: "offline" },
-      { id: "v2", name: "영상감독", task: "영상 컷 구성 - 아직 연동 안 됨", status: "offline" },
-      { id: "v3", name: "썸네일디자이너", task: "썸네일 생성 - 아직 연동 안 됨", status: "offline" },
-      { id: "v4", name: "업로드담당", task: "업로드 예약 - 아직 연동 안 됨", status: "offline" },
-      { id: "v5", name: "수익집계원", task: "조회수/수익 집계 - 아직 연동 안 됨", status: "offline" },
+      { id: "v5", name: "트렌드분석원", task: "01. Search · 유튜브 검색 & 바이럴 지표 산출", status: "active" },
+      { id: "v2", name: "영상감독", task: "02. Analyze · 11대 바이럴 공식 & 시각 DNA 역설계", status: "active" },
+      { id: "v4", name: "소재기획자", task: "03. Ideate · 6대 떡상 소재 발굴 & 기획", status: "active" },
+      { id: "v6", name: "전략디렉터", task: "04. Select Topic · 구간별 스토리텔링 로드맵 확정", status: "active" },
+      { id: "v1", name: "대본작가", task: "05. Script · 1문장 완청 최적화 쇼츠 대본 집필", status: "active" },
+      { id: "v3", name: "비주얼디자이너", task: "06. Visual Prompts · 미드저니 v6 & Suno BGM 생성", status: "active" },
     ],
   },
   {

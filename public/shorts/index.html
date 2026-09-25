@@ -1,0 +1,2308 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>남다른AI - Shorts 분석기 | 운영본부 관제실</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-body: #090D16;
+            --bg-sidebar: #0E1526;
+            --bg-surface: #131C31;
+            --bg-surface-elevated: #1A2642;
+            --bg-card: rgba(19, 28, 49, 0.75);
+            --bg-card-hover: rgba(26, 38, 66, 0.9);
+            
+            --border-subtle: rgba(255, 255, 255, 0.07);
+            --border-light: #253352;
+            --border-focus: #6366F1;
+            
+            --text-primary: #F8FAFC;
+            --text-secondary: #94A3B8;
+            --text-muted: #64748B;
+            --text-inverse: #090D16;
+            
+            --primary: #6366F1;
+            --primary-hover: #4F46E5;
+            --primary-glow: rgba(99, 102, 241, 0.2);
+            --sidebar-active-bg: rgba(99, 102, 241, 0.15);
+            
+            --success: #10B981;
+            --success-bg: rgba(16, 185, 129, 0.15);
+            --danger: #EF4444;
+            --danger-bg: rgba(239, 68, 68, 0.15);
+            --warning: #F59E0B;
+            --warning-bg: rgba(245, 158, 11, 0.15);
+            --cyan: #06B6D4;
+            --cyan-bg: rgba(6, 182, 212, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(6, 182, 212, 0.06) 0%, transparent 40%);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2A3B5F;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3E5485;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 260px;
+            background-color: var(--bg-sidebar);
+            border-right: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            padding: 24px 16px;
+            color: var(--text-primary);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            flex-shrink: 0;
+            position: relative;
+            z-index: 100;
+        }
+
+        body.sidebar-collapsed .sidebar {
+            margin-left: -260px;
+        }
+
+        .btn-toggle-sidebar {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-light);
+            color: var(--text-primary);
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .btn-toggle-sidebar:hover {
+            background: var(--bg-surface-elevated);
+            color: var(--primary);
+            border-color: var(--primary);
+            transform: scale(1.05);
+        }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        @media (max-width: 900px) {
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100vh;
+                z-index: 1000;
+                margin-left: -260px;
+                box-shadow: 4px 0 25px rgba(0, 0, 0, 0.6);
+            }
+
+            body.sidebar-open .sidebar {
+                margin-left: 0;
+            }
+
+            body.sidebar-open .sidebar-overlay {
+                display: block;
+                opacity: 1;
+            }
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 32px;
+            padding: 0 8px;
+        }
+
+        .nav {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .nav-item {
+            background: none;
+            border: 1px solid transparent;
+            color: var(--text-secondary);
+            text-align: left;
+            padding: 12px 14px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-item:hover {
+            color: #FFFFFF;
+            background-color: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.06);
+        }
+
+        .nav-item.active {
+            color: #FFFFFF;
+            background: var(--sidebar-active-bg);
+            border-color: rgba(99, 102, 241, 0.4);
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.15);
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 28px;
+            background: rgba(14, 21, 38, 0.7);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.3px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #6366F1, #4F46E5);
+            color: #FFFFFF;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 9px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 10px rgba(99, 102, 241, 0.25);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: linear-gradient(135deg, #4F46E5, #4338CA);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            border: 1px solid var(--border-light);
+            padding: 9px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--bg-surface-elevated);
+            border-color: #3B4D72;
+            color: #FFFFFF;
+        }
+
+        /* Views */
+        .view {
+            display: none;
+            padding: 24px 28px 40px 28px;
+            animation: fadeIn 0.25s ease-out;
+        }
+
+        .view.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Cards / Widgets */
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+            margin-bottom: 22px;
+        }
+
+        .card h2 {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 14px;
+            color: #FFFFFF;
+            letter-spacing: -0.2px;
+        }
+
+        .input-group {
+            margin-bottom: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .input-group label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .input-group input, .input-group select, textarea {
+            padding: 10px 12px;
+            background: var(--bg-body);
+            border: 1px solid var(--border-light);
+            color: var(--text-primary);
+            border-radius: 8px;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .input-group input:focus, .input-group select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-glow);
+        }
+
+        /* Presets tags */
+        .preset-tag {
+            cursor: pointer;
+            font-size: 12px;
+            color: #818CF8;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 6px;
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            transition: all 0.2s;
+        }
+
+        .preset-tag:hover {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: #818CF8;
+            color: #FFFFFF;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th {
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border-light);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            background: rgba(14, 21, 38, 0.5);
+        }
+
+        td {
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 13px;
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        /* Control Tower Banner */
+        .hq-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(14, 21, 38, 0.9);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 10px;
+            padding: 10px 16px;
+            margin-bottom: 18px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .hq-banner-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 700;
+            color: #818CF8;
+            background: var(--primary-glow);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar Overlay for mobile -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="logo" style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <div style="font-size: 19px; font-weight: 800; letter-spacing: -0.5px; background: linear-gradient(135deg, #A5B4FC, #818CF8, #C084FC); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">남다른AI</div>
+                <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-top: 4px; letter-spacing: -0.2px;">Shorts 분석기 · 관제실</div>
+            </div>
+            <button id="btn-sidebar-collapse" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 15px; padding: 4px;" title="사이드바 접기 (Ctrl+B)">◀</button>
+        </div>
+        <nav class="nav">
+            <button class="nav-item active" data-step="search"><span>🔍</span> 01. Search</button>
+            <button class="nav-item" data-step="analyze"><span>📊</span> 02. Analyze</button>
+            <button class="nav-item" data-step="ideate"><span>💡</span> 03. Ideate</button>
+            <button class="nav-item" data-step="select"><span>🎯</span> 04. Select Topic</button>
+            <button class="nav-item" data-step="script"><span>📝</span> 05. Script</button>
+            <button class="nav-item" data-step="prompts"><span>🎨</span> 06. Visual Prompts</button>
+        </nav>
+
+        <div style="margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px;">
+            <a href="/" id="btn-back-hq" style="display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-decoration: none; padding: 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-subtle); transition: all 0.2s;">
+                🏢 운영본부 관제실 복귀
+            </a>
+            <div style="font-size: 10px; color: var(--text-muted); text-align: center;">
+                쇼츠부서 5명 전원 자동 연동 활성
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="header">
+            <div style="display: flex; align-items: center; gap: 14px;">
+                <button class="btn-toggle-sidebar" id="btn-toggle-sidebar" title="사이드바 열기/접기 (Ctrl+B)">
+                    ☰
+                </button>
+                <h1 id="page-title">Search & Discover</h1>
+            </div>
+            <div class="header-actions" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <input type="password" id="yt-api-key" placeholder="YouTube API Key" style="padding: 8px 12px; background: var(--bg-body); border: 1px solid var(--border-light); color: var(--text-primary); border-radius: 8px; font-size: 12px; width: 150px;">
+                <input type="password" id="gemini-api-key" placeholder="Gemini API Key" style="padding: 8px 12px; background: var(--bg-body); border: 1px solid var(--border-light); color: var(--text-primary); border-radius: 8px; font-size: 12px; width: 150px;">
+                <button class="btn-primary" id="btn-api-save" style="padding: 8px 14px; font-size: 12px;">Save Keys</button>
+                <button class="btn-secondary" id="btn-export-md" style="padding: 8px 14px; font-size: 12px; border-color: var(--primary); color: #A5B4FC; display: flex; align-items: center; gap: 6px;" title="전체 분석/대본/프롬프트 결과를 .md 파일로 다운로드">
+                    📥 Export (.md)
+                </button>
+                <span id="api-status" style="font-size: 12px; font-weight: 600; color: var(--warning);">● Not Connected</span>
+            </div>
+        </header>
+
+        <!-- View 1: Search -->
+        <div id="view-search" class="view active">
+            <div class="hq-banner">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="hq-banner-badge">🏢 쇼츠부서 팩토리</span>
+                    <span>유튜브 쇼츠 데이터셋 검색 및 바이럴 수치(V/S Ratio, Velocity, Outlier)를 실시간 산출합니다.</span>
+                </div>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #818CF8;">담당: v5 수익집계원 / v4 업로드담당</span>
+            </div>
+
+            <div class="card">
+                <h2>Search Configuration & Query</h2>
+                <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+                    <input type="text" id="search-query" placeholder="Enter Keyword (e.g. ChatGPT, AI 뉴스, 일상 꿀팁, 쇼츠)" style="flex:1; padding: 11px 14px; background: var(--bg-body); border: 1px solid var(--border-light); color: #fff; border-radius: 8px; font-size: 14px;">
+                    <button class="btn-primary" id="btn-search" style="padding: 11px 24px; font-weight: 700; white-space: nowrap;">Search YouTube</button>
+                </div>
+                
+                <!-- Presets -->
+                <div style="display: flex; gap: 10px; margin-bottom: 20px; align-items: center; flex-wrap: wrap;">
+                    <span style="font-size: 12px; color: var(--text-secondary); font-weight: 700;">빠른 프리셋:</span>
+                    <span class="preset-tag" data-preset="viral">🔥 지금 떡상</span>
+                    <span class="preset-tag" data-preset="small-channel">🚀 작은 채널 대박</span>
+                    <span class="preset-tag" data-preset="trending">⚡ 급상승</span>
+                    <span class="preset-tag" data-preset="reset" style="background: transparent; border-color: var(--border-light); color: var(--text-secondary);">초기화</span>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 14px;">
+                    <div class="input-group">
+                        <label>Upload Date (게시 기간 설정)</label>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <input type="date" id="filter-date-from" style="flex: 1; padding: 8px 10px; font-size: 12px;">
+                            <span style="color: var(--text-secondary); font-size: 12px;">~</span>
+                            <input type="date" id="filter-date-to" style="flex: 1; padding: 8px 10px; font-size: 12px;">
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>Max Duration (영상 길이)</label>
+                        <select id="filter-duration" style="padding: 8px 10px; font-size: 12px;">
+                            <option value="60" selected>1분 이내 (≤ 60초)</option>
+                            <option value="180">3분 이내 (≤ 180초)</option>
+                            <option value="gt300">5분 초과 (> 300초)</option>
+                            <option value="all">전체 (All)</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Min Views (최소 조회수)</label>
+                        <input type="number" id="filter-views" placeholder="예: 10000" style="padding: 8px 10px; font-size: 12px;">
+                    </div>
+                    <div class="input-group">
+                        <label>Max Subscribers (최대 구독자)</label>
+                        <input type="number" id="filter-subs" placeholder="예: 500000" style="padding: 8px 10px; font-size: 12px;">
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                    <h2>Results <span id="result-count" style="color: var(--text-secondary); font-size: 13px; font-weight: normal;">(0 videos)</span></h2>
+                    <button class="btn-primary" id="btn-analyze-selected" disabled>Analyze Selected</button>
+                </div>
+                
+                <div style="overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: 8px;">
+                    <table id="results-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;"><input type="checkbox" id="check-all"></th>
+                                <th>Video</th>
+                                <th>Views</th>
+                                <th>Subs</th>
+                                <th>V/S Ratio</th>
+                                <th>Velocity</th>
+                                <th>Outlier</th>
+                                <th>Viral Score</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-body">
+                            <tr>
+                                <td colspan="8" style="padding: 36px; text-align: center; color: var(--text-muted); font-size: 13px;">No videos to display. Try searching.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- View 2: Analyze -->
+        <div id="view-analyze" class="view">
+            <div class="card" id="analyze-loading" style="display: none; text-align: center; padding: 48px;">
+                <h2 id="analyze-progress-text" style="color: #A5B4FC;">영상 데이터 및 시각/스토리 구조 분석 중...</h2>
+                <p style="color: var(--text-secondary); font-size: 13px; margin-top: 8px;">Gemini Multimodal API를 통해 1초 훅, 시청 지속 장치, 영상/이미지 연출 DNA를 추출하고 있습니다.</p>
+            </div>
+            
+            <div id="analyze-results-container" style="display: none;">
+                <!-- 1. 분석 대상 영상 목록 -->
+                <div class="card">
+                    <h2 id="analyze-summary-title">Analyzed Target Videos (분석 대상)</h2>
+                    <div id="analyzed-videos-list" style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px;"></div>
+                </div>
+
+                <!-- 2. 11대 핵심 바이럴 메커니즘 분석 -->
+                <div class="card">
+                    <h2>🎯 11대 바이럴 메커니즘 & 성공 공식 분석</h2>
+                    <p style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">첫 1초 훅부터 호기심 갭, 정보 순서, 자막/BGM 타이밍까지 체계적으로 해체한 공식입니다.</p>
+                    <div id="viral-mechanisms-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px;"></div>
+                </div>
+
+                <!-- 3. 스크립트 구간별 타임라인 전략 -->
+                <div class="card">
+                    <h2>⏱️ 스크립트 구간별 타임라인 스토리 전략</h2>
+                    <div id="timeline-strategies" style="display: flex; flex-direction: column; gap: 12px; margin-top: 14px;"></div>
+                </div>
+                
+                <!-- 4. 이미지 & 영상 시각 연출 분석 -->
+                <div class="card">
+                    <h2>🎨 시각 연출 & 비디오 스타일 DNA (초정밀 프롬프트 역설계)</h2>
+                    <p style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">영상 컷 전환, 렌즈/화각, 카메라 무빙, 조명, 색감 톤앤매너, 질감 렌더링 스타일을 세밀히 역설계하여 고품질 이미지/비디오 프롬프트에 자동 반영합니다.</p>
+                    <div id="visual-style-dna" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px;"></div>
+                </div>
+
+                <!-- 5. 시청자 댓글 인사이트 -->
+                <div class="card">
+                    <h2>💬 시청자 반응 & 결핍 니즈 분석</h2>
+                    <div id="comment-insights" style="display: flex; flex-direction: column; gap: 10px; margin-top: 14px;"></div>
+                </div>
+                
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 24px;">
+                    <button class="btn-primary" id="btn-goto-ideate" style="padding: 12px 28px; font-size: 14px; font-weight: 700;">이 분석 공식으로 6개 소재 발굴하기 ➔</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- View 3: Ideate -->
+        <div id="view-ideate" class="view">
+            <div class="card" id="ideate-loading" style="display: none; text-align: center; padding: 48px;">
+                <h2 style="color: #A5B4FC;">새로운 6개 소재 발굴 중...</h2>
+                <p style="color: var(--text-secondary); font-size: 13px; margin-top: 8px;">추출된 바이럴 공식과 Content DNA를 바탕으로 6개의 독창적인 떡상 아이디어를 생성하고 있습니다.</p>
+            </div>
+            
+            <div id="ideate-results-container" style="display: none;">
+                <div class="card" style="margin-bottom: 20px;">
+                    <h2>💡 발굴된 6가지 맞춤형 쇼츠 아이디어</h2>
+                    <p style="font-size:13px; color:var(--text-secondary);">가장 마음에 드는 주제를 선택하면 정밀 기획 로드맵을 확인하고 피드백을 줄 수 있습니다.</p>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;" id="idea-cards">
+                    <!-- 6 Idea Cards -->
+                </div>
+            </div>
+        </div>
+
+        <!-- View 4: Select -->
+        <div id="view-select" class="view">
+            <div class="card" id="topic-detail-card" style="display:none;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                    <h2 id="topic-title" style="font-size:20px; color:#fff;">주제 제목</h2>
+                    <span id="topic-score-badge" style="background:var(--success-bg); color:var(--success); border:1px solid rgba(16, 185, 129, 0.3); padding:4px 10px; border-radius:6px; font-size:12px; font-weight:bold;">잠재력 95점</span>
+                </div>
+                
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:14px;" id="topic-details"></div>
+                
+                <div style="margin-top:20px; border:1px solid var(--border-light); padding:16px; border-radius:10px; background:var(--bg-body);">
+                    <h3 style="font-size:14px; font-weight:700; margin-bottom:10px; color:#818CF8;">🎯 구간별 스토리텔링 전개 로드맵</h3>
+                    <div id="topic-timeline-preview" style="display:flex; flex-direction:column; gap:8px; font-size:13px;"></div>
+                </div>
+
+                <div style="margin-top:22px;">
+                    <h3 style="font-size:13px; margin-bottom:8px; font-weight:600; color:var(--text-secondary);">✍️ 추가 기획 피드백 및 요청사항 (Optional)</h3>
+                    <textarea id="topic-feedback" placeholder="예: 2030 직장인이 공감할 수 있는 톤으로 해줘, 첫 문장을 더 충격적인 질문으로 시작해줘, 40초 분량으로 핵심만 압축해줘..." style="width:100%; height:80px; line-height:1.5;"></textarea>
+                </div>
+                
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:24px;">
+                    <button class="btn-secondary" onclick="navigate('ideate')">← 다른 주제 선택</button>
+                    <button class="btn-primary" id="btn-confirm-topic" style="padding: 12px 28px; font-size: 14px; font-weight: 700;">이 전략으로 대본 생성하기 ➔</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- View 5: Script -->
+        <div id="view-script" class="view">
+            <div class="card" id="script-config" style="display:none;">
+                <h2>Script Configuration & Options</h2>
+                <div style="display:flex; gap:16px; margin-top:16px; flex-wrap:wrap; align-items:flex-end;">
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                        <label style="font-size:11px; color:var(--text-secondary); font-weight:600;">목표 길이 (초 단위 직접 입력)</label>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <input type="number" id="script-duration" value="60" min="10" max="180" step="5" style="width:90px; text-align:center; font-weight:700;">
+                            <span style="font-size:13px; color:var(--text-secondary); font-weight:600;">초</span>
+                        </div>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:6px; min-width:220px;">
+                        <label style="font-size:11px; color:var(--text-secondary); font-weight:600;">나레이션 톤</label>
+                        <select id="script-tone">
+                            <option value="몰입감 있고 긴박한 (Urgent & Suspenseful)" selected>⚡ 몰입감 있고 긴박한</option>
+                            <option value="도발적이고 충격적인 (Provocative & Shocking)">💥 도발적이고 충격적인</option>
+                            <option value="친근하고 재치있는 (Friendly & Witty)">😄 친근하고 재치있는</option>
+                            <option value="전문적이고 신뢰감 있는 (Authoritative & Deep)">🎓 전문적이고 신뢰감 있는</option>
+                            <option value="감성적이고 서정적인 (Emotional & Storytelling)">🎬 감성적이고 서정적인</option>
+                            <option value="빠르고 에너지 넘치는 (High-energy & Hype)">🔥 빠르고 에너지 넘치는</option>
+                            <option value="냉소적이고 현실적인 (Cynical & Raw)">😏 냉소적이고 현실적인</option>
+                            <option value="custom">✏️ 직접 입력 (기타)...</option>
+                        </select>
+                    </div>
+                    <div id="custom-tone-wrapper" style="display:none; flex-direction:column; gap:6px; flex:1; min-width:180px;">
+                        <label style="font-size:11px; color:var(--primary); font-weight:700;">사용자 지정 나레이션 톤 입력</label>
+                        <input type="text" id="script-tone-custom" placeholder="예: 시니컬한 뉴스 앵커 톤, AI 기계음 같은 무미건조한 톤...">
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:6px; flex:1; min-width:180px;">
+                        <label style="font-size:11px; color:var(--text-secondary); font-weight:600;">타겟 시청자</label>
+                        <input type="text" id="script-target" placeholder="예: 2030 직장인, 테크 관심자, 학생 등">
+                    </div>
+                    <div>
+                        <button class="btn-primary" id="btn-generate-script" style="padding:10px 24px; font-weight:700;">Generate Script</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" id="script-loading" style="display:none; text-align: center; padding: 48px;">
+                <h2 id="script-loading-text" style="color: #A5B4FC;">초정밀 쇼츠 스크립트 작성 중...</h2>
+                <p style="color:var(--text-secondary); font-size:13px; margin-top: 8px;">타임코드별 1문장 나레이션, 비주얼 연출, 자막, 효과음 가이드를 생성하고 있습니다.</p>
+            </div>
+
+            <div id="script-results-container" style="display:none;">
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                        <h2>🎬 Generated Shorts Script (1문장 원칙 엄수)</h2>
+                        <span id="script-summary-tag" style="font-size:12px; color:var(--text-secondary);"></span>
+                    </div>
+                    
+                    <div id="script-scenes" style="display:flex; flex-direction:column; gap:16px; margin-top:16px;"></div>
+
+                    <!-- 대본 수정 & 재생성 피드백 박스 -->
+                    <div style="margin-top:28px; border-top:1px solid var(--border-subtle); padding-top:20px;">
+                        <h3 style="font-size:13px; font-weight:700; margin-bottom:6px; color: #fff;">🔄 스크립트 수정 및 재생성 피드백</h3>
+                        <p style="font-size:12px; color:var(--text-secondary); margin-bottom:10px;">마음에 들지 않는 부분이나 추가하고 싶은 멘트를 입력하면 대본을 즉시 반영하여 다시 작성합니다.</p>
+                        <div style="display:flex; gap:12px;">
+                            <textarea id="script-revision-feedback" placeholder="예: 2번 씬 나레이션을 더 긴박하게 바꿔줘, 마지막에 댓글 참여 유도 CTA 멘트 넣어줘..." style="flex:1; height:60px; font-size:13px;"></textarea>
+                            <button class="btn-secondary" id="btn-regenerate-script" style="padding:0 20px; font-weight:700; white-space:nowrap; border-color:var(--primary); color:#A5B4FC;">
+                                🔄 대본 재생성
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:24px;">
+                        <button class="btn-secondary" onclick="navigate('select')">← 기획 전략 수정</button>
+                        <button class="btn-primary" id="btn-goto-prompts" style="padding: 12px 28px; font-size: 14px; font-weight: 700;">시각 프롬프트(이미지 & 영상) 생성하기 ➔</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View 6: Prompts -->
+        <div id="view-prompts" class="view">
+            <div class="card" id="prompts-loading" style="display:none; text-align: center; padding: 48px;">
+                <h2 style="color: #A5B4FC;">🎨 비주얼 및 BGM 프롬프트 생성 중...</h2>
+                <p style="color:var(--text-secondary); font-size:13px; margin-top: 8px;">1단계에서 분석한 시각/사운드 스타일 DNA를 바탕으로 씬별 미드저니/비디오 프롬프트와 전체 쇼츠 전용 Master BGM 프롬프트를 작성 중입니다.</p>
+            </div>
+            
+            <div id="prompts-results-container" style="display:none;">
+                <div class="card" style="margin-bottom:20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                        <div>
+                            <h2>🎨 Production Prompts (Visual & Master BGM)</h2>
+                            <p style="font-size:13px; color:var(--text-secondary); margin-top:4px;">1단계 시각/사운드 연출 DNA가 완벽히 반영된 이미지, 비디오, BGM 일체형 프롬프트입니다.</p>
+                        </div>
+                        <button class="btn-primary" id="btn-download-all-md" style="padding:10px 20px; font-weight:700; display:flex; align-items:center; gap:6px;">
+                            📥 전체 프로젝트 (.md) 저장
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 1. Master BGM Prompt Card -->
+                <div id="bgm-prompt-container" style="margin-bottom:24px;"></div>
+
+                <!-- 2. Scene-by-Scene Visual Prompts -->
+                <div style="margin-bottom:12px; font-size:14px; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:8px;">
+                    <span>🎬 씬별 비주얼 생성 프롬프트 (Midjourney v6 & AI Video)</span>
+                </div>
+                <div id="prompts-list" style="display:flex; flex-direction:column; gap:16px;"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- JavaScript -->
+    <script>
+        // State
+        const state = {
+            currentStep: 'search',
+            apiKeys: {
+                youtube: '',
+                gemini: ''
+            }
+        };
+
+        const viewTitles = {
+            'search': 'Search & Discover',
+            'analyze': 'Analyze Video Patterns',
+            'ideate': 'Ideate Contents',
+            'select': 'Select Topic',
+            'script': 'Generate Script',
+            'prompts': 'Visual Prompts'
+        };
+
+        // DOM Elements
+        const navItems = document.querySelectorAll('.nav-item[data-step]');
+        const views = document.querySelectorAll('.view');
+        const pageTitle = document.getElementById('page-title');
+        const btnApiSave = document.getElementById('btn-api-save');
+        const inputYtKey = document.getElementById('yt-api-key');
+        const inputGeminiKey = document.getElementById('gemini-api-key');
+        const apiStatus = document.getElementById('api-status');
+        const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
+        const btnSidebarCollapse = document.getElementById('btn-sidebar-collapse');
+        const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+        // Optional postMessage bridge to parent control tower
+        window.addEventListener('message', (event) => {
+            if (event.data?.type === 'set-keys') {
+                if (event.data.yt) { inputYtKey.value = event.data.yt; state.apiKeys.youtube = event.data.yt; }
+                if (event.data.gemini) { inputGeminiKey.value = event.data.gemini; state.apiKeys.gemini = event.data.gemini; }
+                updateApiStatus();
+            }
+            // 관제실에서 직원 클릭 시 해당 단계로 즉시 이동
+            if (event.data?.type === 'navigate-step' && event.data.step) {
+                navigate(event.data.step);
+            }
+        });
+
+        async function logToControlTower(agentId, message) {
+            try {
+                await fetch('/api/complete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ departmentId: 'shorts', agentId, message })
+                });
+            } catch (err) {
+                console.debug('[Control Tower Log]', err);
+            }
+        }
+
+        // --- Sidebar Collapsible Logic ---
+        function isMobileView() {
+            return window.innerWidth <= 900;
+        }
+
+        const savedSidebarCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+        if (savedSidebarCollapsed && !isMobileView()) {
+            document.body.classList.add('sidebar-collapsed');
+        }
+
+        function toggleSidebar() {
+            if (isMobileView()) {
+                document.body.classList.toggle('sidebar-open');
+            } else {
+                document.body.classList.toggle('sidebar-collapsed');
+                const isCollapsed = document.body.classList.contains('sidebar-collapsed');
+                localStorage.setItem('sidebar_collapsed', isCollapsed);
+            }
+        }
+
+        function closeSidebarMobile() {
+            if (isMobileView()) {
+                document.body.classList.remove('sidebar-open');
+            }
+        }
+
+        if (btnToggleSidebar) btnToggleSidebar.addEventListener('click', toggleSidebar);
+
+        if (btnSidebarCollapse) {
+            btnSidebarCollapse.addEventListener('click', () => {
+                if (isMobileView()) {
+                    document.body.classList.remove('sidebar-open');
+                } else {
+                    document.body.classList.add('sidebar-collapsed');
+                    localStorage.setItem('sidebar_collapsed', 'true');
+                }
+            });
+        }
+
+        if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebarMobile);
+
+        window.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+                e.preventDefault();
+                toggleSidebar();
+            }
+        });
+
+        // Navigation Logic
+        navItems.forEach(item => {
+            item.addEventListener('click', (e) => {
+                const step = e.currentTarget.getAttribute('data-step');
+                navigate(step);
+                closeSidebarMobile();
+            });
+        });
+
+        function navigate(step) {
+            state.currentStep = step;
+            
+            navItems.forEach(item => {
+                if(item.getAttribute('data-step') === step) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+
+            pageTitle.textContent = viewTitles[step] || 'Shorts Studio';
+
+            views.forEach(view => {
+                if(view.id === 'view-' + step) {
+                    view.classList.add('active');
+                } else {
+                    view.classList.remove('active');
+                }
+            });
+        }
+
+        // URL ?step= 파라미터로 초기 단계 설정 (관제실 직원 클릭 시 즉시 해당 기능으로 이동)
+        {
+            const urlParams = new URLSearchParams(window.location.search);
+            const initialStep = urlParams.get('step');
+            const validSteps = ['search', 'analyze', 'ideate', 'select', 'script', 'prompts'];
+            if (initialStep && validSteps.includes(initialStep)) {
+                navigate(initialStep);
+            }
+        }
+
+        // --- API Keys Validation & Persistence ---
+        const savedYtKey = localStorage.getItem('yt_api_key') || '';
+        const savedGeminiKey = localStorage.getItem('gemini_api_key') || '';
+        
+        if (savedYtKey) {
+            inputYtKey.value = savedYtKey;
+            state.apiKeys.youtube = savedYtKey;
+        }
+        if (savedGeminiKey) {
+            inputGeminiKey.value = savedGeminiKey;
+            state.apiKeys.gemini = savedGeminiKey;
+        }
+        updateApiStatus();
+
+        async function validateYouTubeKey(key) {
+            if (!key) return { valid: false, skipped: true };
+            try {
+                const res = await fetch(`https://www.googleapis.com/youtube/v3/videoCategories?part=snippet&regionCode=KR&key=${key}`);
+                const data = await res.json();
+                if (res.ok) {
+                    return { valid: true };
+                } else {
+                    const errMsg = data.error?.message || '알 수 없는 오류';
+                    return { valid: false, error: errMsg };
+                }
+            } catch (err) {
+                return { valid: false, error: err.message || '네트워크 오류' };
+            }
+        }
+
+        async function validateGeminiKey(key) {
+            if (!key) return { valid: false, skipped: true };
+            try {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+                const data = await res.json();
+                if (res.ok) {
+                    return { valid: true };
+                } else {
+                    const errMsg = data.error?.message || '알 수 없는 오류';
+                    return { valid: false, error: errMsg };
+                }
+            } catch (err) {
+                return { valid: false, error: err.message || '네트워크 오류' };
+            }
+        }
+
+        btnApiSave.addEventListener('click', async () => {
+            const ytKey = inputYtKey.value.trim();
+            const geminiKey = inputGeminiKey.value.trim();
+
+            if (!ytKey && !geminiKey) {
+                alert('⚠️ API 키를 입력해 주세요!\nYouTube API 키 또는 Gemini API 키가 최소 1개 이상 필요합니다.');
+                return;
+            }
+
+            const originalBtnText = btnApiSave.textContent;
+            btnApiSave.textContent = '연결 확인 중...';
+            btnApiSave.disabled = true;
+
+            try {
+                const [ytResult, geminiResult] = await Promise.all([
+                    validateYouTubeKey(ytKey),
+                    validateGeminiKey(geminiKey)
+                ]);
+
+                let successMessages = [];
+                let failMessages = [];
+
+                if (ytKey) {
+                    if (ytResult.valid) {
+                        state.apiKeys.youtube = ytKey;
+                        localStorage.setItem('yt_api_key', ytKey);
+                        successMessages.push('• YouTube API: 연결 성공');
+                    } else {
+                        state.apiKeys.youtube = '';
+                        localStorage.removeItem('yt_api_key');
+                        failMessages.push(`• YouTube API 실패: ${ytResult.error}`);
+                    }
+                } else {
+                    state.apiKeys.youtube = '';
+                    localStorage.removeItem('yt_api_key');
+                }
+
+                if (geminiKey) {
+                    if (geminiResult.valid) {
+                        state.apiKeys.gemini = geminiKey;
+                        localStorage.setItem('gemini_api_key', geminiKey);
+                        successMessages.push('• Gemini API: 연결 성공');
+                    } else {
+                        state.apiKeys.gemini = '';
+                        localStorage.removeItem('gemini_api_key');
+                        failMessages.push(`• Gemini API 실패: ${geminiResult.error}`);
+                    }
+                } else {
+                    state.apiKeys.gemini = '';
+                    localStorage.removeItem('gemini_api_key');
+                }
+
+                updateApiStatus();
+
+                if (failMessages.length > 0 && successMessages.length === 0) {
+                    alert(`❌ API 연결 실패\n입력한 API 키가 유효하지 않습니다:\n\n${failMessages.join('\n')}\n\n키를 다시 확인해 주세요.`);
+                } else if (failMessages.length > 0 && successMessages.length > 0) {
+                    alert(`⚠️ 부분 연결 성공\n\n[연결됨]\n${successMessages.join('\n')}\n\n[연결 실패]\n${failMessages.join('\n')}`);
+                } else if (successMessages.length > 0) {
+                    alert(`🎉 API 연결 완료!\n\n${successMessages.join('\n')}\n\n정상적으로 기능을 이용할 수 있습니다.`);
+                }
+
+            } catch (error) {
+                console.error('API 키 검증 중 오류:', error);
+                alert(`❌ 연결 중 오류가 발생했습니다: ${error.message}`);
+            } finally {
+                btnApiSave.textContent = originalBtnText;
+                btnApiSave.disabled = false;
+            }
+        });
+
+        function updateApiStatus() {
+            const hasYt = !!state.apiKeys.youtube;
+            const hasGemini = !!state.apiKeys.gemini;
+
+            if (hasYt && hasGemini) {
+                apiStatus.textContent = '● 연결 완료 (YouTube, Gemini)';
+                apiStatus.style.color = 'var(--success)';
+            } else if (hasYt) {
+                apiStatus.textContent = '● 부분 연결 (YouTube만 활성)';
+                apiStatus.style.color = 'var(--warning)';
+            } else if (hasGemini) {
+                apiStatus.textContent = '● 부분 연결 (Gemini만 활성)';
+                apiStatus.style.color = 'var(--warning)';
+            } else {
+                apiStatus.textContent = '● Not Connected';
+                apiStatus.style.color = 'var(--danger)';
+            }
+        }
+
+        // --- Search & Metrics Logic ---
+        const searchState = {
+            allResults: [],
+            results: [],
+            selectedVideoIds: new Set()
+        };
+
+        const btnSearch = document.getElementById('btn-search');
+        const inputSearchQuery = document.getElementById('search-query');
+        const inputDateFrom = document.getElementById('filter-date-from');
+        const inputDateTo = document.getElementById('filter-date-to');
+        const selectDuration = document.getElementById('filter-duration');
+        const inputMinViews = document.getElementById('filter-views');
+        const inputMaxSubs = document.getElementById('filter-subs');
+        const presetTags = document.querySelectorAll('.preset-tag');
+        const resultsBody = document.getElementById('results-body');
+        const resultCount = document.getElementById('result-count');
+        const btnAnalyzeSelected = document.getElementById('btn-analyze-selected');
+
+        function initDefaultDates() {
+            const today = new Date();
+            const past30Days = new Date();
+            past30Days.setDate(today.getDate() - 30);
+            
+            inputDateTo.value = today.toISOString().split('T')[0];
+            inputDateFrom.value = past30Days.toISOString().split('T')[0];
+        }
+        initDefaultDates();
+
+        presetTags.forEach(tag => {
+            tag.addEventListener('click', (e) => {
+                const preset = e.currentTarget.getAttribute('data-preset');
+                const today = new Date();
+                
+                if (preset === 'viral') {
+                    const past7Days = new Date();
+                    past7Days.setDate(today.getDate() - 7);
+                    inputDateFrom.value = past7Days.toISOString().split('T')[0];
+                    inputDateTo.value = today.toISOString().split('T')[0];
+                    selectDuration.value = '60';
+                    inputMinViews.value = '50000';
+                    inputMaxSubs.value = '';
+                } else if (preset === 'small-channel') {
+                    const past30Days = new Date();
+                    past30Days.setDate(today.getDate() - 30);
+                    inputDateFrom.value = past30Days.toISOString().split('T')[0];
+                    inputDateTo.value = today.toISOString().split('T')[0];
+                    selectDuration.value = '60';
+                    inputMinViews.value = '10000';
+                    inputMaxSubs.value = '50000';
+                } else if (preset === 'trending') {
+                    const past1Day = new Date();
+                    past1Day.setDate(today.getDate() - 1);
+                    inputDateFrom.value = past1Day.toISOString().split('T')[0];
+                    inputDateTo.value = today.toISOString().split('T')[0];
+                    selectDuration.value = '60';
+                    inputMinViews.value = '5000';
+                    inputMaxSubs.value = '';
+                } else if (preset === 'reset') {
+                    initDefaultDates();
+                    selectDuration.value = '60';
+                    inputMinViews.value = '';
+                    inputMaxSubs.value = '';
+                }
+
+                if (searchState.allResults.length > 0) {
+                    applyFilters();
+                }
+            });
+        });
+
+        [inputDateFrom, inputDateTo, selectDuration, inputMinViews, inputMaxSubs].forEach(el => {
+            el.addEventListener('input', () => { if (searchState.allResults.length > 0) applyFilters(); });
+            el.addEventListener('change', () => { if (searchState.allResults.length > 0) applyFilters(); });
+        });
+
+        function parseISO8601Duration(durationStr) {
+            if (!durationStr) return 0;
+            const match = durationStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+            if (!match) return 0;
+            const hours = parseInt(match[1] || 0, 10);
+            const minutes = parseInt(match[2] || 0, 10);
+            const seconds = parseInt(match[3] || 0, 10);
+            return (hours * 3600) + (minutes * 60) + seconds;
+        }
+
+        function formatDuration(totalSeconds) {
+            if (!totalSeconds || isNaN(totalSeconds)) return '0:00';
+            const m = Math.floor(totalSeconds / 60);
+            const s = totalSeconds % 60;
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        btnSearch.addEventListener('click', async () => {
+            const query = inputSearchQuery.value.trim();
+            if (!query) {
+                alert('검색어를 입력해 주세요. (예: ChatGPT, 쇼츠, 여행)');
+                return;
+            }
+            if (!state.apiKeys.youtube) {
+                alert('YouTube API 키가 설정되지 않았습니다. 상단에서 키를 먼저 입력하고 저장해 주세요.');
+                return;
+            }
+
+            btnSearch.textContent = 'Searching...';
+            btnSearch.disabled = true;
+            resultsBody.innerHTML = '<tr><td colspan="8" style="padding: 36px; text-align: center; color: var(--text-secondary);">YouTube에서 영상 검색 및 분석 데이터를 불러오는 중...</td></tr>';
+            
+            try {
+                await executeSearch(query);
+                logToControlTower('v5', `유튜브 쇼츠 "${query}" 검색 및 바이럴 수치 집계 완료 (${searchState.results.length}건)`);
+            } catch (error) {
+                console.error(error);
+                resultsBody.innerHTML = `<tr><td colspan="8" style="padding: 36px; text-align: center; color: var(--danger);">Error: ${error.message}</td></tr>`;
+                alert(`⚠️ YouTube 검색 실패:\n${error.message}`);
+            } finally {
+                btnSearch.textContent = 'Search YouTube';
+                btnSearch.disabled = false;
+            }
+        });
+
+        async function executeSearch(query) {
+            const apiKey = state.apiKeys.youtube;
+            const maxResults = 50;
+            
+            let searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${encodeURIComponent(query)}&maxResults=${maxResults}&key=${apiKey}`;
+            
+            if (inputDateFrom.value) {
+                const dateFrom = new Date(inputDateFrom.value + 'T00:00:00Z');
+                searchUrl += `&publishedAfter=${dateFrom.toISOString()}`;
+            }
+            if (inputDateTo.value) {
+                const dateTo = new Date(inputDateTo.value + 'T23:59:59Z');
+                searchUrl += `&publishedBefore=${dateTo.toISOString()}`;
+            }
+
+            const searchRes = await fetch(searchUrl);
+            if (!searchRes.ok) {
+                const errData = await searchRes.json().catch(() => ({}));
+                const errMsg = errData.error?.message || `상태 코드: ${searchRes.status}`;
+                throw new Error(`YouTube API 요청 실패 (${errMsg})`);
+            }
+            const searchData = await searchRes.json();
+            
+            const videoIds = (searchData.items || []).map(item => item.id?.videoId).filter(Boolean);
+            if (videoIds.length === 0) {
+                searchState.allResults = [];
+                searchState.results = [];
+                resultsBody.innerHTML = '<tr><td colspan="8" style="padding: 36px; text-align: center; color: var(--text-secondary);">검색 결과가 없습니다. 다른 검색어나 날짜 범위를 시도해 보세요.</td></tr>';
+                resultCount.textContent = '(0 videos)';
+                return;
+            }
+
+            const videoUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${videoIds.join(',')}&key=${apiKey}`;
+            const videoRes = await fetch(videoUrl);
+            const videoData = await videoRes.json();
+
+            const channelIds = [...new Set((videoData.items || []).map(v => v.snippet.channelId))];
+            const channelUrl = `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${channelIds.join(',')}&key=${apiKey}`;
+            const channelRes = await fetch(channelUrl);
+            const channelData = await channelRes.json();
+            
+            const channelMap = {};
+            (channelData.items || []).forEach(ch => {
+                channelMap[ch.id] = ch;
+            });
+
+            searchState.allResults = (videoData.items || []).map(video => {
+                const channel = channelMap[video.snippet.channelId];
+                return calculateMetrics(video, channel);
+            });
+
+            applyFilters();
+        }
+
+        function applyFilters() {
+            if (!searchState.allResults || searchState.allResults.length === 0) {
+                searchState.results = [];
+                renderResults();
+                return;
+            }
+
+            const fromVal = inputDateFrom.value;
+            const toVal = inputDateTo.value;
+            const dateFrom = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+            const dateTo = toVal ? new Date(toVal + 'T23:59:59') : null;
+            
+            const durationFilter = selectDuration.value;
+            const minViews = inputMinViews.value ? parseInt(inputMinViews.value, 10) : null;
+            const maxSubs = inputMaxSubs.value ? parseInt(inputMaxSubs.value, 10) : null;
+
+            searchState.results = searchState.allResults.filter(item => {
+                const itemDate = new Date(item.publishedAt);
+                if (dateFrom && itemDate < dateFrom) return false;
+                if (dateTo && itemDate > dateTo) return false;
+
+                if (durationFilter === '60' && item.durationSec > 60) return false;
+                if (durationFilter === '180' && item.durationSec > 180) return false;
+                if (durationFilter === 'gt300' && item.durationSec <= 300) return false;
+
+                if (minViews !== null && !isNaN(minViews) && item.views < minViews) return false;
+                if (maxSubs !== null && !isNaN(maxSubs) && item.subs > maxSubs) return false;
+
+                return true;
+            });
+
+            searchState.results.sort((a, b) => b.viralScore - a.viralScore);
+            renderResults();
+        }
+
+        function calculateMetrics(video, channel) {
+            const stats = video.statistics || {};
+            const chStats = channel ? channel.statistics : null;
+            
+            const views = parseInt(stats.viewCount || 0);
+            const likes = parseInt(stats.likeCount || 0);
+            const comments = parseInt(stats.commentCount || 0);
+            const subs = chStats ? parseInt(chStats.subscriberCount || 0) : 0;
+            const chViews = chStats ? parseInt(chStats.viewCount || 0) : 0;
+            const chVideoCount = chStats ? parseInt(chStats.videoCount || 1) : 1;
+
+            const durationSec = parseISO8601Duration(video.contentDetails?.duration);
+            const publishedAt = new Date(video.snippet.publishedAt);
+            const now = new Date();
+            const hoursSinceUpload = Math.max((now - publishedAt) / (1000 * 60 * 60), 1);
+            
+            const viewsPerDay = (views / hoursSinceUpload) * 24;
+
+            let vsRatio = 0;
+            if (subs > 0) vsRatio = views / subs;
+
+            const chAvgViews = chViews / chVideoCount;
+            const outlier = chAvgViews > 0 ? views / chAvgViews : 1;
+
+            let engRate = 0;
+            if (views > 0) engRate = ((likes + comments) / views) * 100;
+
+            const normOutlier = Math.min(outlier / 10, 1) * 100;
+            const normVs = Math.min(vsRatio / 5, 1) * 100;
+            const normVelocity = Math.min(viewsPerDay / 100000, 1) * 100;
+            const normEng = Math.min(engRate / 10, 1) * 100;
+            
+            const daysSinceUpload = hoursSinceUpload / 24;
+            const normFreshness = Math.max(100 - (daysSinceUpload * 2), 0);
+
+            const viralScore = Math.round(
+                (normOutlier * 0.30) +
+                (normVs * 0.25) +
+                (normVelocity * 0.20) +
+                (normEng * 0.15) +
+                (normFreshness * 0.10)
+            );
+
+            return {
+                id: video.id,
+                thumbnail: video.snippet.thumbnails?.medium?.url || video.snippet.thumbnails?.default?.url || '',
+                title: video.snippet.title,
+                channelName: video.snippet.channelTitle,
+                publishedAt: video.snippet.publishedAt,
+                durationSec,
+                durationFormatted: formatDuration(durationSec),
+                views,
+                likes,
+                comments,
+                subs,
+                vsRatio,
+                viewsPerDay,
+                outlier,
+                engRate,
+                viralScore
+            };
+        }
+
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toLocaleString();
+        }
+
+        function renderResults() {
+            resultCount.textContent = `(${searchState.results.length} videos)`;
+            resultsBody.innerHTML = '';
+            
+            if (searchState.results.length === 0) {
+                resultsBody.innerHTML = '<tr><td colspan="8" style="padding: 36px; text-align: center; color: var(--text-muted); font-size: 13px;">조건에 맞는 영상이 없습니다. 필터를 조정해 보세요.</td></tr>';
+                btnAnalyzeSelected.disabled = true;
+                return;
+            }
+
+            searchState.results.forEach(item => {
+                const tr = document.createElement('tr');
+                
+                let vsBadge = item.vsRatio >= 3 ? `<span style="background:var(--success-bg); color:var(--success); border:1px solid rgba(16, 185, 129, 0.3); padding:2px 6px; border-radius:4px; font-size:11px; font-weight:700;">🔥 ${item.vsRatio.toFixed(1)}x</span>` : `${item.vsRatio.toFixed(1)}x`;
+                let outlierBadge = item.outlier >= 3 ? `<span style="background:var(--cyan-bg); color:var(--cyan); border:1px solid rgba(6, 182, 212, 0.3); padding:2px 6px; border-radius:4px; font-size:11px; font-weight:700;">🚀 ${item.outlier.toFixed(1)}x</span>` : `${item.outlier.toFixed(1)}x`;
+                
+                tr.innerHTML = `
+                    <td>
+                        <input type="checkbox" class="row-check" value="${item.id}">
+                    </td>
+                    <td style="display:flex; gap:12px; align-items:center;">
+                        <div style="position:relative; width:110px; height:62px; flex-shrink:0;">
+                            <img src="${item.thumbnail}" alt="thumb" style="width:100%; height:100%; object-fit:cover; border-radius:6px; border:1px solid var(--border-subtle);">
+                            <span style="position:absolute; bottom:3px; right:3px; background:rgba(0,0,0,0.8); color:#fff; font-size:10px; padding:1px 4px; border-radius:3px; font-family:'JetBrains Mono', monospace;">${item.durationFormatted}</span>
+                        </div>
+                        <div style="min-width:0;">
+                            <div style="font-size:13px; font-weight:600; color:#fff; margin-bottom:3px; max-width:280px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${item.title}">${item.title}</div>
+                            <div style="font-size:11px; color:var(--text-muted);">${item.channelName} • <span>${new Date(item.publishedAt).toLocaleDateString()}</span></div>
+                        </div>
+                    </td>
+                    <td style="font-size:13px; font-weight:700; color:#fff;">${formatNumber(item.views)}</td>
+                    <td style="font-size:13px; color:var(--text-secondary);">${formatNumber(item.subs)}</td>
+                    <td>${vsBadge}</td>
+                    <td style="font-size:12px; color:var(--text-secondary); font-family:'JetBrains Mono', monospace;">${formatNumber(item.viewsPerDay)}/d</td>
+                    <td>${outlierBadge}</td>
+                    <td>
+                        <span style="background: ${item.viralScore >= 80 ? 'linear-gradient(135deg, #6366F1, #4F46E5)' : 'var(--bg-surface-elevated)'}; color:#fff; padding:4px 9px; border-radius:10px; font-size:11px; font-weight:800; font-family:'JetBrains Mono', monospace; border:1px solid rgba(255,255,255,0.1);">
+                            ${item.viralScore}
+                        </span>
+                    </td>
+                `;
+                resultsBody.appendChild(tr);
+            });
+            
+            const checkAll = document.getElementById('check-all');
+            const rowChecks = document.querySelectorAll('.row-check');
+            
+            checkAll.checked = false;
+            checkAll.addEventListener('change', (e) => {
+                const isChecked = e.target.checked;
+                rowChecks.forEach(cb => cb.checked = isChecked);
+                updateAnalyzeButton();
+            });
+            
+            rowChecks.forEach(cb => {
+                cb.addEventListener('change', updateAnalyzeButton);
+            });
+        }
+
+        function updateAnalyzeButton() {
+            const checked = document.querySelectorAll('.row-check:checked');
+            btnAnalyzeSelected.disabled = checked.length === 0;
+            searchState.selectedVideoIds = new Set(Array.from(checked).map(cb => cb.value));
+        }
+
+        // --- Gemini AI Analysis Logic ---
+        const analyzeState = {
+            analyzedVideos: [],
+            analysisResult: null
+        };
+
+        const analyzeLoading = document.getElementById('analyze-loading');
+        const analyzeResultsContainer = document.getElementById('analyze-results-container');
+        const progressText = document.getElementById('analyze-progress-text');
+        
+        btnAnalyzeSelected.addEventListener('click', async () => {
+            if (!state.apiKeys.gemini) {
+                alert('Gemini API 키가 설정되지 않았습니다. 상단에서 Gemini API 키를 먼저 입력하고 저장해 주세요.');
+                return;
+            }
+            if (searchState.selectedVideoIds.size === 0) {
+                alert('분석할 영상을 최소 1개 이상 선택해 주세요.');
+                return;
+            }
+
+            const selectedVideos = searchState.results.filter(v => searchState.selectedVideoIds.has(v.id));
+            if (selectedVideos.length === 0) {
+                alert('선택된 영상 정보를 찾을 수 없습니다.');
+                return;
+            }
+
+            navigate('analyze');
+            analyzeLoading.style.display = 'block';
+            analyzeResultsContainer.style.display = 'none';
+
+            try {
+                progressText.textContent = `선택된 ${selectedVideos.length}개 영상의 댓글 및 반응 수집 중...`;
+                const commentsMap = {};
+                await Promise.all(selectedVideos.map(async (v) => {
+                    const cList = await fetchComments(v.id);
+                    commentsMap[v.id] = cList;
+                }));
+                
+                progressText.textContent = `Gemini AI가 ${selectedVideos.length}개 영상의 성공 패턴 및 Content DNA를 분석 중...`;
+                const analysisResult = await analyzeWithGemini(selectedVideos, commentsMap);
+                
+                analyzeState.analyzedVideos = selectedVideos;
+                analyzeState.analysisResult = analysisResult;
+                renderAnalysis(analysisResult, selectedVideos);
+                
+                analyzeLoading.style.display = 'none';
+                analyzeResultsContainer.style.display = 'block';
+
+                logToControlTower('v2', `쇼츠 ${selectedVideos.length}개 영상 교차 바이럴 역설계 및 시각 DNA 분석 완료`);
+            } catch (error) {
+                console.error(error);
+                progressText.textContent = "Error: " + error.message;
+                alert(`⚠️ 영상 분석 중 오류가 발생했습니다:\n${error.message}`);
+            }
+        });
+
+        async function fetchComments(videoId) {
+            const apiKey = state.apiKeys.youtube;
+            try {
+                const url = `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&maxResults=30&order=relevance&key=${apiKey}`;
+                const res = await fetch(url);
+                if(!res.ok) return [];
+                const data = await res.json();
+                return (data.items || []).map(item => item.snippet.topLevelComment.snippet.textOriginal);
+            } catch (e) {
+                return [];
+            }
+        }
+
+        // Gemini Dynamic Model Discovery & Resilient Fallback Runner
+        let availableGeminiModelsCache = null;
+
+        async function getAvailableGeminiModels(apiKey) {
+            if (availableGeminiModelsCache && availableGeminiModelsCache.length > 0) {
+                return availableGeminiModelsCache;
+            }
+
+            const fallbackList = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+
+            try {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const validModels = (data.models || [])
+                        .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+                        .map(m => m.name.replace('models/', ''));
+
+                    const sorted = validModels.sort((a, b) => {
+                        if (a.includes('2.0-flash')) return -1;
+                        if (b.includes('2.0-flash')) return 1;
+                        if (a.includes('flash')) return -1;
+                        if (b.includes('flash')) return 1;
+                        return 0;
+                    });
+
+                    if (sorted.length > 0) {
+                        availableGeminiModelsCache = sorted;
+                        return availableGeminiModelsCache;
+                    }
+                }
+            } catch (err) {
+                console.warn('[Gemini AI] Dynamic model discovery fallback:', err);
+            }
+
+            availableGeminiModelsCache = fallbackList;
+            return availableGeminiModelsCache;
+        }
+
+        async function callGemini(apiKey, prompt, isJson = true) {
+            const candidateModels = await getAvailableGeminiModels(apiKey);
+            
+            let lastError = null;
+            for (const model of candidateModels) {
+                try {
+                    const bodyPayload = {
+                        contents: [{ parts: [{ text: prompt }] }]
+                    };
+                    if (isJson) {
+                        bodyPayload.generationConfig = { responseMimeType: "application/json" };
+                    }
+
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(bodyPayload)
+                    });
+
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        const errMsg = errData.error?.message || `HTTP ${res.status}`;
+                        
+                        const isRetryable = res.status === 404 || res.status === 503 || res.status === 429 || res.status === 500;
+                        if (isRetryable) {
+                            lastError = new Error(`[${model}] ${errMsg}`);
+                            continue;
+                        }
+                        throw new Error(`Gemini API 요청 실패 (${model}): ${errMsg}`);
+                    }
+
+                    const data = await res.json();
+                    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                    return isJson ? JSON.parse(rawText) : rawText;
+                } catch (err) {
+                    lastError = err;
+                }
+            }
+            throw lastError || new Error('사용 가능한 Gemini Flash 모델을 찾을 수 없습니다.');
+        }
+
+        const ideationState = { ideas: [], selectedIdea: null };
+        const scriptState = { script: null, duration: 60, tone: '몰입감 있고 긴박한', target: '대중' };
+        const promptState = { prompts: [], bgmPrompt: null };
+
+        async function analyzeWithGemini(videos, commentsMap) {
+            const apiKey = state.apiKeys.gemini;
+            
+            let videosContext = videos.map((v, idx) => {
+                const comments = (commentsMap[v.id] || []).slice(0, 20);
+                return `
+========================================
+[Target Video #${idx + 1}]
+- YouTube Shorts URL: https://www.youtube.com/shorts/${v.id}
+- Video ID: ${v.id}
+- Title: ${v.title}
+- Channel: ${v.channelName}
+- Performance: Views ${v.views.toLocaleString()} (V/S Ratio: ${v.vsRatio.toFixed(1)}x, Viral Score: ${v.viralScore} / 100)
+- Duration: ${v.durationFormatted}
+- Description Snippet: ${(v.description || '').substring(0, 300)}
+- Audience Top Comments:
+${comments.length > 0 ? comments.map((c, i) => `  ${i + 1}. "${c}"`).join('\n') : '  (No top comments available)'}
+========================================
+`;
+            }).join('\n');
+
+            const isMulti = videos.length > 1;
+            const prompt = `
+You are the world's #1 YouTube Shorts Algorithm Reverse-Engineer & Master Cinematographer.
+Analyze the following ${videos.length} viral YouTube Shorts video(s) (including their Shorts URLs, titles, pacing metadata, and viewer comments) to perform a deep-dive reverse engineering.
+
+${isMulti ? 'Perform a CROSS-VIDEO SYNTHESIS: extract common viral mechanics, pacing secrets, visual framing rules, cinematic lighting, and retention formulas that made these videos achieve massive viral reach.' : 'Perform an exhaustive viral and cinematic breakdown of this specific video.'}
+
+Video Data:
+${videosContext}
+
+Analyze and return ONLY a valid JSON object matching this exact schema (No markdown fences, no code blocks, pure JSON):
+{
+    "viralMechanisms": [
+        { "title": "첫 1초 Hook", "icon": "⚡", "tactic": "첫 1초 동안 시청자를 멈추게 만든 시각/청각적 장치 분석", "analysis": "구체적인 대사, 자막 효과, 시각적 충격 요소 설명" },
+        { "title": "0~3초 시청자 붙잡는 장치", "icon": "🪝", "tactic": "스와이프 방지 심리적 트랩 및 오프닝 연출 공식", "analysis": "호기심을 유발하는 질문이나 예상 밖의 행동 분석" },
+        { "title": "문제 제기 (Problem Framing)", "icon": "❓", "tactic": "시청자의 결핍이나 공감을 자극하는 문제 설정 방식", "analysis": "시청자가 '내 이야기다' 또는 '이거 궁금하다'고 느끼게 한 포인트" },
+        { "title": "호기심 Gap (Curiosity Gap)", "icon": "🔍", "tactic": "끝까지 보지 않고는 못 배기게 만드는 미제(Mystery) 장치", "analysis": "정보의 일부만 보여주고 핵심은 뒤로 미룬 밀당 기술" },
+        { "title": "정보 공개 순서 (Pacing & Reveal)", "icon": "📈", "tactic": "지루할 틈을 주지 않는 정보 분배 및 빌드업 구조", "analysis": "단도직입 -> 근거 제시 -> 결정적 증거로 이어지는 템포" },
+        { "title": "반전 및 보상 (Twist / Payoff)", "icon": "🎁", "tactic": "기대를 뛰어넘는 클라이맥스 반전 또는 카타르시스 보상", "analysis": "시청자가 느낀 도파민 폭발 지점" },
+        { "title": "CTA (행동 유도 전략)", "icon": "📢", "tactic": "댓글 참여, 공유, 저장을 유도한 자연스러운 콜투액션", "analysis": "논쟁 유도형 질문, 공유 트리거 문구 등" },
+        { "title": "영상 길이 및 최적화", "icon": "⏱️", "tactic": "시청 완료율(AVD)을 극대화한 영상 길이 및 템포 전략", "analysis": "쇼츠 알고리즘상 완청 및 루프 재생을 유도한 길이 설계" },
+        { "title": "컷 전환 빈도 (Cut Pace)", "icon": "🎬", "tactic": "평균 컷 전환 주기(예: 1.2~1.8초) 및 화면 전환 역동성", "analysis": "줌인/줌아웃, B-roll 삽입, 시각적 자극 유지 기법" },
+        { "title": "자막 스타일 (Caption Style)", "icon": "📝", "tactic": "키네틱 타이포그래피, 하이라이트 컬러, 단어 단위 팝업", "analysis": "시선을 고정시키는 폰트, 색상 대비, 위치 전략" },
+        { "title": "BGM 및 효과음 타이밍", "icon": "🎵", "tactic": "비트 드롭, Whoosh/Pop 효과음, 음소거 완급조절", "analysis": "긴장감을 고조시키고 반전에서 강조하는 사운드 디자인" }
+    ],
+    "timelineStrategies": [
+        { "range": "0:00 ~ 0:03 (Hook)", "title": "시선 강탈 & 스와이프 방어", "tactic": "초반 3초간 시청자를 정지시키는 구체적 연출 및 멘트 전략", "psychologicalTrigger": "인지부조화 및 강렬한 시각적 도파민 자극" },
+        { "range": "0:03 ~ 0:15 (Build-up)", "title": "문제 심화 & 몰입 유도", "tactic": "흥미를 유지하며 시청자가 이탈하지 못하도록 호기심 증폭", "psychologicalTrigger": "손실 회피 심리 및 공감대 형성" },
+        { "range": "0:15 ~ 0:40 (Climax / Reveal)", "title": "핵심 전개 & 반전/보상", "tactic": "빠른 컷 전환과 함께 기대했던 진실/정보를 폭발적으로 공개", "psychologicalTrigger": "호기심 해소와 즉각적인 도파민 보상" },
+        { "range": "0:40 ~ Finish (Loop & CTA)", "title": "루프 유도 & 댓글 폭발", "tactic": "첫 장면과 자연스럽게 이어지는 무한 루프 또는 논쟁형 댓글 유도", "psychologicalTrigger": "자기 표현 욕구 및 지적 공유 본능" }
+    ],
+    "visualStyle": {
+        "lensAndFraming": "24mm 와이드 앵글 및 극초접사(Extreme Close-up)를 교차 활용한 압도적 몰입감의 샷 구성",
+        "cameraMovement": "피사체를 향해 빠르게 돌진하는 Crash Zoom 및 다이내믹 Push-in, 핸드헬드 미세 흔들림",
+        "lightingArchitecture": "사이버펑크 네온 림 라이트(Rim Light)와 극명한 명암 대비를 이루는 키아로스쿠로(Chiaroscuro) 시네마틱 조명",
+        "colorGrading": "청록과 오렌지(Teal & Orange)의 강렬한 보색 대비 및 고채도 하이라이트 팝 컬러",
+        "subjectComposition": "황금분할 3분할법과 정중앙 대칭 구도를 속도감 있게 교차, 깊은 피사계 심도(DoF 아웃포커싱)",
+        "textureAesthetic": "35mm 필름 그레인 질감과 언리얼 엔진 5 기반의 극사실적 8K 포토리얼리즘 렌더 룩",
+        "motionVFXPacing": "평균 1.2초 단위의 컷 전환, 스피드 램프(Speed Ramp), 글리치 트랜지션 및 키네틱 타이포 오버레이",
+        "promptModifiers": "8k resolution, cinematic lighting, shot on ARRI Alexa 35mm, volumetric atmosphere, octane render, photorealistic, dramatic rim light, hyper-detailed"
+    },
+    "contentDNA": {
+        "topicPattern": "대중이 당연하게 믿던 상식을 뒤엎는 충격적 반전형 지식/스토리",
+        "hookPattern": "첫 문장에 결론의 일부분이나 도발적인 질문을 던져 스와이프를 원천 차단하는 Hook",
+        "narrativePattern": "호기심 유발 -> 진실 공개 지연 -> 급격한 반전 전개 -> 매끄러운 숏폼 루프 마무리"
+    },
+    "commentInsights": [
+        { "category": "Positive", "insight": "시청자들이 '이거 진짜 몰랐다', '소름 돋는다'며 열광한 핵심 트리거" },
+        { "category": "Question", "insight": "영상 시청 후 후속편이나 추가 설명을 요구하며 알고리즘을 부스트한 질문들" },
+        { "category": "Request", "insight": "시청자들이 다음 쇼츠로 다뤄주길 희망하는 연관 주제 니즈" }
+    ]
+}
+`;
+
+            return await callGemini(apiKey, prompt, true);
+        }
+
+        function renderAnalysis(data, selectedVideos) {
+            const summaryList = document.getElementById('analyzed-videos-list');
+            const summaryTitle = document.getElementById('analyze-summary-title');
+            if (summaryTitle) {
+                summaryTitle.textContent = `Analyzed Videos (${selectedVideos.length}개 영상 ${selectedVideos.length > 1 ? '교차 종합 바이럴 역설계' : '심층 역설계 분석'})`;
+            }
+
+            if (summaryList) {
+                summaryList.innerHTML = selectedVideos.map(v => `
+                    <div style="display:flex; align-items:center; gap:12px; background:var(--bg-body); border:1px solid var(--border-light); padding:10px 14px; border-radius:10px; flex: 1 1 calc(50% - 12px); min-width:280px;">
+                        <img src="${v.thumbnail}" style="width:68px; height:42px; object-fit:cover; border-radius:6px; flex-shrink:0;">
+                        <div style="min-width:0; flex:1;">
+                            <div style="font-size:12px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${v.title}">${v.title}</div>
+                            <div style="font-size:11px; color:var(--text-secondary); margin-top:2px;">
+                                ${v.channelName} • 조회수 <strong>${formatNumber(v.views)}</strong> • 바이럴 점수 <strong style="color:#818CF8;">${v.viralScore}점</strong>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            const viralDiv = document.getElementById('viral-mechanisms-grid');
+            if (viralDiv && data.viralMechanisms) {
+                viralDiv.innerHTML = data.viralMechanisms.map(m => `
+                    <div style="background:var(--bg-body); padding:14px; border-radius:10px; border:1px solid var(--border-light); display:flex; flex-direction:column; gap:6px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:16px;">${m.icon || '🔥'}</span>
+                            <span style="font-weight:700; font-size:13px; color:#fff;">${m.title}</span>
+                        </div>
+                        <div style="font-size:12px; font-weight:600; color:#818CF8;">${m.tactic}</div>
+                        <div style="font-size:11px; color:var(--text-secondary); line-height:1.45; background:var(--bg-surface); padding:8px; border-radius:6px; margin-top:2px;">${m.analysis}</div>
+                    </div>
+                `).join('');
+            }
+
+            const timelineDiv = document.getElementById('timeline-strategies');
+            if (timelineDiv && data.timelineStrategies) {
+                timelineDiv.innerHTML = data.timelineStrategies.map(t => `
+                    <div style="background:var(--bg-body); padding:14px 18px; border-radius:10px; border-left:4px solid var(--primary); border-top:1px solid var(--border-light); border-right:1px solid var(--border-light); border-bottom:1px solid var(--border-light);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+                            <span style="font-size:11px; font-weight:800; background:var(--primary-glow); color:#A5B4FC; padding:3px 8px; border-radius:4px; font-family:'JetBrains Mono', monospace;">${t.range}</span>
+                            <span style="font-size:13px; font-weight:700; color:#fff;">${t.title}</span>
+                        </div>
+                        <div style="font-size:13px; font-weight:500; color:var(--text-primary); margin-bottom:4px; line-height:1.4;">${t.tactic}</div>
+                        <div style="font-size:11px; color:var(--text-secondary);">💡 <strong>심리 트리거:</strong> ${t.psychologicalTrigger}</div>
+                    </div>
+                `).join('');
+            }
+
+            const visualDiv = document.getElementById('visual-style-dna');
+            if (visualDiv && data.visualStyle) {
+                const vs = data.visualStyle;
+                const styleItems = [
+                    { label: '렌즈 & 화각 (Lens & Framing)', val: vs.lensAndFraming || vs.cameraAngle, icon: '📷' },
+                    { label: '카메라 무빙 & 앵글 (Camera Motion)', val: vs.cameraMovement || '다이내믹 Push-in & Crash Zoom', icon: '🎥' },
+                    { label: '조명 설계 & 무드 (Lighting Architecture)', val: vs.lightingArchitecture || vs.lightingMood, icon: '💡' },
+                    { label: '컬러 그레이딩 & 팔레트 (Color LUT)', val: vs.colorGrading || vs.colorPalette, icon: '🎨' },
+                    { label: '피사체 배치 & 구도 (Composition & Depth)', val: vs.subjectComposition || '3분할 구도 및 깊은 심도', icon: '📐' },
+                    { label: '텍스처 & 렌더 룩 (Texture & Aesthetic)', val: vs.textureAesthetic || vs.artStyle, icon: '🖼️' },
+                    { label: '컷 전환 템포 & VFX (Motion Pacing)', val: vs.motionVFXPacing || vs.transitionPace, icon: '⚡' },
+                    { label: 'AI 프롬프트 핵심 모디파이어 (Prompt Keywords)', val: vs.promptModifiers || 'cinematic, 8k, photorealistic, volumetric light', icon: '🏷️' }
+                ];
+                visualDiv.innerHTML = styleItems.map(s => `
+                    <div style="background:var(--bg-body); padding:14px; border-radius:10px; border:1px solid var(--border-light); display:flex; flex-direction:column; justify-content:space-between;">
+                        <div>
+                            <div style="font-size:11px; font-weight:800; color:#818CF8; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                                <span>${s.icon}</span> <span>${s.label}</span>
+                            </div>
+                            <div style="font-size:12px; font-weight:500; color:var(--text-primary); line-height:1.45;">${s.val}</div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            const commentDiv = document.getElementById('comment-insights');
+            if (commentDiv && data.commentInsights) {
+                commentDiv.innerHTML = data.commentInsights.map(c => {
+                    let badgeColor = c.category === 'Positive' ? 'var(--success)' : c.category === 'Negative' ? 'var(--danger)' : 'var(--warning)';
+                    let badgeBg = c.category === 'Positive' ? 'var(--success-bg)' : c.category === 'Negative' ? 'var(--danger-bg)' : 'var(--warning-bg)';
+                    return `
+                    <div style="display:flex; gap:12px; align-items:flex-start; border-bottom:1px solid var(--border-subtle); padding:10px 0;">
+                        <span style="font-size:10px; font-weight:800; color:${badgeColor}; background:${badgeBg}; border:1px solid ${badgeColor}; padding:3px 8px; border-radius:4px; width:70px; text-align:center; flex-shrink:0;">${c.category}</span>
+                        <span style="font-size:13px; color:var(--text-primary); line-height:1.45;">${c.insight}</span>
+                    </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        document.getElementById('btn-goto-ideate').addEventListener('click', () => {
+            navigate('ideate');
+            if (typeof triggerIdeation === 'function') triggerIdeation();
+        });
+
+        // --- Ideation Logic ---
+        async function triggerIdeation() {
+            document.getElementById('ideate-loading').style.display = 'block';
+            document.getElementById('ideate-results-container').style.display = 'none';
+            
+            const apiKey = state.apiKeys.gemini;
+            const dna = analyzeState.analysisResult?.contentDNA || {};
+            const query = inputSearchQuery.value || '쇼츠 트렌드';
+            
+            const prompt = `
+You are a viral YouTube Shorts Producer who has generated billions of views.
+Based on the search keyword "${query}" and the extracted Content DNA & Viral Mechanics below:
+
+[Content DNA]
+- Topic Pattern: ${dna.topicPattern || '반전 지식 및 호기심 유발'}
+- Hook Pattern: ${dna.hookPattern || '첫 1초 시선 강탈'}
+- Narrative Pattern: ${dna.narrativePattern || '긴박한 전개 및 루프 마무리'}
+
+Generate exactly 6 distinctive, ultra-clickable YouTube Shorts content ideas tailored for maximum viral potential.
+
+Return ONLY a valid JSON object matching this schema (pure JSON, no markdown backticks):
+{
+    "ideas": [
+        {
+            "title": "클릭하지 않고는 못 배기는 직관적 쇼츠 제목 (한국어)",
+            "hook": "첫 1초에 귀와 눈을 때리는 강력한 오프닝 멘트/화면 (한국어)",
+            "hookFormula": "사용된 훅 공식 (예: 인지부조화 훅, 손실회피 질문 훅, 충격적 시각증거 훅 등)",
+            "strategy": "영상 전체를 관통하는 스토리텔링 및 시청지속시간(AVD) 극대화 전략 (한국어)",
+            "storylineRoadmap": [
+                { "phase": "0~3초", "action": "시선 강탈 및 호기심 갭 생성" },
+                { "phase": "3~15초", "action": "상황 심화 및 이탈 방지 미끼 투척" },
+                { "phase": "15~40초", "action": "진실 공개 및 도파민 터지는 클라이맥스" },
+                { "phase": "40초~끝", "action": "반전 보상 및 무한 루프 / 댓글 참여 유도" }
+            ],
+            "whyItWorks": "시청자 심리학적 관점에서 이 아이디어가 폭발할 수밖에 없는 이유",
+            "expectedRetention": "85%+",
+            "potentialScore": 96
+        }
+    ]
+}
+`;
+            
+            try {
+                const ideasData = await callGemini(apiKey, prompt, true);
+                ideationState.ideas = ideasData.ideas || [];
+                renderIdeas();
+                logToControlTower('v1', `쇼츠 신규 바이럴 6개 아이디어 발굴 완료`);
+            } catch (e) {
+                console.error(e);
+                alert(`소재 도출 중 오류: ${e.message}`);
+                document.getElementById('ideate-loading').style.display = 'none';
+            }
+        }
+
+        function renderIdeas() {
+            document.getElementById('ideate-loading').style.display = 'none';
+            document.getElementById('ideate-results-container').style.display = 'block';
+            
+            const container = document.getElementById('idea-cards');
+            container.innerHTML = ideationState.ideas.map((idea, index) => `
+                <div class="card" style="margin-bottom:0; display:flex; flex-direction:column; justify-content:space-between; border:1px solid var(--border-light); background:var(--bg-surface); transition:all 0.2s ease;">
+                    <div>
+                        <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:10px; gap:8px;">
+                            <span style="font-size:10px; font-weight:800; background:var(--primary-glow); color:#A5B4FC; padding:2px 8px; border-radius:4px; font-family:'JetBrains Mono', monospace;">IDEA #${index + 1}</span>
+                            <div style="display:flex; gap:4px; align-items:center;">
+                                <span style="background:var(--success-bg); color:var(--success); border:1px solid rgba(16, 185, 129, 0.3); padding:2px 6px; border-radius:4px; font-size:10px; font-weight:bold;">잠재점수 ${idea.potentialScore || 90}점</span>
+                                <span style="background:var(--bg-body); color:var(--text-secondary); padding:2px 6px; border-radius:4px; font-size:10px;">완청 ${idea.expectedRetention || '80%+'}</span>
+                            </div>
+                        </div>
+                        <h3 style="font-size:15px; font-weight:700; line-height:1.4; margin-bottom:10px; color:#fff;">${idea.title}</h3>
+                        
+                        <div style="background:var(--bg-body); border-left:3px solid var(--primary); padding:10px 12px; border-radius:6px; margin-bottom:10px;">
+                            <div style="font-size:10px; font-weight:700; color:#818CF8; text-transform:uppercase; margin-bottom:2px;">⚡ 1초 킬러 훅</div>
+                            <div style="font-size:13px; font-weight:600; color:#fff; line-height:1.4;">"${idea.hook}"</div>
+                            <div style="font-size:11px; color:var(--text-secondary); margin-top:3px;">공식: <em>${idea.hookFormula || '호기심 갭 훅'}</em></div>
+                        </div>
+
+                        <div style="font-size:12px; color:var(--text-secondary); line-height:1.45; margin-bottom:14px;">
+                            <strong style="color:var(--text-primary);">핵심 전략:</strong> ${idea.strategy || idea.whyItWorks}
+                        </div>
+                    </div>
+
+                    <button class="btn-primary" onclick="selectIdea(${index})" style="width:100%; font-size:13px; padding:10px; margin-top:8px;">
+                        이 주제로 기획 확정하기 →
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        window.selectIdea = function(index) {
+            ideationState.selectedIdea = ideationState.ideas[index];
+            navigate('select');
+            
+            const idea = ideationState.selectedIdea;
+            document.getElementById('topic-detail-card').style.display = 'block';
+            document.getElementById('topic-title').textContent = idea.title;
+            
+            const scoreBadge = document.getElementById('topic-score-badge');
+            if (scoreBadge) {
+                scoreBadge.textContent = `잠재력 ${idea.potentialScore || 95}점 • 완청률 ${idea.expectedRetention || '85%'}`;
+            }
+
+            document.getElementById('topic-details').innerHTML = `
+                <div style="background:var(--bg-body); padding:14px; border-radius:10px; border-left:4px solid var(--primary); border:1px solid var(--border-light);">
+                    <div style="font-size:11px; font-weight:800; color:#818CF8; margin-bottom:4px;">🔥 1초 킬러 훅 & 연출 공식</div>
+                    <div style="font-size:14px; font-weight:700; color:#fff; margin-bottom:4px;">"${idea.hook}"</div>
+                    <div style="font-size:12px; color:var(--text-secondary);">적용 공식: <strong>${idea.hookFormula || '호기심 갭 & 스와이프 방어 훅'}</strong></div>
+                </div>
+
+                <div style="background:var(--bg-body); padding:14px; border-radius:10px; border:1px solid var(--border-light);">
+                    <div style="font-size:11px; font-weight:800; color:#818CF8; margin-bottom:4px;">🎯 스토리 전개 및 완청 극대화 전략</div>
+                    <div style="font-size:12px; color:var(--text-primary); line-height:1.5;">${idea.strategy || idea.whyItWorks}</div>
+                </div>
+
+                <div style="background:var(--bg-body); padding:14px; border-radius:10px; border:1px solid var(--border-light);">
+                    <div style="font-size:11px; font-weight:800; color:#818CF8; margin-bottom:4px;">🧠 바이럴 심리학적 성공 요인</div>
+                    <div style="font-size:12px; color:var(--text-primary); line-height:1.5;">${idea.whyItWorks}</div>
+                </div>
+            `;
+
+            const timelinePreview = document.getElementById('topic-timeline-preview');
+            if (timelinePreview) {
+                const roadmap = idea.storylineRoadmap || [
+                    { phase: "0~3초", action: "초강력 훅으로 스와이프 방어 및 호기심 유발" },
+                    { phase: "3~15초", action: "문제 심화 및 기대감 증폭" },
+                    { phase: "15~40초", action: "결정적 단서 및 빠른 템포의 진실 공개" },
+                    { phase: "40초~끝", action: "도파민 보상 & 댓글/공유 유도 루프" }
+                ];
+
+                timelinePreview.innerHTML = roadmap.map(r => `
+                    <div style="background:var(--bg-surface); border:1px solid var(--border-light); padding:10px 14px; border-radius:8px;">
+                        <span style="font-size:10px; font-weight:800; color:#A5B4FC; background:var(--primary-glow); padding:2px 6px; border-radius:4px; font-family:'JetBrains Mono', monospace;">${r.phase}</span>
+                        <div style="font-size:13px; font-weight:600; color:#fff; margin-top:4px;">${r.action}</div>
+                    </div>
+                `).join('');
+            }
+        };
+
+        document.getElementById('btn-confirm-topic').addEventListener('click', () => {
+            navigate('script');
+            document.getElementById('script-config').style.display = 'block';
+        });
+
+        // --- Script Generation Logic ---
+        const selectTone = document.getElementById('script-tone');
+        const customToneWrapper = document.getElementById('custom-tone-wrapper');
+        if (selectTone && customToneWrapper) {
+            selectTone.addEventListener('change', () => {
+                if (selectTone.value === 'custom') {
+                    customToneWrapper.style.display = 'flex';
+                    const customInput = document.getElementById('script-tone-custom');
+                    if (customInput) customInput.focus();
+                } else {
+                    customToneWrapper.style.display = 'none';
+                }
+            });
+        }
+
+        async function generateOrRegenerateScript(feedbackText = '') {
+            document.getElementById('script-loading').style.display = 'block';
+            document.getElementById('script-results-container').style.display = 'none';
+            
+            const apiKey = state.apiKeys.gemini;
+            const topic = ideationState.selectedIdea;
+            const durationInput = parseInt(document.getElementById('script-duration').value, 10);
+            const duration = !isNaN(durationInput) && durationInput >= 10 ? durationInput : 60;
+            
+            let tone = selectTone ? selectTone.value : '몰입감 있고 긴박한';
+            if (tone === 'custom') {
+                const customVal = document.getElementById('script-tone-custom')?.value.trim();
+                tone = customVal || '사용자 지정 독창적인 톤';
+            }
+
+            const target = document.getElementById('script-target').value || '대중';
+            const userInitialFeedback = document.getElementById('topic-feedback').value;
+            const visualStyle = analyzeState.analysisResult?.visualStyle || {};
+
+            scriptState.duration = duration;
+            scriptState.tone = tone;
+            scriptState.target = target;
+
+            const isRegen = !!feedbackText;
+            const loadingText = document.getElementById('script-loading-text');
+            if (loadingText) {
+                loadingText.textContent = isRegen ? '피드백을 반영하여 씬별 1문장 원칙으로 대본 재작성 중...' : `목표 길이 ${duration}초에 맞춘 초밀도 1문장 대본 작성 중...`;
+            }
+
+            const minScenes = Math.max(3, Math.floor(duration / 6));
+            const maxScenes = Math.max(minScenes + 1, Math.ceil(duration / 4));
+
+            const prompt = `
+You are an award-winning YouTube Shorts Head Scriptwriter & Director.
+Write a production-ready, scene-by-scene YouTube Shorts script engineered for ultra-high audience retention (AVD > 85%).
+
+[Project Blueprint]
+- Topic Title: ${topic.title}
+- 1-Second Hook: ${topic.hook}
+- Strategic Framework: ${topic.strategy || topic.whyItWorks}
+- Visual Style Blueprint: ${JSON.stringify(visualStyle)}
+
+[Production Specifications]
+- Target Total Duration: EXACTLY ${duration} seconds (Generate between ${minScenes} and ${maxScenes} concise scenes)
+- Narration Tone: ${tone}
+- Target Audience: ${target}
+- Initial Directives: ${userInitialFeedback || 'None'}
+${isRegen ? `\n[CRITICAL USER REVISION FEEDBACK - MUST APPLY THESE CHANGES STRICTLY]:\n${feedbackText}\n[Previous Script]:\n${JSON.stringify(scriptState.script)}` : ''}
+
+[STRICT SCRIPTWRITING CONSTRAINTS - MUST FOLLOW 100%]
+1. 🚨 STRICT SINGLE SENTENCE RULE (한 문장 엄수): Every scene's narration MUST be EXACTLY ONE single, punchy Korean spoken sentence (절대 두 문장 이상 쓰지 마시오. 한 씬에 오직 1개의 완결된 단문 문장만 작성).
+2. SCENE 1 (0~3s) MUST immediately speak the hook with high impact.
+3. Spoken Korean Dialogue (자연스러운 한국어 구어체): Write rhythmic, colloquial, and engaging dialogue without awkward translations.
+4. Visual Direction: Describe exact camera movement, lighting, and action reflecting the Visual Style DNA.
+5. Provide SFX & BGM cues for video editors.
+
+Return ONLY a valid JSON object matching this schema (pure JSON, no markdown backticks):
+{
+    "scenes": [
+        {
+            "sceneNumber": 1,
+            "time": "0:00 - 0:03",
+            "narration": "오직 단 1개의 강렬한 단문 한국어 대사 (두 문장 절대 금지)",
+            "visual": "카메라 앵글, 조명, 피사체 액션 디테일 (한국어)",
+            "caption": "화면에 큼직하게 뜰 핵심 키워드 자막",
+            "sfx": "효과음 및 BGM 타이밍 (예: Fast Whoosh + Sub Bass Drop)"
+        }
+    ]
+}
+`;
+
+            try {
+                const scriptData = await callGemini(apiKey, prompt, true);
+                scriptState.script = scriptData.scenes || [];
+                renderScript();
+                logToControlTower('v1', `쇼츠 ${duration}초 대본 (${scriptState.script.length}씬) 작성 완료 (1문장 원칙 엄수)`);
+            } catch(e) {
+                console.error(e);
+                alert(`대본 생성 중 오류: ${e.message}`);
+                document.getElementById('script-loading').style.display = 'none';
+            }
+        }
+
+        document.getElementById('btn-generate-script').addEventListener('click', () => {
+            generateOrRegenerateScript();
+        });
+
+        document.getElementById('btn-regenerate-script').addEventListener('click', () => {
+            const feedback = document.getElementById('script-revision-feedback').value.trim();
+            if (!feedback) {
+                alert('수정하고 싶은 피드백 내용을 입력해주세요! (예: 1번 씬을 더 자극적으로 바꿔줘, 중반부 전개를 더 빠르게 해줘 등)');
+                return;
+            }
+            generateOrRegenerateScript(feedback);
+        });
+
+        function renderScript() {
+            document.getElementById('script-loading').style.display = 'none';
+            document.getElementById('script-results-container').style.display = 'block';
+            
+            document.getElementById('script-scenes').innerHTML = scriptState.script.map(s => `
+                <div style="border:1px solid var(--border-light); padding:16px; border-radius:10px; background:var(--bg-body); display:flex; flex-direction:column; gap:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-subtle); padding-bottom:8px;">
+                        <span style="font-size:12px; font-weight:800; color:#A5B4FC; background:var(--primary-glow); padding:2px 8px; border-radius:4px; font-family:'JetBrains Mono', monospace;">SCENE ${s.sceneNumber}</span>
+                        <span style="font-size:12px; color:var(--text-secondary); font-family:'JetBrains Mono', monospace;">⏱️ ${s.time}</span>
+                    </div>
+                    
+                    <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:14px;">
+                        <div style="background:var(--bg-surface); padding:12px; border-radius:8px; border:1px solid var(--border-light);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                <div style="font-size:10px; font-weight:800; color:#818CF8;">🎙️ NARRATION (단문 대사)</div>
+                                <span style="font-size:9px; color:var(--success); background:var(--success-bg); border:1px solid rgba(16, 185, 129, 0.3); padding:1px 5px; border-radius:3px; font-weight:700;">1문장</span>
+                            </div>
+                            <div style="font-size:14px; font-weight:700; color:#fff; line-height:1.5;">${s.narration}</div>
+                            <div style="margin-top:8px; font-size:11px; color:var(--text-secondary);">
+                                📝 <strong>화면 자막:</strong> <span style="color:#fff; font-weight:600;">"${s.caption || ''}"</span>
+                            </div>
+                        </div>
+
+                        <div style="background:var(--bg-surface); padding:12px; border-radius:8px; border:1px solid var(--border-light); display:flex; flex-direction:column; justify-content:space-between;">
+                            <div>
+                                <div style="font-size:10px; font-weight:800; color:var(--warning); margin-bottom:4px;">🎬 VISUAL & CAMERA</div>
+                                <div style="font-size:12px; color:var(--text-primary); line-height:1.45;">${s.visual}</div>
+                            </div>
+                            <div style="margin-top:8px; font-size:11px; color:#A5B4FC; font-weight:600;">
+                                🎵 <strong>SFX / 사운드:</strong> ${s.sfx || 'Fast transition whoosh'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // --- Visual Prompts & Master BGM Generation Logic ---
+        document.getElementById('btn-goto-prompts').addEventListener('click', async () => {
+            navigate('prompts');
+            document.getElementById('prompts-loading').style.display = 'block';
+            document.getElementById('prompts-results-container').style.display = 'none';
+
+            const apiKey = state.apiKeys.gemini;
+            const scenes = scriptState.script || [];
+            const topic = ideationState.selectedIdea || {};
+            const vs = analyzeState.analysisResult?.visualStyle || {
+                lensAndFraming: "24mm wide angle, extreme close-up",
+                cameraMovement: "Rapid push-in zoom, whip pan",
+                lightingArchitecture: "Cyberpunk neon rim light, moody chiaroscuro",
+                colorGrading: "Teal and orange cinematic LUT",
+                subjectComposition: "Rule of thirds with shallow depth of field",
+                textureAesthetic: "35mm film grain, 8k photorealism",
+                motionVFXPacing: "1.2s cut pace with speed ramp",
+                promptModifiers: "8k resolution, cinematic lighting, shot on ARRI Alexa 35mm, volumetric atmosphere"
+            };
+            
+            const prompt = `
+You are an elite AI Cinematographer, Prompt Engineer & Sound Designer specialized in Midjourney v6, AI Video generators (Kling, Runway Gen-3, Luma), and AI Music generators (Suno v3.5, Udio).
+
+Based on the YouTube Shorts Project (${topic.title || 'Shorts'}), the script scenes, and the 8-factor Visual & Sound Style DNA below, generate:
+1. One comprehensive **Master BGM Prompt** covering the entire video's dynamic soundtrack and emotional arc.
+2. Ultra-detailed **Midjourney v6 Image Prompts** and **AI Video Motion Prompts** for each scene.
+
+[Visual & Sound Style DNA Blueprint]
+- Topic & Hook: "${topic.hook || ''}" (${topic.title || ''})
+- Lens & Framing: ${vs.lensAndFraming || vs.cameraAngle}
+- Camera Movement: ${vs.cameraMovement || 'Dynamic push-in'}
+- Lighting Architecture: ${vs.lightingArchitecture || vs.lightingMood}
+- Color Grading & Palette: ${vs.colorGrading || vs.colorPalette}
+- Subject Composition: ${vs.subjectComposition || 'Center focused depth'}
+- Texture & Render Aesthetic: ${vs.textureAesthetic || vs.artStyle}
+- Motion VFX & Pacing: ${vs.motionVFXPacing || vs.transitionPace}
+- Key Prompt Modifiers: ${vs.promptModifiers || '8k, cinematic, photorealistic'}
+
+[Script Scenes]
+${JSON.stringify(scenes)}
+
+[Generation Guidelines]
+1. **Master BGM Prompt (전체 스크립트 총괄 1개)**:
+   - Provide genre/mood, ideal BPM, primary instrumentation, sound dynamics (0~3s beat drop ➔ build-up ➔ climax), and an English prompt ready for Suno v3.5 / Udio.
+2. **Scene Visual Prompts**:
+   - Image Prompt (Midjourney v6): In English with subjects, framing, lighting, 35mm lens specs, ending with \`--ar 9:16 --style raw --v 6.0\`.
+   - Video Motion Prompt (AI Video): In English with dynamic camera movement (push-in, crash zoom, whip pan) and character action physics.
+
+Return ONLY a valid JSON object matching this schema (pure JSON, no markdown backticks):
+{
+    "bgmPrompt": {
+        "title": "BGM 트랙 콘셉트명 (한국어)",
+        "genreAndMood": "장르, 분위기 및 무드 (한국어)",
+        "bpm": "130 ~ 140 BPM",
+        "instrumentation": "핵심 악기 및 사운드 구성 (한국어, 예: 디스토션 808 베이스, 긴장감 있는 스트링, 트랩 하이햇)",
+        "dynamicStructure": "0~3s 강렬한 비트 드롭 ➔ 3~15s 긴장감 빌드업 ➔ 15~40s 클라이맥스 전개 ➔ Outro 루프 페이드",
+        "sunoPrompt": "Complete English Prompt for Suno v3.5 / Udio (e.g., Aggressive dark phonk trap, 135 bpm, heavy distorted 808 sub-bass, suspenseful synth melody, punchy punchy drums, cinematic drop, high energy background music for viral shorts, instrumental only, no vocals)",
+        "audioMixingNotes": "오디오 믹싱 가이드 (한국어, 예: 1초 훅에서 비트 드롭 동기화, 나레이션 주파수 덕킹 처리)"
+    },
+    "prompts": [
+        {
+            "sceneNumber": 1,
+            "sceneSummary": "씬 요약 (한국어)",
+            "imagePrompt": "Midjourney v6 Prompt in English with camera lens, lighting, and parameters --ar 9:16 --style raw --v 6.0",
+            "videoPrompt": "AI Video Motion prompt in English with camera movement and action physics"
+        }
+    ]
+}
+`;
+
+            try {
+                const promptData = await callGemini(apiKey, prompt, true);
+                promptState.prompts = promptData.prompts || [];
+                promptState.bgmPrompt = promptData.bgmPrompt || null;
+                renderPrompts(promptData);
+                logToControlTower('v3', `쇼츠 Midjourney v6 및 Suno BGM 마스터 프롬프트 생성 완료`);
+            } catch(e) {
+                console.error(e);
+                alert(`프롬프트 생성 중 오류: ${e.message}`);
+                document.getElementById('prompts-loading').style.display = 'none';
+            }
+        });
+
+        function copyText(btn) {
+            const text = btn.getAttribute('data-copy') || '';
+            navigator.clipboard.writeText(text).then(() => {
+                const orig = btn.textContent;
+                btn.textContent = 'Copied!';
+                btn.style.borderColor = 'var(--success)';
+                btn.style.color = 'var(--success)';
+                setTimeout(() => { 
+                    btn.textContent = orig;
+                    btn.style.borderColor = '';
+                    btn.style.color = '';
+                }, 1500);
+            }).catch(err => {
+                console.error('Clipboard copy failed:', err);
+            });
+        }
+
+        function renderPrompts(promptData) {
+            document.getElementById('prompts-loading').style.display = 'none';
+            document.getElementById('prompts-results-container').style.display = 'block';
+            
+            const bgmContainer = document.getElementById('bgm-prompt-container');
+            const bgm = promptData.bgmPrompt;
+            if (bgmContainer && bgm) {
+                bgmContainer.innerHTML = `
+                <div style="border:1px solid rgba(99, 102, 241, 0.4); background:var(--bg-surface); padding:20px; border-radius:12px; box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:20px;">🎵</span>
+                            <div>
+                                <h3 style="font-size:16px; font-weight:800; color:#fff;">${bgm.title || 'Master Background Music (BGM)'}</h3>
+                                <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">
+                                    ${bgm.genreAndMood || '바이럴 쇼츠 전용 BGM'} • <strong style="color:#A5B4FC;">${bgm.bpm || '135 BPM'}</strong>
+                                </div>
+                            </div>
+                        </div>
+                        <span style="font-size:10px; font-weight:800; background:var(--primary-glow); color:#A5B4FC; padding:3px 8px; border-radius:6px; font-family:'JetBrains Mono', monospace;">MASTER SOUNDTRACK</span>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:14px;">
+                        <div style="background:var(--bg-body); padding:10px 12px; border-radius:6px; border:1px solid var(--border-light);">
+                            <div style="font-size:10px; font-weight:800; color:#818CF8; margin-bottom:2px;">🥁 악기 구성</div>
+                            <div style="font-size:12px; color:var(--text-primary); line-height:1.4;">${bgm.instrumentation || '808 Bass, Synth Lead, Punchy Drums'}</div>
+                        </div>
+                        <div style="background:var(--bg-body); padding:10px 12px; border-radius:6px; border:1px solid var(--border-light);">
+                            <div style="font-size:10px; font-weight:800; color:var(--warning); margin-bottom:2px;">📈 타임라인 다이내믹 전개</div>
+                            <div style="font-size:12px; color:var(--text-primary); line-height:1.4;">${bgm.dynamicStructure || '0~3s Hook Drop -> Climax -> Loop Outro'}</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:12px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <span style="font-size:11px; font-weight:800; background:var(--sidebar-active-bg); color:#A5B4FC; padding:2px 8px; border-radius:4px;">🎧 SUNO AI / UDIO AI MUSIC PROMPT</span>
+                            <button class="btn-primary" style="padding:4px 12px; font-size:11px;" onclick="copyText(this)" data-copy="${(bgm.sunoPrompt || '').replace(/"/g, '&quot;')}">Copy BGM Prompt</button>
+                        </div>
+                        <div style="font-size:12px; font-family:'JetBrains Mono', monospace; background:var(--bg-body); border:1px solid var(--border-light); padding:12px; border-radius:6px; line-height:1.5; color:var(--text-primary); word-break:break-word;">
+                            ${bgm.sunoPrompt || ''}
+                        </div>
+                    </div>
+
+                    <div style="font-size:11px; color:var(--text-secondary); background:var(--bg-body); padding:8px 12px; border-radius:6px; border-left:3px solid var(--primary);">
+                        💡 <strong>오디오 믹싱 팁:</strong> ${bgm.audioMixingNotes || '나레이션 대사 구간에서 BGM 볼륨을 -6dB~-10dB 덕킹 처리하세요.'}
+                    </div>
+                </div>
+                `;
+            }
+
+            const prompts = promptData.prompts || [];
+            document.getElementById('prompts-list').innerHTML = prompts.map(p => `
+                <div style="border:1px solid var(--border-light); padding:18px; border-radius:10px; background:var(--bg-surface);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <span style="font-size:12px; font-weight:800; color:#A5B4FC; background:var(--primary-glow); padding:2px 8px; border-radius:4px; font-family:'JetBrains Mono', monospace;">SCENE ${p.sceneNumber}</span>
+                        <span style="font-size:12px; color:var(--text-secondary);">${p.sceneSummary || ''}</span>
+                    </div>
+                    
+                    <div style="margin-bottom:14px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <span style="font-size:11px; font-weight:800; background:var(--sidebar-active-bg); color:#A5B4FC; padding:2px 8px; border-radius:4px;">🖼️ MIDJOURNEY V6 IMAGE PROMPT (9:16)</span>
+                            <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="copyText(this)" data-copy="${(p.imagePrompt || '').replace(/"/g, '&quot;')}">Copy Prompt</button>
+                        </div>
+                        <div style="font-size:12px; font-family:'JetBrains Mono', monospace; background:var(--bg-body); border:1px solid var(--border-light); padding:10px; border-radius:6px; line-height:1.5; color:var(--text-primary); word-break:break-word;">${p.imagePrompt}</div>
+                    </div>
+
+                    <div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <span style="font-size:11px; font-weight:800; background:var(--success-bg); color:var(--success); border:1px solid rgba(16, 185, 129, 0.3); padding:2px 8px; border-radius:4px;">🎥 AI VIDEO MOTION PROMPT (KLING / RUNWAY)</span>
+                            <button class="btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="copyText(this)" data-copy="${(p.videoPrompt || '').replace(/"/g, '&quot;')}">Copy Motion</button>
+                        </div>
+                        <div style="font-size:12px; font-family:'JetBrains Mono', monospace; background:var(--bg-body); border:1px solid var(--border-light); padding:10px; border-radius:6px; line-height:1.5; color:var(--text-primary); word-break:break-word;">${p.videoPrompt}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // --- Export Project to Markdown (.md) ---
+        function exportProjectMarkdown() {
+            const analysis = analyzeState.analysisResult;
+            const topic = ideationState.selectedIdea;
+            const script = scriptState.script;
+            const prompts = promptState.prompts;
+            const bgm = promptState.bgmPrompt;
+
+            if (!analysis && !topic && !script) {
+                alert('내보낼 분석 또는 대본 데이터가 아직 없습니다. 먼저 분석을 진행해 주세요!');
+                return;
+            }
+
+            const now = new Date();
+            const dateStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+            const projectTitle = topic ? topic.title : (inputSearchQuery.value || 'YouTube_Shorts_Analysis');
+
+            let md = `# 🚀 YouTube Shorts 바이럴 기획 & 제작 종합 리포트\n\n`;
+            md += `> **생성 일자:** ${dateStr}  \n`;
+            md += `> **타겟 키워드:** ${inputSearchQuery.value || '쇼츠 분석'}  \n`;
+            if (topic) {
+                md += `> **선택 주제:** ${topic.title}  \n`;
+                md += `> **바이럴 잠재 점수:** ${topic.potentialScore || 95}점 (예상 완청률: ${topic.expectedRetention || '85%+'})\n`;
+            }
+            md += `\n---\n\n`;
+
+            if (analysis) {
+                md += `## 1. 📊 바이럴 성공 요인 심층 분석 (Reverse Engineering)\n\n`;
+                
+                if (analysis.viralMechanisms && analysis.viralMechanisms.length > 0) {
+                    md += `### 🎯 11대 핵심 바이럴 성공 메커니즘\n\n`;
+                    analysis.viralMechanisms.forEach((m, idx) => {
+                        md += `${idx + 1}. **${m.title}** (${m.icon || '🔥'})\n`;
+                        md += `   - **핵심 전술:** ${m.tactic}\n`;
+                        md += `   - **상세 분석:** ${m.analysis}\n\n`;
+                    });
+                }
+
+                if (analysis.timelineStrategies && analysis.timelineStrategies.length > 0) {
+                    md += `### ⏱️ 스크립트 구간별 타임라인 전략\n\n`;
+                    analysis.timelineStrategies.forEach(t => {
+                        md += `- **[${t.range}] ${t.title}**\n`;
+                        md += `  - 전술: ${t.tactic}\n`;
+                        md += `  - 심리 트리거: ${t.psychologicalTrigger}\n\n`;
+                    });
+                }
+
+                if (analysis.visualStyle) {
+                    const vs = analysis.visualStyle;
+                    md += `### 🎨 영상 & 비주얼 연출 DNA (8대 심층 분석)\n\n`;
+                    md += `- **렌즈 & 화각:** ${vs.lensAndFraming || vs.cameraAngle || 'N/A'}\n`;
+                    md += `- **카메라 무빙:** ${vs.cameraMovement || 'N/A'}\n`;
+                    md += `- **조명 설계 & 무드:** ${vs.lightingArchitecture || vs.lightingMood || 'N/A'}\n`;
+                    md += `- **컬러 그레이딩 & 팔레트:** ${vs.colorGrading || vs.colorPalette || 'N/A'}\n`;
+                    md += `- **피사체 배치 & 구도:** ${vs.subjectComposition || 'N/A'}\n`;
+                    md += `- **텍스처 & 렌더 룩:** ${vs.textureAesthetic || vs.artStyle || 'N/A'}\n`;
+                    md += `- **컷 전환 템포 & VFX:** ${vs.motionVFXPacing || vs.transitionPace || 'N/A'}\n`;
+                    md += `- **AI 프롬프트 모디파이어:** \`${vs.promptModifiers || 'N/A'}\`\n\n`;
+                }
+
+                if (analysis.commentInsights && analysis.commentInsights.length > 0) {
+                    md += `### 💬 시청자 반응 & 결핍 인사이트\n\n`;
+                    analysis.commentInsights.forEach(c => {
+                        md += `- **[${c.category}]** ${c.insight}\n`;
+                    });
+                    md += `\n`;
+                }
+                md += `---\n\n`;
+            }
+
+            if (topic) {
+                md += `## 2. 💡 확정된 주제 및 바이럴 전략 블루프린트\n\n`;
+                md += `### **${topic.title}**\n\n`;
+                md += `- **⚡ 1초 킬러 훅:** "${topic.hook}"\n`;
+                md += `- **🪝 훅 적용 공식:** ${topic.hookFormula || '호기심 갭 & 인지부조화 훅'}\n`;
+                md += `- **🎯 스토리 전개 전략:** ${topic.strategy || topic.whyItWorks}\n`;
+                md += `- **🧠 심리학적 성공 요인:** ${topic.whyItWorks}\n\n`;
+
+                if (topic.storylineRoadmap && topic.storylineRoadmap.length > 0) {
+                    md += `#### 🗺️ 타임라인 로드맵\n\n`;
+                    topic.storylineRoadmap.forEach(r => {
+                        md += `- **${r.phase}:** ${r.action}\n`;
+                    });
+                    md += `\n`;
+                }
+                md += `---\n\n`;
+            }
+
+            if (script && script.length > 0) {
+                md += `## 3. 📝 씬별 완청 최적화 대본 (Script - 씬당 1문장 원칙)\n\n`;
+                md += `> **설정:** ${scriptState.duration}초 | 톤: ${scriptState.tone} | 타겟: ${scriptState.target}\n\n`;
+
+                script.forEach(s => {
+                    md += `### SCENE ${s.sceneNumber} (${s.time})\n`;
+                    md += `- **🎙️ 대사 (Narration - 1문장):** ${s.narration}\n`;
+                    md += `- **🎬 화면 연출 (Visual):** ${s.visual}\n`;
+                    if (s.caption) md += `- **📝 화면 자막 (Caption):** "${s.caption}"\n`;
+                    if (s.sfx) md += `- **🎵 사운드/효과음 (SFX):** ${s.sfx}\n`;
+                    md += `\n`;
+                });
+                md += `---\n\n`;
+            }
+
+            if (bgm) {
+                md += `## 4. 🎵 전체 영상 Master BGM 프롬프트 (Suno / Udio)\n\n`;
+                md += `### **${bgm.title || 'Shorts Soundtrack'}** (${bgm.bpm || '135 BPM'})\n\n`;
+                md += `- **장르 & 무드:** ${bgm.genreAndMood || 'N/A'}\n`;
+                md += `- **악기 구성:** ${bgm.instrumentation || 'N/A'}\n`;
+                md += `- **타임라인 전개:** ${bgm.dynamicStructure || 'N/A'}\n`;
+                md += `- **오디오 믹싱 가이드:** ${bgm.audioMixingNotes || 'N/A'}\n\n`;
+                md += `#### 🎧 Suno AI / Udio AI 프롬프트 (Instrumental)\n`;
+                md += `\`\`\`text\n${bgm.sunoPrompt}\n\`\`\`\n\n`;
+                md += `---\n\n`;
+            }
+
+            if (prompts && prompts.length > 0) {
+                md += `## 5. 🎨 씬별 AI 이미지 & 비디오 생성 프롬프트 (Visual DNA 연동)\n\n`;
+                prompts.forEach(p => {
+                    md += `### SCENE ${p.sceneNumber} ${p.sceneSummary ? `(${p.sceneSummary})` : ''}\n\n`;
+                    md += `#### 🖼️ Midjourney v6 Image Prompt\n`;
+                    md += `\`\`\`text\n${p.imagePrompt}\n\`\`\`\n\n`;
+                    md += `#### 🎥 AI Video Motion Prompt (Kling / Runway / Luma)\n`;
+                    md += `\`\`\`text\n${p.videoPrompt}\n\`\`\`\n\n`;
+                });
+                md += `---\n\n`;
+            }
+
+            md += `\n*Generated by YouTube Shorts Viral Analytics & AI Studio | 운영본부 관제실*\n`;
+
+            const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const sanitizedTitle = projectTitle.replace(/[^a-zA-Z0-9가-힣_-]/g, '_').substring(0, 30);
+            a.href = url;
+            a.download = `Shorts_${sanitizedTitle}_${dateStr}.md`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            logToControlTower('v4', `쇼츠 제작 종합 기획 리포트 다운로드 완료 (${sanitizedTitle})`);
+        }
+
+        const btnExportMd = document.getElementById('btn-export-md');
+        if (btnExportMd) btnExportMd.addEventListener('click', exportProjectMarkdown);
+
+        const btnDownloadAllMd = document.getElementById('btn-download-all-md');
+        if (btnDownloadAllMd) btnDownloadAllMd.addEventListener('click', exportProjectMarkdown);
+    </script>
+</body>
+</html>
