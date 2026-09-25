@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { getSharedRedis } from "@/lib/store";
+import { listTasks } from "@/lib/agent/store";
 
 export type BlogArticleStatus = "ready" | "queued" | "publishing" | "published" | "failed" | "needs_human" | "cleanup_pending";
 
@@ -175,10 +176,24 @@ export async function claimDueBlogSlots(at = new Date()) {
 
 export async function recoverStaleBlogPublishes(maxAgeMs = 120_000) {
   const items = await readArticles();
+  const tasks = await listTasks();
+  const activePublishIds = new Set(
+    tasks
+      .filter((task) => ["queued", "running", "waiting_approval"].includes(task.status))
+      .flatMap((task) => task.instruction.match(/CONTENT_ID:\s*([^\n\r]+)/g) || [])
+      .map((value) => value.replace(/^CONTENT_ID:\s*/, "").trim()),
+  );
   const cutoff = Date.now() - maxAgeMs;
   let recovered = 0;
   for (const article of items) {
     if (!["queued", "publishing"].includes(article.status)) continue;
+    // 큐에 있거나 워커가 실행 중인 작업은 오래 걸려도 실패로 바꾸지 않는다.
+    // 특히 브라우저 워커가 잠시 연결되지 않은 동안 queued 글을 실패 처리하면
+    // 사용자가 재시도해야 하고, 정상 대기 작업이 중복 발행될 수 있다.
+    if (activePublishIds.has(article.id)) continue;
+    // queued는 워커가 아직 claim하지 않은 정상 대기 상태다. 실제 실행 중인
+    // publishing만 stale 기준으로 복구한다.
+    if (article.status === "queued") continue;
     if (Date.parse(article.updatedAt) > cutoff) continue;
     article.status = "failed";
     article.error = "발행 워커 응답 시간 초과. 실패 처리했으며 즉시 발행을 다시 시도할 수 있습니다.";
