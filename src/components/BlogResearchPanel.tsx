@@ -1,0 +1,11 @@
+"use client";
+import {useEffect,useState} from "react";
+type O={keyword:string;trendScore:number;trendGrowth:number;blogSupply:number;recentSupply:number;opportunityScore:number;reason:string};
+export function BlogResearchPanel(){
+ const [items,setItems]=useState<O[]>([]),[keys,setKeys]=useState("생활용품, 가전, IT, 자동차, 여행, 반려동물, 음식, 취미, 교육, 쇼핑정보, 사용법, 문제해결"),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[configured,setConfigured]=useState(false);
+ const load=async()=>{const r=await fetch("/api/blog/research",{cache:"no-store"});const j=await r.json();setItems(j.items||[]);setConfigured(Boolean(j.configured))}; useEffect(()=>{load()},[]);
+ const run=async()=>{setBusy(true);setMsg("");try{const r=await fetch("/api/blog/research",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({keywords:keys.split(/[,\n]/).map(x=>x.trim()).filter(Boolean)})});const j=await r.json();if(!r.ok)setMsg(j.error||"조사 실패");else{setItems(j.items||[]);setMsg("네이버 수요·블로그 공급 조사를 완료했습니다.")}}finally{setBusy(false)}};
+ return <div className="flex flex-col gap-3"><div className="rounded border border-cyan-900 bg-cyan-950/20 p-3 text-[11px]"><div className="font-bold text-cyan-300">소재 조사원</div><div className="mt-1 text-zinc-400">DataLab 상대 검색수요 + 네이버 블로그 공급량을 함께 비교해 콘텐츠 공백 후보를 찾습니다.</div><div className={"mt-1 "+(configured?"text-emerald-400":"text-amber-400")}>{configured?"API 설정 확인됨":"DataLab API 환경변수 미설정"}</div></div>
+ <textarea value={keys} onChange={e=>setKeys(e.target.value)} className="min-h-20 border border-zinc-800 bg-black p-2 text-[11px] text-zinc-200"/><button disabled={busy||!configured} onClick={run} className="border border-cyan-700 px-3 py-2 text-xs font-bold text-cyan-300 disabled:opacity-30">{busy?"조사 중...":"지금 조사"}</button>{msg&&<div className="text-[11px] text-amber-300">{msg}</div>}
+ <div className="max-h-[48vh] overflow-y-auto">{items.map(x=><div key={x.keyword} className="grid grid-cols-[1fr_55px] gap-2 border-b border-zinc-900 py-2 text-[11px]"><div><div className="font-bold text-zinc-200">{x.keyword}</div><div className="text-zinc-500">{x.reason}</div></div><div className="text-right font-bold text-cyan-300">{x.opportunityScore}</div></div>)}</div></div>
+}
