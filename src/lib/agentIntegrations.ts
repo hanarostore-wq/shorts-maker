@@ -21,6 +21,7 @@ export type AgentTool =
   | "profitRealization"
   | "liveTrading"
   | "shortsStudio"
+  | "blogResearch"
   | "blogReady"
   | "naverBlog";
 
@@ -62,6 +63,7 @@ export const AGENT_TOOLS: Record<string, AgentTool> = {
   v4: "shortsStudio",
   v5: "shortsStudio",
   v6: "shortsStudio",
+  b_research: "blogResearch",
   b_ready: "blogReady",
   b_naver: "naverBlog",
 

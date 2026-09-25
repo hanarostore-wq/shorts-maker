@@ -2,6 +2,7 @@
 import {TradingAnalyticsPanel} from "./TradingAnalyticsPanel";
 import { NaverBlogPanel } from "./NaverBlogPanel";
 import { BlogReadyPanel } from "./BlogReadyPanel";
+import { BlogResearchPanel } from "./BlogResearchPanel";
 
 
 
@@ -70,6 +71,7 @@ export function AgentDetailModal({
         {tool === "profitRealization" && <ProfitRealizationPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
         {tool === "liveTrading" && <LiveTradingPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
         {tool === "blogReady" && <BlogReadyPanel />}
+        {tool === "blogResearch" && <BlogResearchPanel />}
         {tool === "naverBlog" && <NaverBlogPanel />}
         {tool === "shortsStudio" && (
           <div className="control-room-panel flex flex-col gap-3 p-4">

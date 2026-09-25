@@ -196,3 +196,131 @@ export async function markPublishFailure(id: string, status: BlogArticleStatus, 
 }
 
 export function isBlogStorageConfigured() { return getSharedRedis() !== null; }
+
+
+export type BlogResearchStatus = "candidate" | "approved" | "used" | "rejected";
+
+export interface BlogResearchItem {
+  id: string;
+  topicId: string;
+  blogId: string;
+  keyword: string;
+  mainKeyword: string;
+  keywordCluster: string[];
+  masterTopic: string;
+  searchIntent: string;
+  sourceUrl?: string | null;
+  sourceTitle?: string | null;
+  notes?: string | null;
+  demandScore: number;
+  gapScore: number;
+  fitScore: number;
+  freshnessScore: number;
+  trendScore: number;
+  supplyScore: number;
+  contentGapScore: number;
+  opportunityScore: number;
+  selectionReason: string;
+  status: BlogResearchStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const RESEARCH_KEY = "moneyos:blog:research-items";
+let memoryResearch: BlogResearchItem[] | null = null;
+
+async function readResearch(): Promise<BlogResearchItem[]> {
+  const redis = getSharedRedis();
+  if (!redis) return memoryResearch ?? (memoryResearch = []);
+  return (await redis.get<BlogResearchItem[]>(RESEARCH_KEY)) ?? [];
+}
+async function writeResearch(items: BlogResearchItem[]) {
+  const redis = getSharedRedis();
+  if (!redis) { memoryResearch = items; return; }
+  await redis.set(RESEARCH_KEY, items.slice(0, 500));
+}
+function scorePart(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(100, Math.round(number))) : 0;
+}
+function opportunityScore(scores: Pick<BlogResearchItem, "demandScore" | "gapScore" | "fitScore" | "freshnessScore">) {
+  return Math.round(scores.demandScore * 0.3 + scores.gapScore * 0.25 + scores.fitScore * 0.25 + scores.freshnessScore * 0.2);
+}
+
+export async function listBlogResearch() { return readResearch(); }
+
+export async function upsertBlogResearch(input: Partial<BlogResearchItem> & Pick<BlogResearchItem, "keyword" | "masterTopic">) {
+  const items = await readResearch();
+  const id = input.id || `RESEARCH-${Date.now()}`;
+  const existing = items.find((item) => item.id === id);
+  const scores = {
+    demandScore: scorePart(input.demandScore ?? existing?.demandScore),
+    gapScore: scorePart(input.gapScore ?? existing?.gapScore),
+    fitScore: scorePart(input.fitScore ?? existing?.fitScore),
+    freshnessScore: scorePart(input.freshnessScore ?? existing?.freshnessScore),
+  };
+  const timestamp = now();
+  const item: BlogResearchItem = {
+    id,
+    topicId: id,
+    blogId: getBlogId(input.blogId || existing?.blogId),
+    keyword: input.keyword.trim(),
+    mainKeyword: input.mainKeyword ?? input.keyword.trim(),
+    keywordCluster: input.keywordCluster ?? existing?.keywordCluster ?? [input.keyword.trim()],
+    masterTopic: input.masterTopic.trim(),
+    searchIntent: input.searchIntent ?? existing?.searchIntent ?? "정보 탐색",
+    sourceUrl: input.sourceUrl ?? existing?.sourceUrl ?? null,
+    sourceTitle: input.sourceTitle ?? existing?.sourceTitle ?? null,
+    notes: input.notes ?? existing?.notes ?? null,
+    ...scores,
+    trendScore: scorePart(input.trendScore ?? existing?.trendScore ?? input.freshnessScore),
+    supplyScore: scorePart(input.supplyScore ?? existing?.supplyScore),
+    contentGapScore: scorePart(input.contentGapScore ?? existing?.contentGapScore ?? input.gapScore),
+    opportunityScore: opportunityScore(scores),
+    selectionReason: input.selectionReason ?? existing?.selectionReason ?? "수동 등록 후보",
+    status: input.status ?? existing?.status ?? "candidate",
+    createdAt: existing?.createdAt ?? timestamp,
+    updatedAt: timestamp,
+  };
+  const index = items.findIndex((candidate) => candidate.id === id);
+  if (index >= 0) items[index] = item; else items.unshift(item);
+  await writeResearch(items);
+  return item;
+}
+
+export async function patchBlogResearch(id: string, patch: Partial<Pick<BlogResearchItem, "status" | "notes" | "masterTopic" | "sourceUrl" | "sourceTitle">>) {
+  const items = await readResearch();
+  const index = items.findIndex((item) => item.id === id);
+  if (index < 0) return null;
+  items[index] = { ...items[index], ...patch, updatedAt: now() };
+  await writeResearch(items);
+  return items[index];
+}
+
+export async function selectTopBlogResearch(limit = 100) {
+  const items = await readResearch();
+  const eligible = items.filter((item) => item.status === "candidate" || item.status === "approved").sort((a, b) => b.opportunityScore - a.opportunityScore);
+  const selected = new Set(eligible.slice(0, Math.max(0, Math.min(100, limit))).map((item) => item.id));
+  for (const item of items) {
+    if (item.status === "candidate" || item.status === "approved") {
+      item.status = selected.has(item.id) ? "approved" : "candidate";
+      item.updatedAt = now();
+    }
+  }
+  await writeResearch(items);
+  return items.filter((item) => selected.has(item.id));
+}
+
+export async function getBlogResearchDashboard() {
+  const items = await readResearch();
+  return {
+    items: [...items].sort((a, b) => b.opportunityScore - a.opportunityScore || b.updatedAt.localeCompare(a.updatedAt)),
+    counts: {
+      total: items.length,
+      candidate: items.filter((item) => item.status === "candidate").length,
+      approved: items.filter((item) => item.status === "approved").length,
+      used: items.filter((item) => item.status === "used").length,
+      rejected: items.filter((item) => item.status === "rejected").length,
+    },
+  };
+}
