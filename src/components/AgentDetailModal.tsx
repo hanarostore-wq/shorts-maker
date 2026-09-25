@@ -38,7 +38,7 @@ export function AgentDetailModal({
 
   return (
     <div
-      className="control-room-modal fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-2 py-2"
+      className="control-room-modal fixed inset-0 z-50 flex items-center justify-center bg-transparent px-2 py-2"
       onClick={onClose}
     >
       <div

@@ -41,7 +41,6 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .control-room-modal {
   font-family: var(--font-geist-sans), "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   color: var(--control-text);
-  background: var(--control-bg);
   letter-spacing: -0.01em;
 }
 
