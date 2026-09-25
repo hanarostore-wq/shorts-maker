@@ -72,12 +72,12 @@ export function AgentDetailModal({
         {tool === "blogReady" && <BlogReadyPanel />}
         {tool === "naverBlog" && <NaverBlogPanel />}
         {tool === "shortsStudio" && (
-          <div className="flex flex-col gap-3 rounded border border-indigo-800/60 bg-indigo-950/20 p-4">
+          <div className="control-room-panel flex flex-col gap-3 p-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-indigo-300">
+              <span className="text-xs font-bold text-[var(--control-cyan)]">
                 🎬 남다른AI Shorts 분석기 스튜디오
               </span>
-              <span className="rounded bg-indigo-900/50 px-2 py-0.5 text-[10px] font-semibold text-indigo-200">
+              <span className="rounded border border-[var(--control-line-strong)] bg-[var(--control-surface-raised)] px-2 py-0.5 text-[10px] font-semibold text-[var(--control-cyan)]">
                 쇼츠부서 팩토리
               </span>
             </div>
@@ -92,7 +92,7 @@ export function AgentDetailModal({
                     onClose();
                     onOpenShortsStudio(agent.name);
                   }}
-                  className="flex flex-1 items-center justify-center gap-2 rounded bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-500 cursor-pointer"
+                  className="control-room-button flex flex-1 items-center justify-center gap-2 text-xs font-bold cursor-pointer"
                 >
                   🚀 분석기 모달 전체화면 실행
                 </button>
@@ -101,7 +101,7 @@ export function AgentDetailModal({
                 href="/shorts/index.html"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-1 rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                className="control-room-button flex items-center justify-center gap-1 text-xs font-bold"
               >
                 ↗ 새 탭
               </a>
