@@ -9,7 +9,6 @@ import { UpbitTerminalModal } from "@/components/UpbitTerminalModal";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
 import { ShortsStudioModal } from "@/components/ShortsStudioModal";
 import { SHORTS_AGENT_STEP_MAP } from "@/lib/agentIntegrations";
-import { OperationsFinanceSummary } from "@/components/OperationsFinanceSummary";
 import type { Agent, Department, Project } from "@/lib/types";
 import type { LogEntry } from "@/lib/store";
 
@@ -134,7 +133,6 @@ export default function Home() {
             <StatCounter label="오늘 완료" value={completedEntries.length} tone="green" onClick={() => setSelectedStatus("오늘 완료")} />
           </div>
         </div>
-        <OperationsFinanceSummary />
       </header>
 
       <section className="flex flex-col gap-3">
