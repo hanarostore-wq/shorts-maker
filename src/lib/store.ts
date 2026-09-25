@@ -105,7 +105,7 @@ function healState(state: State): State {
       }
     }
 
-    // 쇼츠부서는 직원 이름·업무·상태를 항상 최신 mock-data 기준으로 강제 동기화한다.
+    // 블로그부서는 단일 '네이버 블로거' 체계로 강제 동기화한다.\n    // Redis에 남아 있는 예전 4인 블로그 조직이 다시 나타나지 않게 한다.\n    if (department.id === "blog") {\n      const byId = new Map(department.agents.map((a) => [a.id, a]));\n      department.agents = fresh.agents.map((fa) => {\n        const existing = byId.get(fa.id);\n        return existing ? { ...existing, name: fa.name, task: fa.task } : structuredClone(fa);\n      });\n    }\n\n    // 쇼츠부서는 직원 이름·업무·상태를 항상 최신 mock-data 기준으로 강제 동기화한다.
     // (Upstash Redis에 구버전 데이터가 남아 있어도 관제실 화면이 항상 최신을 보여주도록)
     if (department.id === "shorts") {
       // 순서도 fresh 기준으로 재정렬
