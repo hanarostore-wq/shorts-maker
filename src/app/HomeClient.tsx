@@ -5,6 +5,7 @@ import { StatCounter } from "@/components/StatCounter";
 import { DepartmentFloor } from "@/components/DepartmentFloor";
 import { ActivityLog } from "@/components/ActivityLog";
 import { AutoSync } from "@/components/AutoSync";
+import { UpbitTerminalModal } from "@/components/UpbitTerminalModal";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
 import type { Agent, Department, Project } from "@/lib/types";
 import type { LogEntry } from "@/lib/store";
@@ -149,7 +150,8 @@ export default function Home() {
         <ActivityLog log={state.log} />
       </section>
 
-      {liveSelectedAgent && (
+      <UpbitTerminalModal mode={liveSelectedAgent?.id === "c7" ? "paper" : liveSelectedAgent?.id === "c13" ? "live" : null} onClose={() => setSelectedAgent(null)} />
+      {liveSelectedAgent && !["c7", "c13"].includes(liveSelectedAgent.id) && (
         <AgentDetailModal
           agent={liveSelectedAgent}
           departments={state.departments}

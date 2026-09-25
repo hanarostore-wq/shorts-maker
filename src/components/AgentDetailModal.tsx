@@ -13,7 +13,7 @@ import { SourcingManagementPanel } from "./SourcingManagementPanel";
 import { UpbitReportDashboard } from "./UpbitReportDashboard";
 import { AssetManagementPanel, LiveTradingPanel, ProfitRealizationPanel } from "./TradingAccountPanels";
 import { TradingRolePanel } from "./TradingRolePanel";
-import { UpbitTerminalModal } from "./UpbitTerminalModal";
+
 
 export function AgentDetailModal({
   agent,
@@ -27,9 +27,6 @@ export function AgentDetailModal({
   const platforms = getAgentPlatforms(agent.id);
   const tool = getAgentTool(agent.id);
 
-  if (agent.id === "c7" || agent.id === "c13") {
-    return <UpbitTerminalModal key={agent.id} mode={agent.id === "c7" ? "paper" : "live"} onClose={onClose} />;
-  }
 
   return (
     <div

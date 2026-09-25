@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>운영본부 · 업비트 현물 매매</title>
+    <link rel="icon" href="/trading/icon.svg" />
+    <link rel="stylesheet" href="/trading/style.css" />
+    <script type="module" src="/trading/app.js" defer></script>
+  </head>
+  <body class="hq-workspace">
+    <header class="nav">
+      <div class="brand">
+        <img src="/trading/icon.svg" alt="" /><strong>JEV<span>SPOT</span></strong>
+      </div>
+      <nav>
+        <button class="nav-active" id="navExchange">거래소</button
+        ><button id="navHistory">투자기록</button
+        ><button id="settingsBtn">연결·전략 설정</button>
+      </nav>
+      <div class="nav-right">
+        <span class="local-label">업비트 실시간 연결 · 웹</span>
+        <div class="mode-switch" role="group" aria-label="거래 모드">
+          <button id="paperMode" class="selected">모의투자</button
+          ><button id="liveMode">실전투자</button>
+        </div>
+      </div>
+      <button id="themeToggle" type="button" class="outline global-help theme-toggle" aria-pressed="false">다크모드</button>
+      <button id="helpBtn" class="outline global-help">쉬운 설명</button>
+    </header>
+    <div class="status-strip">
+      <span
+        ><i id="feedDot" class="dot"></i><b id="feedStatus">업비트 연결 중</b
+        ><small id="dataAge">—</small></span
+      ><span id="modeNotice">실제 업비트 시세 · 가상 자금으로 거래합니다</span
+      ><time id="clock">—</time>
+    </div>
+    <main class="shell">
+      <section class="account-bar">
+        <div>
+          <span class="eyebrow" id="accountLabel">모의 계좌</span
+          ><button class="capital-link" id="capitalBtn">
+            시작금 설정 <span>↗</span>
+          </button>
+        </div>
+        <div>
+          <span>총 평가자산</span
+          ><strong id="equity">—<small> 원</small></strong>
+        </div>
+        <div><span>평가손익 / 수익률</span><strong id="pnl">—</strong></div>
+        <div><span>주문가능 원화</span><strong id="cash">—</strong></div>
+        <div>
+          <span>실현손익 / 수수료</span><strong id="realized">—</strong>
+        </div>
+        <button class="outline" id="exportBtn">기록 내보내기 ↓</button>
+      </section>
+      <div class="workspace">
+        <div class="main-column">
+          <section class="panel chart-panel" id="chartPanel">
+            <div class="market-heading">
+              <div class="coin-icon" id="coinIcon">₿</div>
+              <h1 id="marketName">비트코인 <small>BTC/원</small></h1>
+              <span class="spot-label">현물</span>
+              <div class="panel-tabs">
+                <span class="active">시세</span
+                ><button id="analysisJump">Jev 분석 ↗</button>
+              </div>
+            </div>
+            <div class="price-summary">
+              <div>
+                <strong id="price">—</strong><small> 원</small>
+                <div id="change">업비트 데이터 수신 대기</div>
+              </div>
+              <dl>
+                <div>
+                  <dt>오늘 최고가</dt>
+                  <dd class="up" id="high">—</dd>
+                </div>
+                <div>
+                  <dt>오늘 최저가</dt>
+                  <dd class="down" id="low">—</dd>
+                </div>
+              </dl>
+              <dl>
+                <div>
+                  <dt>거래된 코인(24시간)</dt>
+                  <dd id="volume">—</dd>
+                </div>
+                <div>
+                  <dt>거래된 금액(24시간)</dt>
+                  <dd id="turnover">—</dd>
+                </div>
+              </dl>
+            </div>
+            <div class="chart-toolbar professional-toolbar">
+              <div id="intervals">
+                <button data-unit="0.016666666666666666">1초</button
+                ><button data-unit="1">1분</button
+                ><button data-unit="5">5분</button
+                ><button data-unit="30" class="active">30분</button
+                ><button data-unit="60">1시간</button
+                ><button data-unit="240">4시간</button
+                ><button data-unit="1440">일</button
+                ><button data-unit="43200">월</button
+                ><button data-unit="525600">12달</button>
+              </div>
+              <div class="chart-actions">
+                <button id="chartKind" title="봉 모양과 선 모양 바꾸기">
+                  봉 차트</button
+                ><button id="indicatorBtn">ƒx 지표 선택</button
+                ><button id="chartFit" title="전체 기간을 화면에 맞추기">
+                  맞춤</button
+                ><button id="chartFullscreen" title="차트 전체 화면">⛶</button
+                ><button id="chartCapture" title="차트 그림 저장">▣</button>
+              </div>
+            </div>
+            <div class="professional-chart">
+              <nav class="drawing-tools" aria-label="차트 그리기 도구">
+                <button
+                  data-draw="cursor"
+                  class="active"
+                  title="십자선 · 가격과 시간 확인"
+                  aria-label="십자선"
+                >
+                  ＋
+                </button>
+                <button
+                  data-draw="trend"
+                  title="추세선 · 두 곳을 눌러 선 연결"
+                  aria-label="추세선 그리기"
+                >
+                  ╱
+                </button>
+                <button
+                  data-draw="horizontal"
+                  title="가로선 · 내 기준 가격 표시"
+                  aria-label="가격 가로선 그리기"
+                >
+                  ☰
+                </button>
+                <button
+                  data-draw="measure"
+                  title="두 가격 사이 차이 재기"
+                  aria-label="가격 차이 재기"
+                >
+                  ↕
+                </button>
+                <button id="zoomIn" title="차트 확대" aria-label="차트 확대">
+                  ⊕</button
+                ><button id="zoomOut" title="차트 축소" aria-label="차트 축소">
+                  ⊖
+                </button>
+                <button
+                  data-draw="clear"
+                  title="내가 그린 선 모두 지우기"
+                  aria-label="그린 선 지우기"
+                >
+                  ⌫
+                </button>
+              </nav>
+              <div class="chart-wrap">
+                <div class="chart-readout">
+                  <div id="chartLegend">실제 업비트 가격 차트</div>
+                  <div id="chartVolumeLegend">
+                    거래량: 실제로 거래된 코인의 개수
+                  </div>
+                  <div id="activeIndicators"></div>
+                </div>
+                <div
+                  id="chart"
+                  role="img"
+                  aria-label="확대·축소 가능한 실시간 업비트 가격 차트"
+                ></div>
+                <div id="chartEmpty">가격 차트를 불러오는 중입니다</div>
+              </div>
+            </div>
+            <div class="chart-footer">
+              <span id="drawingHint">드래그로 이동 · 휠로 확대·축소</span
+              ><span
+                ><span id="chartTime"></span
+                ><button id="chartPercent" title="가격을 변동률로 보기">
+                  %</button
+                ><button
+                  id="chartLog"
+                  title="같은 변화율이 같은 높이로 보이게 하기"
+                >
+                  비율 눈금</button
+                ><button id="chartLive">현재로</button></span
+              >
+            </div>
+            <div class="chart-credit">
+              <a
+                href="https://www.tradingview.com/"
+                target="_blank"
+                rel="noopener"
+                >TradingView Lightweight Charts™</a
+              >
+              · Copyright © 2025 TradingView, Inc. · 차트 자료: 업비트
+            </div>
+          </section>
+          <section class="execution-grid">
+            <div class="panel orderbook-panel">
+              <div class="panel-title">
+                <h2>사고팔 가격과 물량</h2>
+                <span id="spread">살 가격·팔 가격 차이 —</span>
+              </div>
+              <div class="book-labels">
+                <span>팔려는 물량</span><span>가격(원)</span
+                ><span>사려는 물량</span>
+              </div>
+              <div id="asks" class="book-half"></div>
+              <div class="mid-price" id="midPrice">—</div>
+              <div id="bids" class="book-half"></div>
+              <div class="book-total" id="bookTotal">호가 수신 대기</div>
+            </div>
+            <div class="panel order-panel">
+              <div class="order-tabs">
+                <button id="buyTab" class="active buy">매수</button
+                ><button id="sellTab">매도</button
+                ><button id="holdingsTab">보유자산</button>
+              </div>
+              <div id="orderForm">
+                <div class="order-type">
+                  <b>현재가 따라 주문</b><span>체결될 때까지 잔량 재주문</span>
+                </div>
+                <label class="field-row"
+                  ><span id="amountLabel">주문총액 <small>원</small></span
+                  ><input
+                    id="orderAmount"
+                    type="text" inputmode="numeric" data-money
+                    min="5000"
+                    step="1000"
+                    value="10000"
+                    aria-label="주문총액"
+                /></label>
+                <div
+                  class="amount-buttons"
+                  id="quickOrderAmounts"
+                  aria-label="매수·매도 금액 빠르게 입력"
+                >
+                  <button type="button" data-amount="10000">1만원</button
+                  ><button type="button" data-amount="50000">5만원</button
+                  ><button type="button" data-amount="100000">10만원</button
+                  ><button type="button" data-amount="500000">50만원</button
+                  ><button type="button" data-amount="1000000">100만원</button>
+                </div>
+                <div class="percent-buttons" id="percentButtons">
+                  <button data-pct="10">10%</button
+                  ><button data-pct="25">25%</button
+                  ><button data-pct="50">50%</button
+                  ><button data-pct="100">100%</button>
+                </div>
+                <p class="small-note" id="percentBasis"></p>
+                <dl class="order-facts">
+                  <div>
+                    <dt>자동 주문가격</dt>
+                    <dd id="trackingPrice">—</dd>
+                  </div>
+                  <div>
+                    <dt>예상 수량</dt>
+                    <dd id="orderEstimate">—</dd>
+                  </div>
+                  <div>
+                    <dt>주문가능</dt>
+                    <dd id="available">시작금을 설정하세요</dd>
+                  </div>
+                  <div>
+                    <dt>모의 수수료 / 시장가 가격 차이</dt>
+                    <dd id="feeHint">—</dd>
+                  </div>
+                  <div>
+                    <dt>자동 1회 / 최대 보유 한도</dt>
+                    <dd id="limitHint">—</dd>
+                  </div>
+                </dl>
+                <p
+                  class="small-note down"
+                  id="orderValidation"
+                  aria-live="polite"
+                ></p>
+                <div
+                  id="trackingProgress"
+                  class="tracking-progress hidden"
+                  aria-live="polite"
+                >
+                  <strong id="trackingPhase"></strong>
+                  <p id="trackingTotals"></p>
+                  <button id="trackingStop" type="button">추적 중지</button>
+                </div>
+                <button id="submitOrder" class="buy-button">모의 매수</button>
+                <p class="small-note" id="orderNote">
+                  실제 호가의 10%까지 사용 · 300ms 지연 후 계산<br />거래소에는
+                  모의 주문을 전송하지 않습니다.
+                </p>
+              </div>
+              <div id="holdings" class="hidden"></div>
+              <div class="automation">
+                <div>
+                  <i class="dot" id="botDot"></i><strong>Jev 자동매매</strong
+                  ><span id="botState">정지</span>
+                </div>
+                <div class="judgment-control">
+                  <button
+                    id="judgmentToggle"
+                    type="button"
+                    class="outline"
+                    aria-pressed="false"
+                  >
+                    실시간 판단 OFF</button
+                  ><span id="judgmentHint">판단만 ON · 주문은 하지 않음</span>
+                </div>
+                <div class="auto-buttons">
+                  <button id="analyzeBtn" class="outline">1회 분석</button
+                  ><button id="startBtn" class="primary">자동매매 시작</button
+                  ><button id="stopBtn" class="danger-outline">
+                    매매 종료 · 모두 OFF
+                  </button>
+                </div>
+                <div id="pendingTools" class="hidden">
+                  <p id="pendingStatus"></p>
+                  <button id="reconcileBtn" class="outline">
+                    미확정 주문 조회
+                  </button>
+                  <button id="cancelPendingBtn" class="danger-outline">
+                    해당 주문 취소 요청
+                  </button>
+                </div>
+                <p id="actionReason">실제 Jev 연결을 준비하세요.</p>
+              </div>
+            </div>
+          </section>
+          <section class="panel strategy-panel" id="strategyPanel">
+  <div class="panel-title"><h2>지금 돈이 몰리는 흐름 따라가기</h2><span id="strategyMode"></span></div>
+  <div class="strategy-layers">
+    <article><h3>① 종목 찾기</h3><strong id="scanState"></strong><ul id="scanCandidates"></ul></article>
+    <article><h3>② 살 때 판단</h3><strong id="entryState"></strong><p id="entryDetail"></p><small>Jev와 여러 신호를 합쳐 판단 · 모든 지표가 일치할 필요 없음</small></article>
+    <article><h3>③ 가지고 있을 때</h3><strong id="holdState"></strong><p id="holdDetail"></p><small>흐름이 약해지면 청산 검토 · 1분 봉 마감을 기다리지 않음</small></article>
+    <article><h3>④ 위험 감시·청산 확인</h3><strong id="safetyState" role="status"></strong><p id="safetyDetail"></p><small>전송과 체결은 다름 · 잔량 0 확인 전까지 청산 미완료</small></article>
+  </div>
+  <details class="strategy-help"><summary>관찰 근거와 쉬운 설명</summary><dl id="strategyMetrics"></dl><p>ATR은 최근 1분마다 가격이 평소 얼마나 흔들렸는지, EMA는 최근 가격에 더 무게를 둔 평균, VWAP은 실제 거래금액을 반영한 평균 가격입니다. RSI·MACD·가격 띠는 상승 힘과 방향을 참고하는 자료이며 하나만으로 매매를 결정하지 않습니다.</p><p>점수는 연구용 참고 수치이며 수익 확률이 아닙니다. 종목 순위는 최근 원화 거래금액·증가 속도·상승 흐름을 비교합니다. 모의 자동 탐색은 보유가 없을 때 최소 60초 간격으로 종목을 바꾸며, 매수 전 선택 종목의 실제 호가·체결과 Jev 판단을 다시 확인합니다. 실전은 종목별 주문 테스트를 위해 자동 전환하지 않습니다.</p><p>Jev는 설정된 간격으로, 위험 감시는 새 호가·체결과 0.5초 보완 검사로 작동합니다. 종료 버튼을 누르면 모든 자동 주문이 멈추고 보유자산은 유지됩니다. 프로그램이나 인터넷이 꺼지면 자동 보호 주문을 실행할 수 없습니다.</p></details>
+</section>
+<section class="panel" id="historyPanel">
+            <div class="panel-title">
+              <h2>거래내역 <span id="historyCount">0</span></h2>
+              <span id="historyMode">모의 체결</span>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>시간</th>
+                    <th>종목</th>
+                    <th>구분</th>
+                    <th>체결가(원)</th>
+                    <th>수량</th>
+                    <th title="실제로 사고판 금액 · 수수료 별도">체결금액(원)</th>
+                    <th>수수료(원)</th>
+                    <th>실현손익(원)</th>
+                    <th>판단 근거</th>
+                  </tr>
+                </thead>
+                <tbody id="historyBody">
+                  <tr>
+                    <td colspan="9" class="empty">
+                      아직 거래가 없습니다. 시작금을 설정해 모의투자를
+                      시작하세요.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+        <aside class="side-column">
+          <section class="panel markets-panel">
+            <div class="search">
+              <span>⌕</span
+              ><input
+                id="search"
+                placeholder="코인명 / 심볼 검색"
+                aria-label="코인 검색"
+              />
+            </div>
+            <div class="market-tabs">
+              <b>원화</b><span id="marketCount">— 종목</span
+              ><select id="sortMarkets" aria-label="코인 정렬 기준">
+<option value="volume">24시간 거래대금순</option><option value="change">등락률순</option>
+<option value="recent">현재 거래량순 · 1분</option><option value="value">투자가치순 · 단타 참고</option></select>
+            </div>
+            <p id="sortDescription" class="sort-description" aria-live="polite"></p>
+<details class="ranking-help"><summary>투자가치·거래량 순위는 어떻게 정하나요?</summary><p>현재 거래량은 코인 개수가 아닌 최근 1분의 원화 거래대금으로 비교합니다. 수신한 누적 거래대금의 차이로 계산한 근사값이며, 조용한 종목은 약 30초 단위로 보완됩니다.</p><p>투자가치는 단타 관찰용 100점 기준입니다. 최근 거래대금 40점, 직전 1분보다 거래가 늘어난 정도 25점, 최근 1분 상승 흐름 20점, 24시간 거래대금 15점을 합칩니다. 거래대금 점수는 원화 종목끼리 비교합니다.</p><p>거래 증가 점수는 0.5배 이하 0점부터 3배 이상 25점까지, 가격 흐름은 0% 이하 0점부터 +1% 이상 20점까지입니다. 1분에 ±3% 초과, 전일 대비 ±20% 초과, 거래 주의 항목은 각각 15점을 뺍니다. 투자유의 종목은 점수에서 제외합니다.</p><p>처음 2분은 점수 집계 중이며, 시세 수신 지연 시 순위에서 뒤로 보냅니다. 이 점수는 기업가치·수익률·승률이나 Jev의 매수 판단이 아닙니다. 순위 선택으로 자동매매 종목은 바뀌지 않으며, Jev 추가 호출도 없습니다.</p></details>
+<div class="market-row market-labels">
+              <span>코인명</span><span>현재가</span><span>전일대비</span>
+            </div>
+            <div id="marketList" class="market-list"></div>
+          </section>
+          <section class="panel jev-panel" id="jevPanel">
+            <div class="panel-title">
+              <h2><span class="jev-orb">J</span> Jev 실시간 판단</h2>
+              <span id="jevStatus" class="badge">연결 대기</span>
+            </div>
+            <div class="jev-meta">
+              <span id="jevModel">TypeSafe 직접 연결</span
+              ><span id="jevLatency">— ms</span>
+            </div>
+            <div class="direction-head">
+              <strong id="directionTitle">다음 60초 가격 방향</strong
+              ><small>AI 판단 비중 · 수익 확률 아님</small>
+            </div>
+            <div id="directionBars">
+              <div class="prob-row">
+                <span>상승</span>
+                <div class="bar"><i></i></div>
+                <b>—</b>
+              </div>
+              <div class="prob-row">
+                <span>중립</span>
+                <div class="bar"><i></i></div>
+                <b>—</b>
+              </div>
+              <div class="prob-row">
+                <span>하락</span>
+                <div class="bar"><i></i></div>
+                <b>—</b>
+              </div>
+            </div>
+            <div class="signal-grid" id="signalGrid">
+              <div>시장 흐름<strong>판단 대기</strong></div>
+              <div>판단이 한쪽에 모인 정도<strong>—</strong></div>
+              <div>산 뒤 불리해질 위험<strong>—</strong></div>
+              <div>거래 물량 부족 위험<strong>—</strong></div>
+            </div>
+            <div id="scoreList" class="score-list"></div>
+            <div class="decision-explanation">
+              <strong id="decisionAction">판단 대기</strong>
+              <p id="decisionReason"></p>
+              <small
+                >Jev가 준 수치와 설정한 매매 조건을 쉬운 말로 정리한
+                설명입니다.</small
+              >
+            </div>
+            <details>
+              <summary>7가지 판단 자세히 보기</summary>
+              <div id="allProbabilities" class="all-probs">
+                실제 API 응답 후 표시됩니다.
+              </div>
+            </details>
+            <div class="jev-bottom">
+              <span id="jevTimestamp">아직 분석하지 않았습니다.</span
+              ><span id="jevBudget">호출 0</span>
+            </div>
+          </section>
+          <section class="panel usage-panel">
+            <div class="panel-title">
+              <h2>Jev 사용량과 비용</h2>
+              <span>실제 응답 기준</span>
+            </div>
+            <dl id="usageDetails"></dl>
+            <p class="small-note">
+              토큰은 AI가 읽고 쓰는 글의 양을 세는 단위입니다. 이 프로그램의
+              기록으로 계정 전체와 다를 수 있습니다.
+            </p>
+            <a
+              href="https://console.typesafe.ai/"
+              target="_blank"
+              rel="noopener"
+              >TypeSafe에서 실제 잔액·청구 내역 확인 ↗</a
+            >
+          </section>
+          <section class="panel metrics-panel">
+            <div class="panel-title">
+              <h2>지금 시장의 움직임</h2>
+              <span>실제 데이터로 계산</span>
+            </div>
+            <dl id="metrics"></dl>
+          </section>
+        </aside>
+      </div>
+      <section class="panel event-panel">
+        <div class="panel-title">
+          <h2>프로그램 활동 기록</h2>
+          <span>데이터 · 판단 · 주문 상태</span>
+        </div>
+        <div id="eventLog"></div>
+      </section>
+      <footer>
+        <span
+          >JEV SPOT · 개인용 업비트 API 터미널 · 업비트 공식 앱이
+          아닙니다.</span
+        ><span id="clockOffset">시각 동기화 확인 중</span>
+      </footer>
+    </main>
+    <dialog id="paperDialog">
+      <form id="paperForm">
+        <div class="dialog-head">
+          <h2>모의투자 시작금 설정</h2>
+          <button type="button" data-close="paperDialog">×</button>
+        </div>
+        <p>실제 업비트 시세로 거래할 가상 원화를 직접 정하세요.</p>
+        <label
+          >모의 시작금 (원)<input
+            id="paperCapital"
+            type="text" inputmode="numeric" data-money
+            min="5000"
+            max="1000000000"
+            step="1"
+            placeholder="원하는 금액을 입력하세요"
+            required
+        /></label>
+        <div class="quick-capital">
+          <button type="button" data-capital="100000">10만원</button
+          ><button type="button" data-capital="500000">50만원</button
+          ><button type="button" data-capital="1000000">100만원</button
+          ><button type="button" data-capital="10000000">1,000만원</button>
+        </div>
+        <p class="small-note">
+          변경 시 기존 모의계좌와 거래내역은 보관하고 새 계좌로 시작합니다. 실전
+          자산은 변경되지 않습니다.
+        </p>
+        <button class="primary full">이 금액으로 모의계좌 시작</button>
+        <div id="archiveList"></div>
+      </form>
+    </dialog>
+    <dialog id="settingsDialog">
+      <div class="dialog-head">
+        <h2>연결 및 전략 설정</h2>
+        <button data-close="settingsDialog">×</button>
+      </div>
+      <section class="appearance-settings" aria-label="화면 설정">
+        <label for="themeSelect">화면 색상</label>
+        <select id="themeSelect">
+          <option value="light">밝은 화면</option>
+          <option value="dark">다크모드 · 어두운 화면</option>
+        </select>
+        <p>선택하면 차트와 모든 창에 바로 적용됩니다. 다음에 켜도 유지됩니다.</p>
+      </section>
+      <div class="settings-tabs">
+        <button class="active" data-pane="keysPane">서비스 연결</button
+        ><button data-pane="strategyPane">매매 규칙·손실 제한</button>
+      </div>
+      <div id="keysPane">
+        <form id="jevKeyForm" class="settings-section">
+          <h3>TypeSafe · Jev <span id="jevConnected"></span></h3>
+          <p>
+            직접 API에 시장 지표·프로그램 보유 코인 요약을 보내 7개 판단을
+            받습니다.
+          </p>
+          <label
+            >Jev 연결 키<input
+              id="jevKey"
+              type="password"
+              autocomplete="new-password"
+              placeholder="저장된 키가 있으면 비워두고 검증" /></label
+          ><label class="check-label"
+            ><input id="saveJev" type="checkbox" checked /> Windows 계정으로
+            암호화 저장</label
+          ><button class="primary">Jev 실제 응답 검증</button>
+        </form>
+        <form id="upbitKeyForm" class="settings-section">
+          <h3>업비트 · 실전 계좌 <span id="upbitConnected"></span></h3>
+          <p>
+            모의투자는 업비트 키 없이 실제 공개 시세를 사용합니다. 실전 연결에는
+            자산조회·주문조회·주문하기 권한과 허용 IP가 필요합니다. 출금 권한은
+            사용하지 않습니다.
+          </p>
+          <label
+            >업비트 접속 키<input
+              id="upbitAccess"
+              type="password"
+              autocomplete="new-password"
+              required /></label
+          ><label
+            >업비트 비밀 키<input
+              id="upbitSecret"
+              type="password"
+              autocomplete="new-password"
+              required /></label
+          ><label class="check-label"
+            ><input id="saveUpbit" type="checkbox" /> Windows 계정으로 암호화
+            저장</label
+          ><button class="outline">잔고·주문조회 연결 확인</button>
+        </form>
+      </div>
+      <form id="strategyPane" class="hidden">
+        <p class="small-note">
+          자동매매를 정지한 상태에서 변경하세요. 아래 값은 검증 전 실험 설정이며
+          수익을 보장하지 않습니다.
+        </p>
+        <div id="configFields" class="config-grid"></div>
+        <label
+          >Jev 분석 프롬프트<textarea
+            id="strategyPrompt"
+            rows="5"
+            maxlength="4000"
+          ></textarea>
+        </label>
+        <p class="small-note">
+          프롬프트는 분석 관점에만 적용됩니다. 주문금액·손실 한도는 위의 숫자
+          규칙이 우선합니다.
+        </p>
+        <button class="primary full">전략 및 한도 저장</button>
+      </form>
+    </dialog>
+    <dialog id="liveDialog">
+      <form id="liveForm">
+        <div class="dialog-head">
+          <h2>실전 운용금 설정</h2>
+          <button type="button" data-close="liveDialog">×</button>
+        </div>
+        <p class="live-warning">
+          실전 모드에서는 업비트 계좌의 실제 원화로 주문합니다.
+        </p>
+        <div id="liveChecks"></div>
+        <button type="button" id="testLiveBtn" class="outline full">
+          업비트 주문 테스트 (실제 체결 없음)</button
+        ><label
+          >이 봇에 배정할 원화 (원)<input
+            id="liveCapital"
+            type="text" inputmode="numeric" data-money
+            min="5000"
+            step="1"
+            required
+            placeholder="직접 입력" /></label
+        ><input id="livePhrase" type="hidden" value="" />
+        <p class="small-note">
+          봇이 매수한 수량만 매도합니다. 기존 개인 보유 코인은 매도하지
+          않습니다. 브라우저를 닫아도 메인 PC에서 실행됩니다. 종료 버튼을 눌러 정지하세요.
+        </p>
+        <button type="submit" name="action" value="manual" class="outline full">이 금액으로 실전 수동 주문 준비</button>
+        <button type="submit" name="action" value="auto" class="live-button full">이 금액으로 실전 자동매매 시작</button>
+      </form>
+    </dialog>
+    <dialog id="indicatorDialog">
+      <div class="dialog-head">
+        <h2>차트에 보조선 추가</h2>
+        <button data-close="indicatorDialog">×</button>
+      </div>
+      <p>
+        보고 싶은 것만 켜세요. 지표는 과거 가격을 정리한 참고 자료이며 미래를
+        보장하지 않습니다.
+      </p>
+      <label class="indicator-option"
+        ><input type="checkbox" data-indicator="volume" checked /><span
+          ><b>거래량 막대</b
+          ><small>각 시간 동안 실제로 거래된 코인의 개수입니다.</small></span
+        ></label
+      >
+      <label class="indicator-option"
+        ><input type="checkbox" data-indicator="ema" /><span
+          ><b>빠른 평균선 9·21 (EMA)</b
+          ><small
+            >최근 9개·21개 봉의 가격 흐름입니다. 최근 가격에 더 무게를 둡니다.
+            1분 차트라면 각각 최근 약 9분·21분 흐름을 봅니다.</small
+          ></span
+        ></label
+      >
+      <label class="indicator-option"
+        ><input type="checkbox" data-indicator="sma" /><span
+          ><b>평균선 5·20·60 (이동평균)</b
+          ><small
+            >최근 5개·20개·60개 봉의 평균 가격을 이어 그린 선입니다.</small
+          ></span
+        ></label
+      >
+      <label class="indicator-option"
+        ><input type="checkbox" data-indicator="bands" /><span
+          ><b>평소 가격 범위 (볼린저 밴드)</b
+          ><small
+            >최근 20개 봉의 평균과 가격 흔들림을 보여줍니다. 바깥으로 나갔다고
+            반드시 되돌아오는 것은 아닙니다.</small
+          ></span
+        ></label
+      >
+      <label class="indicator-option"
+        ><input type="checkbox" data-indicator="rsi" /><span
+          ><b>오름·내림 힘 14 (RSI)</b
+          ><small
+            >최근 가격이 오른 힘과 내린 힘을 0~100으로 비교합니다. 숫자가 크다고
+            반드시 더 오르는 것은 아닙니다.</small
+          ></span
+        ></label
+      >
+      <label class="indicator-option"
+        ><input type="checkbox" data-indicator="macd" /><span
+          ><b>추세 변화 (MACD)</b
+          ><small
+            >빠른 평균과 느린 평균의 차이를 비교해 가격 흐름이 강해지는지
+            약해지는지 봅니다.</small
+          ></span
+        ></label
+      >
+    </dialog>
+    <dialog id="helpDialog">
+      <div class="dialog-head">
+        <h2>쉽게 읽는 사용 안내</h2>
+        <button data-close="helpDialog">×</button>
+      </div>
+      <div id="glossary"></div>
+    </dialog>
+    <div id="toast" role="status" class="toast hidden"></div>
+  </body>
+</html>

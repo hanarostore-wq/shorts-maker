@@ -1,0 +1,1 @@
+export class UpbitBroker {constructor(){this.verified=false;} async send(){throw Error('웹 실전 주문 승인 연동 전 잠금');} async verify(){throw Error('업비트 인증은 서버에서만 처리합니다.');} async chance(){throw Error('실전 조회 화면에서 잔고를 확인하세요.');}}

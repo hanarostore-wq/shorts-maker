@@ -16,3 +16,5 @@
 .card h2 { margin:0 0 12px; font-size:18px; color:#ecf3ff; }.card p { margin:12px 0; }.card ol { padding-left:22px; list-style:decimal; }.card li { margin:8px 0; }
 .card button { border:1px solid #618cd1; padding:10px 20px; border-radius:6px; background:#235ab0; color:white; cursor:pointer; }
 @media(max-width:600px) { .header { padding:8px; }.heading { gap:6px; font-size:13px; }.connection { flex-basis:100%; }.notice { padding:6px 8px; }.card { padding:16px; }.connectionPanel { padding:12px; } }
+
+.webError{position:absolute;bottom:12px;left:12px;right:12px;border:1px solid #b55b5b;background:#401d26;padding:12px;color:#ffe0e0;font-size:13px;}
