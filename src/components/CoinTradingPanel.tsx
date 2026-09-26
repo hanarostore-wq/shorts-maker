@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Agent } from "@/lib/types";
 
-type Candle = { trade_price: number; opening_price?: number; high_price?: number; low_price?: number; candle_acc_trade_volume?: number };
+type Candle = { trade_price: number; opening_price?: number; high_price?: number; low_price?: number; candle_acc_trade_volume?: number; timestamp?: number; candle_date_time_kst?: string };
 type MarketData = { ok: boolean; market: string; price?: number; indicators?: { sma5: number | null; sma20: number | null; rsi14: number | null; signal?: string }; candles?: Candle[]; orderbook?: { totalAskSize: number; totalBidSize: number; units: Array<{ ask_price: number; bid_price: number; ask_size: number; bid_size: number }> }; error?: string };
 type SimulationRow = { time: string; price: number; action: string; reason: string };
 
@@ -41,7 +41,7 @@ function CandleChart({ candles = [] }: { candles?: Candle[] }) {
   const volumes = ordered.map((c) => Number(c.candle_acc_trade_volume ?? 0)); const maxVolume = Math.max(...volumes, 1);
   const y = (price: number) => 115 - ((price - min) / span) * 92; const x = (index: number) => 10 + (index / Math.max(ordered.length - 1, 1)) * 380;
   const averagePath = (period: number) => ordered.map((c, index) => { if (index < period - 1) return null; const value = ordered.slice(index - period + 1, index + 1).reduce((sum, item) => sum + Number(item.trade_price), 0) / period; return `${x(index)},${y(value)}`; }).filter(Boolean).join(" ");
-  return <svg viewBox="0 0 400 150" className="h-52 w-full" preserveAspectRatio="none" role="img" aria-label="실시간 1분 캔들 차트"><g stroke="#27272a" strokeWidth="0.5">{[20, 45, 70, 95, 120].map((line) => <line key={line} x1="0" x2="400" y1={line} y2={line} />)}</g>{ordered.map((candle, index) => { const open = Number(candle.opening_price ?? candle.trade_price); const close = Number(candle.trade_price); const high = Number(candle.high_price ?? Math.max(open, close)); const low = Number(candle.low_price ?? Math.min(open, close)); const up = close >= open; const width = Math.max(2, 360 / ordered.length); return <g key={`${index}-${candle.trade_price}`}><line x1={x(index)} x2={x(index)} y1={y(high)} y2={y(low)} stroke={up ? "#10b981" : "#ef4444"} strokeWidth="1" /><rect x={x(index) - width / 2} y={Math.min(y(open), y(close))} width={width} height={Math.max(1, Math.abs(y(open) - y(close)))} fill={up ? "#10b981" : "#ef4444"} /><rect x={x(index) - width / 2} y={132 - (volumes[index] / maxVolume) * 12} width={width} height={(volumes[index] / maxVolume) * 12} fill={up ? "#10b98155" : "#ef444455"} /></g>; })}<polyline points={averagePath(5)} fill="none" stroke="#facc15" strokeWidth="1" /><polyline points={averagePath(20)} fill="none" stroke="#38bdf8" strokeWidth="1" /><text x="8" y="148" fill="#71717a" fontSize="7">노랑: 최근 5분 평균 · 파랑: 최근 20분 평균 · 아래 막대: 거래량</text></svg>;
+  return <svg viewBox="0 0 400 150" className="h-52 w-full" preserveAspectRatio="none" role="img" aria-label="실시간 1초봉 체결 차트"><g stroke="#27272a" strokeWidth="0.5">{[20, 45, 70, 95, 120].map((line) => <line key={line} x1="0" x2="400" y1={line} y2={line} />)}</g>{ordered.map((candle, index) => { const open = Number(candle.opening_price ?? candle.trade_price); const close = Number(candle.trade_price); const high = Number(candle.high_price ?? Math.max(open, close)); const low = Number(candle.low_price ?? Math.min(open, close)); const up = close >= open; const width = Math.max(2, 360 / ordered.length); return <g key={`${index}-${candle.timestamp ?? candle.trade_price}`}><line x1={x(index)} x2={x(index)} y1={y(high)} y2={y(low)} stroke={up ? "#10b981" : "#ef4444"} strokeWidth="1" /><rect x={x(index) - width / 2} y={Math.min(y(open), y(close))} width={width} height={Math.max(1, Math.abs(y(open) - y(close)))} fill={up ? "#10b981" : "#ef4444"} /><rect x={x(index) - width / 2} y={132 - (volumes[index] / maxVolume) * 12} width={width} height={(volumes[index] / maxVolume) * 12} fill={up ? "#10b98155" : "#ef444455"} /></g>; })}<polyline points={averagePath(5)} fill="none" stroke="#facc15" strokeWidth="1" /><polyline points={averagePath(20)} fill="none" stroke="#38bdf8" strokeWidth="1" /><text x="8" y="148" fill="#71717a" fontSize="7">노랑: 최근 5초 평균 · 파랑: 최근 20초 평균 · 아래 막대: 초당 체결량</text></svg>;
 }
 
 export function CoinTradingPanel({ agent, showSimulation = true }: { agent: Agent; showSimulation?: boolean }) {
@@ -52,6 +52,7 @@ export function CoinTradingPanel({ agent, showSimulation = true }: { agent: Agen
   const [simulation, setSimulation] = useState<SimulationRow[]>([]);
   const [mode, setMode] = useState<"paper" | "live">("paper");
   const [message, setMessage] = useState("시세 조회 대기");
+  const liveSecondCandles = useRef<Candle[]>([]);
 
   const load = useCallback(async () => {
     setMessage("업비트 공개 시세 조회 중...");
@@ -72,19 +73,42 @@ export function CoinTradingPanel({ agent, showSimulation = true }: { agent: Agen
   }, [load]);
 
   useEffect(() => {
+    liveSecondCandles.current = [];
     const stream = new EventSource(`/api/coin/stream?market=${encodeURIComponent(market)}&codes=${encodeURIComponent(market)}`);
     stream.onopen = () => setStreamStatus("실시간 서버 중계 정상");
     stream.onmessage = (event) => {
       try {
-        const tick = JSON.parse(event.data) as { type?: string; code?: string; trade_price?: number; total_ask_size?: number; total_bid_size?: number; orderbook_units?: NonNullable<MarketData["orderbook"]>["units"]; message?: string; errorCode?: string };
+        const tick = JSON.parse(event.data) as { type?: string; code?: string; trade_price?: number; trade_volume?: number; trade_timestamp?: number; timestamp?: number; total_ask_size?: number; total_bid_size?: number; orderbook_units?: NonNullable<MarketData["orderbook"]>["units"]; message?: string; errorCode?: string };
         if (tick.type === "relay_heartbeat" || tick.type === "relay_open") return;
         if (tick.type === "relay_error") { setStreamStatus("실시간 중계 오류"); setMessage(`${tick.errorCode || "[UPBIT_RELAY_ERROR]"} ${tick.message || "업비트 서버 중계 오류"}`); return; }
         setStreamStatus(`실시간 수신 ${new Date().toLocaleTimeString("ko-KR")}`);
         if (tick.type === "orderbook" && tick.code === market) setLiveOrderbook({ totalAskSize: Number(tick.total_ask_size || 0), totalBidSize: Number(tick.total_bid_size || 0), units: tick.orderbook_units?.slice(0, 8) || [] });
         else if (tick.type === "ticker" && tick.code === market) setData((previous) => {
-          if (!previous?.candles?.length) return previous;
-          const closes = previous.candles.map((candle, index) => index === 0 ? Number(tick.trade_price) : Number(candle.trade_price)).reverse();
-          return { ...previous, price: Number(tick.trade_price), candles: previous.candles.map((candle, index) => index === 0 ? { ...candle, trade_price: Number(tick.trade_price) } : candle), indicators: { ...previous.indicators, sma5: liveSma(closes, 5), sma20: liveSma(closes, 20), rsi14: liveRsi(closes), signal: previous.indicators?.signal } };
+          const price = Number(tick.trade_price);
+          const tradeTs = Number(tick.trade_timestamp || tick.timestamp || Date.now());
+          const secondStart = Math.floor(tradeTs / 1000) * 1000;
+          const current = liveSecondCandles.current[0];
+          if (!current || Number(current.timestamp) !== secondStart) {
+            liveSecondCandles.current = [{
+              trade_price: price,
+              opening_price: price,
+              high_price: price,
+              low_price: price,
+              candle_acc_trade_volume: Number(tick.trade_volume || 0),
+              timestamp: secondStart,
+              candle_date_time_kst: new Date(secondStart).toISOString(),
+            }, ...liveSecondCandles.current].slice(0, 60);
+          } else {
+            liveSecondCandles.current = [{
+              ...current,
+              trade_price: price,
+              high_price: Math.max(Number(current.high_price ?? price), price),
+              low_price: Math.min(Number(current.low_price ?? price), price),
+              candle_acc_trade_volume: Number(current.candle_acc_trade_volume || 0) + Number(tick.trade_volume || 0),
+            }, ...liveSecondCandles.current.slice(1)];
+          }
+          const closes = liveSecondCandles.current.map((candle) => Number(candle.trade_price)).reverse();
+          return { ...(previous || { ok: true, market }), price, candles: liveSecondCandles.current, indicators: { ...(previous?.indicators || {}), sma5: liveSma(closes, 5), sma20: liveSma(closes, 20), rsi14: liveRsi(closes), signal: previous?.indicators?.signal } };
         });
       } catch { setMessage("[UPBIT_RELAY_PARSE_ERROR] 서버 중계 시세·호가 데이터 해석 오류"); }
     };
@@ -127,7 +151,7 @@ export function CoinTradingPanel({ agent, showSimulation = true }: { agent: Agen
       </div>
       {data?.ok ? <>
         <div className="grid grid-cols-2 gap-2 border border-zinc-800 p-2 text-zinc-300"><div>현재가 {data.price?.toLocaleString()}원</div><div>과열 점수 · 최근 14분 {data.indicators?.rsi14?.toFixed(2) ?? "-"}</div><div>짧은 평균 · 최근 5분 {data.indicators?.sma5?.toFixed(2) ?? "-"}</div><div>긴 평균 · 최근 20분 {data.indicators?.sma20?.toFixed(2) ?? "-"}</div><div className={data.indicators?.signal === "golden_cross" ? "text-emerald-400" : data.indicators?.signal === "dead_cross" ? "text-red-400" : "text-zinc-500"}>{data.indicators?.signal === "golden_cross" ? "골든크로스" : data.indicators?.signal === "dead_cross" ? "데드크로스" : "교차 없음"}</div></div>
-        <div className="border border-zinc-800 p-2"><div className="mb-1 text-zinc-500">1분마다 한 개씩 생기는 가격 막대 · 실시간 진행 중</div><CandleChart candles={data.candles} /></div>
+        <div className="border border-zinc-800 p-2"><div className="mb-1 text-zinc-500">최근 60초 · 1초마다 갱신되는 실시간 체결 차트</div><CandleChart candles={data.candles} /></div>
         <div className="border border-zinc-800 p-2"><div className="mb-1 text-zinc-500">지금 사고팔 수 있는 가격표 · 매도 / 매수</div>{(liveOrderbook || data.orderbook)?.units.slice(0, 5).map((unit, index) => <div key={`${unit.ask_price}-${index}`} className="grid grid-cols-2 gap-2 text-[10px]"><span className="text-red-300">매도 {unit.ask_price.toLocaleString()} · {unit.ask_size.toFixed(4)}</span><span className="text-emerald-300">매수 {unit.bid_price.toLocaleString()} · {unit.bid_size.toFixed(4)}</span></div>)}</div>
       </> : null}
       <div className="flex gap-2"><button onClick={() => void submitOrder("buy")} className="flex-1 border border-emerald-700 px-2 py-1 text-emerald-400">{mode === "paper" ? "매수 시뮬레이션" : "실제 매수 검사"}</button><button onClick={() => void submitOrder("sell")} className="flex-1 border border-sky-700 px-2 py-1 text-sky-400">{mode === "paper" ? "매도 시뮬레이션" : "실제 매도 검사"}</button></div>
