@@ -13,6 +13,10 @@ export async function POST(request:Request){
  const key=process.env.TYPESAFE_API_KEY;if(!key)return Response.json({error:'운영본부 서버에 TypeSafe 키가 없습니다. 서버 연결 설정이 필요합니다.'},{status:503});
  const redis=getSharedRedis();if(!redis)return Response.json({error:'중복 판단 방지용 공유 저장소 연결을 확인하세요.'},{status:503});
  const token=randomUUID();const lock=await redis.set('moneyos:terminal:judgment-lock',token,{nx:true,ex:15});if(!lock)return Response.json({error:'다른 판단 요청 처리 중입니다. 잠시 후 다시 시도하세요.'},{status:429});
- try {const decision=await askJev(key,state,prompt);return Response.json({decision},{headers:{'Cache-Control':'no-store'}});} finally {await redis.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",['moneyos:terminal:judgment-lock'],[token]);}
- }catch(e){return Response.json({error:e instanceof Error?e.message:'Jev 판단 서버 오류'},{status:502});}
+ try {
+  const decision=await askJev(key,state,prompt);
+  if(!decision||typeof decision!=='object')return Response.json({error:'TypeSafe가 빈 판단 응답을 반환했습니다. 잠시 후 다시 시도하세요.'},{status:502,headers:{'Cache-Control':'no-store'}});
+  return Response.json({decision},{headers:{'Cache-Control':'no-store'}});
+ } finally {await redis.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",['moneyos:terminal:judgment-lock'],[token]);}
+ }catch(e){return Response.json({error:e instanceof Error?`Jev 연결 실패: ${e.message}`:'Jev 판단 서버 오류'},{status:502});}
 }

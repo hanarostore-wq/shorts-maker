@@ -77,7 +77,13 @@ function toast(text, error = false) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => $("toast").classList.add("hidden"), 6500);
 }
-async function api(path,data={}) {const x=await command(path,data);if(x.engine){state=x;render();renderWorkspace(state);}return x;}
+async function api(path,data={}) {
+  const x=await command(path,data);
+  if (!x || typeof x !== "object") throw Error("매매 PC가 비어 있는 응답을 반환했습니다. PC 워커 연결 상태를 확인하세요.");
+  if (x.error) throw Error(String(x.error));
+  if (!x.engine || !x.market) throw Error("매매 PC 응답 형식이 올바르지 않습니다. 워커를 재시작한 뒤 다시 시도하세요.");
+  state=x;render();renderWorkspace(state);return x;
+}
 
 async function act(fn) {
   if (busy) return;
@@ -91,6 +97,7 @@ async function act(fn) {
   }
 }
 function showSettings() {
+  if (!state?.engine) { toast("매매 화면이 아직 준비되지 않았습니다. PC 워커 연결을 확인하세요.", true); return; }
   if ($('settingsFeedback')) $('settingsFeedback').hidden = true;
   const e = state.engine;
   for (const key of Object.keys(configLabels))
@@ -234,7 +241,7 @@ function renderStrategy() {
   ].map(([k,v])=>'<div><dt>'+esc(k)+'</dt><dd>'+esc(v)+'</dd></div>').join(''):'';
 }
 function render() {
-  if (!state) return;
+  if (!state?.engine || !state?.market) return;
   const e = state.engine,
     m = state.market,
     a = e.account,
@@ -546,6 +553,7 @@ const regimeNames = {
   crisis: "위기",
 };
 function renderJev() {
+  if (!state?.engine) return;
   const e = state.engine,
     d = e.decision;
   const stale =
@@ -562,7 +570,11 @@ function renderJev() {
   $("jevStatus").className = "badge " + (!stale ? "ok" : "");
   $("jevModel").textContent = d ? d.model : "TypeSafe 직접 연결";
   $("jevLatency").textContent = d ? d.latencyMs + "ms" : "— ms";
-  const ans = !stale ? d.answers : null;
+  const ans = !stale && d?.answers ? d.answers : null;
+  const probability = (group,key) => {
+    const value = Number(group?.probabilities?.[key]);
+    return Number.isFinite(value) ? value : 0;
+  };
   const dirs = [
     ["up", "상승", "#d64145"],
     ["neutral", "중립", "#9aa8bc"],
@@ -574,25 +586,25 @@ function renderJev() {
         '<div class="prob-row"><span>' +
         label +
         '</span><div class="bar"><i style="width:' +
-        (ans ? ans.direction.probabilities[k] * 100 : 0) +
+            (ans ? probability(ans.direction,k) * 100 : 0) +
         "%;background:" +
         c +
         '"></i></div><b style="color:' +
         c +
         '">' +
-        (ans ? pct(ans.direction.probabilities[k]) : "—") +
+            (ans ? pct(probability(ans.direction,k)) : "—") +
         "</b></div>",
     )
     .join("");
   $("signalGrid").innerHTML =
     "<div>시장 흐름<strong>" +
-    (ans ? regimeNames[ans.regime.choice] : "판단 대기") +
+    (ans?.regime ? regimeNames[ans.regime.choice] || ans.regime.choice : "판단 대기") +
     "</strong></div><div>판단이 한쪽에 모인 정도<strong>" +
-    (ans ? pct(ans.direction.confidence) : "—") +
+    (ans && Number.isFinite(Number(ans.direction?.confidence)) ? pct(ans.direction.confidence) : "—") +
     "</strong></div><div>산 뒤 불리해질 위험<strong>" +
-    (ans ? pct(ans.toxic_flow.noul) : "—") +
+    (ans && Number.isFinite(Number(ans.toxic_flow?.noul)) ? pct(ans.toxic_flow.noul) : "—") +
     "</strong></div><div>거래 물량 부족 위험<strong>" +
-    (ans ? pct(ans.liquidity_stressed.noul) : "—") +
+    (ans && Number.isFinite(Number(ans.liquidity_stressed?.noul)) ? pct(ans.liquidity_stressed.noul) : "—") +
     "</strong></div>";
   $("scoreList").innerHTML = [
     "quote_environment",
@@ -604,11 +616,11 @@ function renderJev() {
         '<div class="score-row"><span>' +
         labels[k] +
         "</span><b>" +
-        (ans ? fixed(ans[k].score, 2) + " / 3" : "—") +
+        (ans && Number.isFinite(Number(ans[k]?.score)) ? fixed(ans[k].score, 2) + " / 3" : "—") +
         "</b></div>",
     )
     .join("");
-  $("allProbabilities").innerHTML = d
+  $("allProbabilities").innerHTML = d?.answers
     ? Object.entries(d.answers)
         .map(
           ([k, v]) =>
@@ -879,6 +891,7 @@ $("liveForm").onsubmit = (e) => {
 };
 $("startBtn").onclick = () =>
   act(async () => {
+    if (!state?.engine) throw Error("매매 화면이 아직 준비되지 않았습니다. PC 워커 연결을 확인하세요.");
     if (state.engine.mode === "live" && !state.engine.account) {
       if (state.engine.account)
         $("liveCapital").value = groupedMoneyInput(state.engine.account.initial);

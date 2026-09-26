@@ -21,7 +21,9 @@ export class MarketFeed {
     this.generation = 0;
     this.closed = false;
     this.restBlockedUntil = 0;
-    this.units = 1;
+    // The visible chart defaults to Upbit's 1-second candles. Strategy features
+    // continue to use signalCandles (1-minute candles) separately.
+    this.units = 1 / 60;
     this.ws = null;
     this.restQueue = Promise.resolve();
     this.clockSamples = [];
@@ -163,7 +165,11 @@ export class MarketFeed {
         JSON.stringify([
           { ticket: randomUUID() },
           { type: "ticker", codes: this.markets.map((x) => x.market) },
-          ...(this.scanner ? [] : [{ type: "trade", codes: [this.symbol] }]),
+          // Keep a direct selected-market trade stream even when the universe
+          // scanner is active. The scanner stream is for ranking; this stream
+          // is the authoritative source for the visible chart and selected
+          // market risk loop. Duplicate sequential IDs are deduplicated below.
+          { type: "trade", codes: [this.symbol], is_only_realtime: true },
           { type: "orderbook", codes: [this.symbol] },
         ]),
       );
