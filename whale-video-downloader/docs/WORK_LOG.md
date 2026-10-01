@@ -1,0 +1,37 @@
+# 작업 로그 — 웨일 영상 다운로더
+
+중앙 규칙(`hanarostore-wq/obsidian-main` AGENTS.md)의 상태 표준을 따른다: CONFIRMED / UNVERIFIED / IN PROGRESS / BLOCKED / FAILED / PLANNED.
+
+## 2026-10-01 · WVD-001 · 웨일 영상 다운로더 v1.0.0 최초 구축
+
+- 담당: Claude Code (원격 세션)
+- 요청: 웨일 확장프로그램 단독으로(로컬 헬퍼 없이) 17개 사이트 영상을 원본 화질로 저장, 영상 하단 다운로드 버튼, 팝업에서 저장 경로 설정, 아이콘·팝업 디자인, 전 사이트 다운로드 검증. 사용자가 "저장소 새로 만들어서" 진행하도록 지시.
+- 진행 상태: 완료(소스 구현·모의 검증) / 실사이트 검증 BLOCKED
+
+### 구현 (CONFIRMED — 코드 존재, 테스트 통과)
+- MV3 확장프로그램 `extension/`: MAIN world 응답 가로채기(hook.js), 사이트 어댑터 17종 + 일반 사이트(sites.js), Shadow DOM 버튼·진행률·오류 패널(core.js)
+- 서비스워커: 화질 선택 빌더(builders.js), DASH MPD 파서(mpd.js), 원본 주소 확인(resolvers.js: 유튜브 InnerTube ANDROID_VR→IOS→페이지 플레이어, 블루스카이 PDS 원본 blob→HLS, X 신디케이션, 네이버 재생정보, 비메오 설정, 데일리모션 메타데이터, 네트워크 감지), declarativeNetRequest 헤더 규칙, 미러·차선 화질 자동 재시도
+- 오프스크린 저장 엔진(engine.js): 병렬 범위 다운로드, 패킷 복사 병합(재인코딩 없음), HLS·DASH(SegmentTemplate 포함) → MP4, 라이브 HLS 차단, Range 미지원 서버 스트리밍 저장 — mediabunny 1.61.0(MPL-2.0) 사용
+- 저장 위치: 다운로드 폴더+하위 폴더 / 매번 묻기 / 폴더 직접 선택(File System Access, 권한 만료 시 다운로드 폴더로 대체 저장 + 안내)
+- 팝업(다운로드·저장 설정·지원 사이트 탭, 다크 모드), 폴더 선택 창, 아이콘 16/32/48/128
+
+### 검증
+| 항목 | 상태 | 근거 |
+|---|---|---|
+| 단위 테스트 12건 | CONFIRMED | `npm test` 12/12 |
+| 엔진 테스트 7건 (Chromium) | CONFIRMED | `npm run test:engine` 7/7 |
+| E2E 35건 (배포 ZIP 을 풀어 Chromium 에 로드) | CONFIRMED | `npm run test:e2e` 35/35 — 17개 사이트 모의 페이지에서 버튼 클릭 → 실제 파일 저장 → ffprobe 로 해상도·코덱·음성 확인, 오류 경로 4건, 폴더 모드 4건, 하위 폴더 변경, 팝업 다운로드 |
+| 실제 17개 사이트 다운로드 | BLOCKED → UNVERIFIED | 이 세션의 네트워크 정책이 대상 도메인 전부를 프록시 403 으로 차단. 사용자가 환경 네트워크 허용 목록에 도메인을 추가하거나, 웨일에서 직접 설치해 확인 필요 |
+| 웨일 브라우저 설치 | UNVERIFIED | 세션에 웨일 없음 (Chromium 141 계열로 검증) |
+| 폴더 선택 대화상자 | UNVERIFIED | 자동화 불가. 같은 타입의 디렉터리 핸들로 쓰기 경로만 CONFIRMED |
+
+### 검증 중 발견·수정한 문제
+1. 비UTF-8 로케일 리눅스에서 한글 파일 이름을 `chrome.downloads` 가 거부 → 영문 이름 자동 재시도 + 안내 추가 (윈도우 웨일은 해당 없음)
+2. OPFS 임시 파일에 MIME 타입이 없어 저장 시 확장자가 `.txt` 로 바뀜 → 확장자에 맞는 타입 지정
+3. 브라우저 다운로드 관리자 요청에는 declarativeNetRequest 헤더가 붙지 않음(실측) → Referer/UA 가 필요한 CDN 은 확장 엔진으로 직접 받아 웨일 다운로드 목록에 실패 항목이 남지 않게 함
+4. hook.js 규칙 정리 중 유튜브 플레이어 질의 처리기가 등록되지 않던 회귀 → 수정 후 재검증
+
+### 주의 / 다음 행동
+- 실사이트 구조가 모의 데이터와 다르면 해당 어댑터(`extension/content/sites.js`, `extension/background/builders.js`) 수정 필요. 특히 유튜브 앱 클라이언트 버전(`resolvers.js` YT_CLIENTS)은 주기적 갱신 필요.
+- 중앙 기록(`obsidian-main` AI-TEAM/WORK_LOG, HANDOFF)은 이 세션에 쓰기 권한이 없어 갱신하지 못함 → 이 파일 내용을 중앙에 옮겨 적어야 함.
+- GitHub 새 저장소 생성은 연결된 GitHub 앱 권한 부족(403 "Resource not accessible by integration")으로 실패 → 사용자가 빈 저장소를 만들면 push.

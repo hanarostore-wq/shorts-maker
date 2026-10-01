@@ -1,0 +1,94 @@
+{
+  "manifest_version": 3,
+  "name": "웨일 영상 다운로더",
+  "short_name": "영상 다운로더",
+  "version": "1.0.0",
+  "description": "유튜브·쇼츠·틱톡·인스타·X·블루스카이·빌리빌리 등 17개 사이트 영상을 원본화질로 바로 저장합니다. 별도 프로그램 없이 확장프로그램만으로 동작합니다.",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "웨일 영상 다운로더",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "permissions": [
+    "downloads",
+    "storage",
+    "unlimitedStorage",
+    "offscreen",
+    "declarativeNetRequestWithHostAccess",
+    "webRequest",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://*.youtube-nocookie.com/*",
+        "*://*.tiktok.com/*",
+        "*://bsky.app/*",
+        "*://*.bsky.app/*",
+        "*://*.instagram.com/*",
+        "*://*.xiaohongshu.com/*",
+        "*://*.snapchat.com/*",
+        "*://*.douyin.com/*",
+        "*://*.kuaishou.com/*",
+        "*://*.bilibili.com/*",
+        "*://weibo.com/*",
+        "*://*.weibo.com/*",
+        "*://*.weibo.cn/*",
+        "*://*.facebook.com/*",
+        "*://x.com/*",
+        "*://*.x.com/*",
+        "*://twitter.com/*",
+        "*://*.twitter.com/*",
+        "*://*.pinterest.com/*",
+        "*://*.pinterest.co.kr/*",
+        "*://*.pinterest.co.uk/*",
+        "*://*.pinterest.jp/*",
+        "*://*.pinterest.de/*",
+        "*://*.pinterest.fr/*",
+        "*://*.pinterest.ca/*",
+        "*://*.pinterest.com.au/*",
+        "*://*.naver.com/*",
+        "*://vimeo.com/*",
+        "*://*.vimeo.com/*",
+        "*://*.dailymotion.com/*"
+      ],
+      "js": [
+        "content/hook.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/sites.js",
+        "content/core.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}

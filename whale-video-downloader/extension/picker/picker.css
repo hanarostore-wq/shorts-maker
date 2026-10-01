@@ -1,0 +1,12 @@
+body.picker { width: auto; height: auto; min-height: 100vh; overflow: auto; }
+.picker main { padding: 16px; overflow: visible; }
+.picker .hero { padding-bottom: 22px; }
+.card.big { padding: 16px; }
+.btn.huge { width: 100%; margin-top: 14px; padding: 13px 0; font-size: 14px; border-radius: 13px; }
+.msg { min-height: 20px; margin: 10px 2px 0; font-size: 12.5px; line-height: 1.55; }
+.msg.ok { color: var(--ok); font-weight: 700; }
+.msg.err { color: var(--err); font-weight: 650; }
+.tips strong { display: block; margin-bottom: 6px; }
+.tips ul { margin: 0; padding-left: 18px; color: var(--sub); font-size: 12px; line-height: 1.6; }
+.tips li + li { margin-top: 4px; }
+code { font-family: inherit; font-weight: 700; color: var(--text); background: var(--soft); padding: 0 5px; border-radius: 5px; }
