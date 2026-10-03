@@ -338,6 +338,30 @@ const handlers = {
           ${vtag('poster="https://pbs.twimg.com/ext_tw_video_thumb/1790000000000000999/pu/img/thumb.jpg"')}</article>`,
         `fetch('/i/api/graphql/abc123/TweetDetail?variables=%7B%7D').then(r=>r.json());`));
     }
+    if (u.pathname === '/tester/status/1790000000000000003/photo/1') {
+      // X 사진 확대 보기(모달). 닫기 버튼을 누르면 window.__closed = true
+      return html(res, page('X 사진 보기', `<div role="dialog" aria-modal="true" style="position:fixed;inset:0;background:rgba(0,0,0,.9);display:grid;place-items:center">
+          <button data-testid="app-bar-close" aria-label="Close" onclick="window.__closed = true" style="position:absolute;left:12px;top:12px">×</button>
+          <img alt="이미지" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=large" style="max-width:80vw;max-height:80vh">
+        </div>`));
+    }
+    if (u.pathname === '/home') {
+      // 타임라인: GraphQL 가로채기 데이터 없음 + 신디케이션 실패(404) → 화면 게시물의 React 데이터로 찾아야 한다.
+      // 영상 위에는 실제 X 처럼 썸네일 <img> 가 겹쳐 있다(여기에 사진 버튼이 뜨면 안 됨).
+      const tweet = { rest_id: '1790000000000000004', legacy: { id_str: '1790000000000000004', full_text: '타임라인 영상 게시물', extended_entities: { media: [{ id_str: '1790000000000000777', type: 'video', video_info: { duration_millis: 6000, variants: [
+        { content_type: 'video/mp4', bitrate: 632000, url: 'https://video.twimg.com/ext_tw_video/1790000000000000777/pu/vid/avc1/320x568/low.mp4' },
+        { content_type: 'video/mp4', bitrate: 10368000, url: 'https://video.twimg.com/ext_tw_video/1790000000000000777/pu/vid/avc1/1080x1920/high.mp4' },
+      ] } }] } } };
+      return html(res, page('홈 / X', `<article data-testid="tweet"><a href="/tester/status/1790000000000000004"><time>9월 30일</time></a>
+          <div id="player" style="position:relative;width:360px;height:640px">
+            <video src="https://cdn.example-videos.com/preview.webm" muted playsinline loop style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video>
+            <img alt="" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=small" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+          </div></article>`,
+        `const host = document.getElementById('player');
+         const fiber = { memoizedProps: { className: 'x' }, return: { memoizedProps: { tweet: ${JSON.stringify(tweet)}, viewerId: 1 }, return: null } };
+         host['__reactFiber$mockx1'] = fiber;
+         document.querySelector('#player video')['__reactFiber$mockx1'] = { memoizedProps: {}, return: fiber };`));
+    }
     if (u.pathname === '/tester/status/1790000000000000003') {
       // 실제 X 처럼: 배경 이미지 div 위에 투명도 0 인 <img> 를 겹쳐 둔다
       const pic = (id) => `<div style="position:relative;width:420px;height:315px;margin:8px 0"><div style="position:absolute;inset:0;background:url(https://pbs.twimg.com/media/${id}?format=jpg&name=small) center/cover"></div><img alt="이미지" src="https://pbs.twimg.com/media/${id}?format=jpg&name=small" style="position:absolute;inset:0;width:100%;height:100%;opacity:0"></div>`;

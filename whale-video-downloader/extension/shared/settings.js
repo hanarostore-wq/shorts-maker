@@ -7,7 +7,8 @@ export const DEFAULT_SETTINGS = {
   quality: 'best', // 'best' = 원본 최고화질, 'compat' = 호환성(H.264) 우선
   showButtons: true,
   buttonPosition: 'mid-right', // mid-right | bottom-right | bottom-center | bottom-left | top-right
-  placements: {}, // 사이트별로 직접 배치한 버튼 위치 { fx, fy } (영상 안 비율)
+  placements: {}, // 사이트별로 직접 배치한 영상 버튼 위치 { fx, fy } (영상 안 비율)
+  imagePlacements: {}, // 사이트별로 직접 배치한 사진 버튼 위치
   genericButtons: true, // 지원 목록 밖 사이트에서도 버튼 표시
   disabledSites: [],
 };

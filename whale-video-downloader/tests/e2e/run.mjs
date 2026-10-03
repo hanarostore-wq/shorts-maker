@@ -212,6 +212,7 @@ const scenarios = [
   { name: '데일리모션(메타데이터 → HLS)', url: 'https://www.dailymotion.com/video/x8mock1', expect: { width: 1280, height: 720, audio: true } },
   { name: '유튜브(앱 클라이언트 실패 → 페이지 플레이어 대체)', url: 'https://www.youtube.com/watch?v=YTpage00001', expect: { width: 1920, height: 1080, audio: true } },
   { name: '일반 사이트(Range 미지원 서버 → 스트리밍 저장)', url: 'https://www.example-videos.com/norange', expect: { width: 1080, height: 1920, audio: true } },
+  { name: 'X 타임라인(게시물 안 열고, React 데이터)', url: 'https://x.com/home', expect: { width: 1080, height: 1920, audio: true } },
   // 오류 경로
   { name: '[오류] 진행 중 라이브(HLS)', url: 'https://www.example-videos.com/live', expectError: ['라이브', '해결'] },
   { name: '[오류] 틱톡 만료 주소(403)', url: 'https://www.tiktok.com/@creator/video/7300000000000000009', expectError: ['단계', '영상 데이터 받기', '403', '해결'], shot: 'tiktok-expired' },
@@ -299,6 +300,97 @@ if (!only || only === 'image' || '사진'.includes(only)) {
     await pp.close();
   } catch (err) {
     record('[사진] X 사진 / 모두 저장', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
+// ── 영상 위 썸네일에는 사진 버튼이 뜨지 않아야 한다 ──
+if (!only || only === 'image' || '사진'.includes(only)) {
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1800);
+    const vb = await page.locator('video').boundingBox();
+    await page.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 3);
+    await page.waitForTimeout(500);
+    const n = await page.evaluate(() => [...document.querySelectorAll('smd-anchor')].filter((h) => h.shadowRoot.querySelector('.btn.show')).length);
+    const label = await page.locator('smd-anchor .btn.show').first().getAttribute('title');
+    record('[사진] 영상 위 썸네일에는 사진 버튼 없음(영상 다운로드 버튼만)', n === 1 && /원본 화질/.test(label || ''), { note: `보이는 버튼 ${n}개 · ${label}` });
+  } catch (err) {
+    record('[사진] 영상 위 썸네일 제외', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
+// ── 사진 버튼: 기본 위치(영상 버튼 자리보다 아래) + 직접 배치 ──
+if (!only || only === 'place' || '배치'.includes(only)) {
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://www.example-videos.com/photos', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const img = page.locator('img.photo').nth(1);
+    const geom = () => page.evaluate(() => {
+      const im = document.querySelectorAll('img.photo')[1];
+      const host = [...document.querySelectorAll('smd-anchor')].find((h) => h.parentElement.contains(im));
+      const b = host.shadowRoot.querySelector('.btn');
+      const r = im.getBoundingClientRect();
+      const br = b.getBoundingClientRect();
+      return { fx: (br.left + br.width / 2 - r.left) / r.width, fy: (br.top + br.height / 2 - r.top) / r.height };
+    });
+    const ib = await img.boundingBox();
+    await page.mouse.move(ib.x + ib.width / 2, ib.y + ib.height / 2);
+    await page.waitForTimeout(400);
+    const g0 = await geom();
+    record('[사진] 기본 버튼 위치 = 오른쪽, 영상 버튼 자리보다 아래', g0.fx > 0.85 && g0.fy > 0.55 && g0.fy < 0.8, { note: `가로 ${(g0.fx * 100).toFixed(0)}% · 세로 ${(g0.fy * 100).toFixed(0)}%` });
+
+    const tabId = await (async () => { const pp = await extPage(); const id = await pp.evaluate(async () => (await chrome.tabs.query({ url: 'https://www.example-videos.com/photos' }))[0]?.id); await pp.close(); return id; })();
+    const pp = await extPage(`popup/popup.html?tabId=${tabId}`);
+    await pp.click('.tab[data-tab="settings"]');
+    await pp.click('#placeButton');
+    await pp.close().catch(() => {});
+    await page.locator('smd-toolbar').waitFor({ timeout: 5000 });
+    const host = page.locator('smd-anchor').filter({ has: page.locator('.btn.edit') });
+    const btnBox = await page.evaluate(() => {
+      const im = document.querySelectorAll('img.photo')[1];
+      const h = [...document.querySelectorAll('smd-anchor')].find((x) => x.parentElement.contains(im));
+      const r = h.shadowRoot.querySelector('.btn').getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    });
+    await page.mouse.move(btnBox.x, btnBox.y);
+    await page.mouse.down();
+    await page.mouse.move(ib.x + ib.width * 0.2, ib.y + ib.height * 0.2, { steps: 8 });
+    await page.mouse.up();
+    await page.locator('smd-toolbar').evaluate((t) => t.shadowRoot.querySelector('[data-a="save"]').click());
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const ib2 = await page.locator('img.photo').nth(1).boundingBox();
+    await page.mouse.move(ib2.x + ib2.width / 2, ib2.y + ib2.height / 2);
+    await page.waitForTimeout(400);
+    const g1 = await geom();
+    record('[사진] 사진 버튼 직접 배치 → 저장 → 새로고침 후 유지', Math.abs(g1.fx - 0.2) < 0.06 && Math.abs(g1.fy - 0.2) < 0.06, { note: `가로 ${(g1.fx * 100).toFixed(0)}% · 세로 ${(g1.fy * 100).toFixed(0)}%` });
+    await setSettings({ imagePlacements: {} });
+  } catch (err) {
+    record('[사진] 사진 버튼 배치', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
+// ── X 사진 확대 보기: 사진을 누르면 닫힘 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://x.com/tester/status/1790000000000000003/photo/1', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const ib = await page.locator('[role="dialog"] img').boundingBox();
+    await page.mouse.click(ib.x + ib.width * 0.3, ib.y + ib.height * 0.3);
+    await page.waitForTimeout(300);
+    const closed = await page.evaluate(() => window.__closed === true);
+    record('[X] 사진 확대 보기에서 사진 클릭 → 닫힘', closed, { note: closed ? '닫기 버튼이 눌림' : '닫히지 않음' });
+  } catch (err) {
+    record('[X] 사진 확대 보기 닫기', false, { note: err.message.split('\n')[0] });
   } finally {
     await page.close();
   }

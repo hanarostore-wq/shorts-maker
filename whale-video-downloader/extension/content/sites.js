@@ -463,7 +463,7 @@
     match: (h) => /(^|\.)(x|twitter)\.com$/.test(h),
     offset: 50,
     ingest: ingestX,
-    async resolve(video) {
+    async resolve(video, ctx) {
       const poster = video.getAttribute('poster') || '';
       const mediaId = /(?:ext_tw_video_thumb|amplify_video_thumb|tweet_video_thumb)\/(\d+)/.exec(poster)?.[1];
       const article = video.closest('article') || U.container(video);
@@ -480,6 +480,13 @@
         item = list.find((m) => U.durationClose(m.duration, video.duration)) || list[0];
       }
       if (item) return { id: item.id, title: item.title, author: item.author, info: { media: item.media } };
+      // 타임라인: 화면에 그려진 게시물이 들고 있는 데이터에서 직접 찾는다(게시물을 열지 않아도 됨)
+      const r = await ctx.ask({ kind: 'reactmedia', token: ctx.mark(video) }, 2500).catch(() => ({}));
+      const found = (r?.media || []).filter((m) => m.video_info?.variants?.length);
+      if (found.length) {
+        const m = found.find((x) => mediaId && x.id_str === mediaId) || found.find((x) => U.durationClose((x.video_info.duration_millis || 0) / 1000, video.duration)) || found[0];
+        return { id: m.id_str || tweetId, title: m.text || U.metaTitle(), info: { media: { video_info: m.video_info } } };
+      }
       if (!tweetId && !mediaId) throw new SiteError('이 게시물의 트윗 ID 를 찾지 못했습니다.', '게시물을 클릭해 상세 화면(/status/ 주소)을 연 뒤 다시 시도하세요.');
       return { id: tweetId || mediaId, title: U.metaTitle(), bg: { kind: 'x', tweetId, mediaId, duration: video.duration || 0 } };
     },

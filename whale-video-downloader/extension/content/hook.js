@@ -151,6 +151,36 @@
           const v = readPath(name);
           if (v !== undefined) res.data[name] = safeJson(v);
         }
+      } else if (req.kind === 'reactmedia') {
+        // 화면에 그려진 게시물(React 컴포넌트)이 들고 있는 원본 데이터에서 영상 정보를 찾는다(X 타임라인용).
+        const el = document.querySelector(`[data-smd-q="${CSS.escape(req.token)}"]`);
+        const media = [];
+        const seen = new WeakSet();
+        const scan = (obj, depth, ctx) => {
+          if (!obj || typeof obj !== 'object' || depth > 7 || seen.has(obj) || media.length > 12) return;
+          seen.add(obj);
+          if (obj.video_info && Array.isArray(obj.video_info.variants)) {
+            media.push({ id_str: String(obj.id_str || obj.media_key || ''), media_key: obj.media_key || '', type: obj.type || '', video_info: { duration_millis: obj.video_info.duration_millis || 0, variants: obj.video_info.variants.map((v) => ({ content_type: v.content_type, bitrate: v.bitrate, url: v.url })) }, tweetId: ctx.tweetId, text: ctx.text });
+            return;
+          }
+          const legacy = obj.legacy && typeof obj.legacy === 'object' ? obj.legacy : null;
+          const next = legacy && (obj.rest_id || legacy.id_str) ? { tweetId: String(obj.rest_id || legacy.id_str), text: legacy.full_text || '' } : ctx;
+          for (const k of Object.keys(obj)) {
+            if (k === 'children' || k === '_owner' || k.startsWith('__')) continue;
+            let v;
+            try { v = obj[k]; } catch { continue; }
+            if (v && typeof v === 'object') scan(v, depth + 1, next);
+          }
+        };
+        let node = el;
+        for (let i = 0; node && i < 25 && !media.length; i++, node = node.parentElement) {
+          const key = Object.keys(node).find((k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
+          let fiber = key ? node[key] : null;
+          for (let j = 0; fiber && j < 80 && !media.length; j++, fiber = fiber.return) {
+            if (fiber.memoizedProps) scan(fiber.memoizedProps, 0, {});
+          }
+        }
+        res.data = { media };
       } else if (req.kind === 'ytplayer') {
         // 유튜브 플레이어 API 로 지금 재생 중인 영상 ID/제목을 묻는다.
         const el = document.querySelector(`[data-smd-q="${CSS.escape(req.token)}"]`);

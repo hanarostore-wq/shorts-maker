@@ -8,7 +8,7 @@
   const { pick, U } = SITES;
   const adapter = pick(location.hostname);
 
-  const DEFAULTS = { showButtons: true, imageButtons: true, buttonPosition: 'mid-right', placements: {}, disabledSites: [], genericButtons: true };
+  const DEFAULTS = { showButtons: true, imageButtons: true, buttonPosition: 'mid-right', placements: {}, imagePlacements: {}, disabledSites: [], genericButtons: true };
   let settings = { ...DEFAULTS };
   const enabled = () =>
     settings.showButtons !== false &&
@@ -107,6 +107,8 @@
   .btn.compact{width:38px;height:38px;padding:0;justify-content:center}
   .btn.compact .txt{display:none}
   .btn.compact .ico{background:transparent;width:24px;height:24px}
+  .btn.compact.busy .ico{width:26px;height:26px}
+  .btn.compact.busy .ico::after{inset:4px}
   .btn.compact .ico svg{width:18px;height:18px}
   .btn.busy{background:rgba(17,17,30,.88);box-shadow:0 10px 26px -8px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.12);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
   .btn.busy .ico{background:conic-gradient(#b69bff calc(var(--p,0)*1%),rgba(255,255,255,.16) 0);position:relative}
@@ -179,12 +181,12 @@
     }
     // 버튼 직접 배치 모드: 끌어서 영상 안 원하는 곳에 놓는다
     b.addEventListener('pointerdown', (ev) => {
-      if (!editMode || entry.kind !== 'video') return;
+      if (!editMode) return;
       ev.preventDefault();
       b.setPointerCapture(ev.pointerId);
       const move = (e) => {
         const r = entry.el.getBoundingClientRect();
-        editTemp = {
+        editTemp[entry.kind] = {
           fx: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
           fy: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
         };
@@ -215,16 +217,19 @@
       b.classList.add('busy', 'spin');
       ico.innerHTML = '';
       txt.textContent = text || '분석 중…';
+      b.title = txt.textContent;
     } else if (state === 'busy') {
       b.classList.add('busy');
       ico.innerHTML = '';
       if (percent == null) b.classList.add('spin');
       b.style.setProperty('--p', String(Math.max(2, Math.min(100, percent || 0))));
       txt.textContent = text;
+      b.title = text;
     } else if (state === 'done') {
       b.classList.add('done');
       ico.innerHTML = ICON_OK;
       txt.textContent = text || '저장 완료';
+      b.title = txt.textContent;
     } else if (state === 'error') {
       b.classList.add('err');
       ico.innerHTML = ICON_ERR;
@@ -403,6 +408,26 @@
     }
   });
 
+  // ───────────── X: 사진 확대 보기에서 사진을 누르면 닫기 ─────────────
+  if (adapter.id === 'x') {
+    document.addEventListener(
+      'click',
+      (ev) => {
+        if (!/\/photo\/\d+/.test(location.pathname)) return;
+        const t = ev.target;
+        if (!(t instanceof HTMLImageElement) && !t.closest?.('[data-testid="swipe-to-dismiss"]')) return;
+        const modal = t.closest('[aria-modal="true"], [role="dialog"]');
+        if (!modal) return;
+        const close = modal.querySelector('[data-testid="app-bar-close"], [aria-label="Close"], [aria-label="닫기"]') || document.querySelector('[data-testid="app-bar-close"]');
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (close) close.click();
+        else history.back();
+      },
+      true,
+    );
+  }
+
   // ───────────── 버튼 직접 배치 모드 ─────────────
   let editMode = false;
   let editTemp = null;
@@ -410,7 +435,7 @@
   function enterEdit() {
     if (editMode) return;
     editMode = true;
-    editTemp = settings.placements?.[adapter.id] || null;
+    editTemp = { video: settings.placements?.[adapter.id] || null, image: settings.imagePlacements?.[adapter.id] || null };
     toolbar = document.createElement('smd-toolbar');
     toolbar.setAttribute('style', 'all:initial;position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:2147483647;display:block');
     const sh = toolbar.attachShadow({ mode: 'open' });
@@ -419,23 +444,27 @@
         font:600 13px/1.4 "Pretendard","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;box-shadow:0 18px 50px -12px rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.1)}
       button{all:unset;cursor:pointer;padding:8px 13px;border-radius:10px;font:700 12.5px/1 inherit;background:rgba(255,255,255,.1);color:#fff}
       button:hover{background:rgba(255,255,255,.18)} .pri{background:linear-gradient(135deg,#5b5cff,#9b4dff 55%,#ff4f8b)}
-    </style><div class="bar"><span>다운로드 버튼을 끌어서 원하는 위치에 놓고 <b>저장</b>을 누르세요</span>
+    </style><div class="bar"><span>영상·사진 버튼을 끌어서 원하는 위치에 놓고 <b>저장</b>을 누르세요</span>
       <button data-a="reset">기본 위치</button><button data-a="cancel">취소</button><button class="pri" data-a="save">저장</button></div>`;
     sh.addEventListener('click', async (ev) => {
       const a = ev.target.closest('button')?.dataset.a;
       if (!a) return;
       if (a === 'reset') {
-        editTemp = null;
+        editTemp = { video: null, image: null };
         return place();
       }
       if (a === 'save') {
         const r = await chrome.storage.local.get('settings');
         const cur = r.settings || {};
         const placements = { ...(cur.placements || {}) };
-        if (editTemp) placements[adapter.id] = editTemp;
+        const imagePlacements = { ...(cur.imagePlacements || {}) };
+        if (editTemp.video) placements[adapter.id] = editTemp.video;
         else delete placements[adapter.id];
-        await chrome.storage.local.set({ settings: { ...cur, placements } });
+        if (editTemp.image) imagePlacements[adapter.id] = editTemp.image;
+        else delete imagePlacements[adapter.id];
+        await chrome.storage.local.set({ settings: { ...cur, placements, imagePlacements } });
         settings.placements = placements;
+        settings.imagePlacements = imagePlacements;
       }
       exitEdit();
     });
@@ -454,8 +483,10 @@
   function allImages() {
     const seen = new Set();
     const out = [];
+    const vids = videoRects();
     for (const img of document.images) {
       if (img.closest('smd-anchor')) continue;
+      if (onVideo(img, vids)) continue;
       if ((img.naturalWidth || 0) < 200 || (img.naturalHeight || 0) < 150) continue;
       const key = SITES.originalImageUrls(img)[0];
       if (!key || seen.has(key)) continue;
@@ -512,11 +543,38 @@
   }
 
   const imagesOn = () => settings.imageButtons !== false && enabled();
+  // 영상 위에 겹친 썸네일·포스터 이미지는 사진이 아니다(영상에는 다운로드 버튼만)
+  function videoRects() {
+    const out = [];
+    for (const v of document.querySelectorAll('video')) {
+      const r = v.getBoundingClientRect();
+      if (r.width > 40 && r.height > 40) out.push({ v, r });
+    }
+    return out;
+  }
+  function onVideo(img, vids) {
+    const r = img.getBoundingClientRect();
+    const area = Math.max(1, r.width * r.height);
+    for (const { v, r: vr } of vids) {
+      const w = Math.min(r.right, vr.right) - Math.max(r.left, vr.left);
+      const h = Math.min(r.bottom, vr.bottom) - Math.max(r.top, vr.top);
+      if (w > 0 && h > 0 && (w * h) / area > 0.3) return true;
+    }
+    // 같은 플레이어 안의 이미지(영상 재생 전 썸네일) — 가까운 조상에 영상이 있으면 제외
+    let p = img.parentElement;
+    for (let i = 0; p && i < 6; i++, p = p.parentElement) {
+      if (p.querySelector('video')) return true;
+      if (p.querySelectorAll('img').length > 1) break;
+    }
+    return /video_thumb|_video_thumb|videothumb/.test(img.currentSrc || img.src || '');
+  }
   function collectImages(out) {
     if (!imagesOn()) return;
     const vh = window.innerHeight;
+    const vids = videoRects();
     for (const img of document.images) {
       if (img.closest('smd-anchor')) continue;
+      if (onVideo(img, vids)) continue;
       if ((img.naturalWidth || 0) < 200 || (img.naturalHeight || 0) < 150) continue;
       const r = img.getBoundingClientRect();
       if (r.width < 120 || r.height < 100) continue;
@@ -592,11 +650,16 @@
       x: Math.max(r.left + 4, Math.min(x, r.right - bw - 4)),
       y: Math.max(r.top + 4, Math.min(y, r.bottom - bh - 4)),
     });
-    if (entry.kind === 'image') return clamp(r.right - bw - 10, r.bottom - bh - 10);
-    const custom = editTemp || settings.placements?.[adapter.id];
+    const midY = r.top + (r.height - bh) / 2;
+    if (entry.kind === 'image') {
+      const ci = editMode ? editTemp.image : settings.imagePlacements?.[adapter.id];
+      if (ci) return clamp(r.left + ci.fx * r.width - bw / 2, r.top + ci.fy * r.height - bh / 2);
+      // 기본: 오른쪽, 영상 버튼 자리(가운데)보다 약간 아래 → 영상 버튼과 겹치지 않음
+      return clamp(r.right - bw - 12, midY + bh + 14);
+    }
+    const custom = editMode ? editTemp.video : settings.placements?.[adapter.id];
     if (custom) return clamp(r.left + custom.fx * r.width - bw / 2, r.top + custom.fy * r.height - bh / 2);
     const bottom = r.bottom - Math.min(offsetFor(entry.el), Math.max(8, r.height * 0.25)) - bh;
-    const midY = r.top + (r.height - bh) / 2;
     switch (settings.buttonPosition) {
       case 'bottom-right': return clamp(r.right - bw - 12, bottom);
       case 'bottom-center':
@@ -626,9 +689,8 @@
       }
       if (entry.hiddenStyle) show = false;
       const busy = entry.state !== 'idle';
-      if (editMode && isImg) show = false;
-      const visible = show && (busy || !isImg || pointerIn(r) || pointerIn(b.getBoundingClientRect()));
-      b.classList.toggle('edit', editMode && !isImg);
+      const visible = show && (busy || editMode || !isImg || pointerIn(r) || pointerIn(b.getBoundingClientRect()));
+      b.classList.toggle('edit', editMode);
       if (!visible) {
         if (entry.visible) {
           b.classList.remove('show');
@@ -637,7 +699,7 @@
         if (entry.panel && !show) closePanel(entry);
         continue;
       }
-      b.classList.toggle('compact', isImg ? entry.state === 'idle' : r.width < 300 && entry.state === 'idle');
+      b.classList.add('compact'); // 모든 버튼은 작은 원형 아이콘
       if (!entry.measured) {
         entry.w = b.offsetWidth || 120;
         entry.h = b.offsetHeight || 36;

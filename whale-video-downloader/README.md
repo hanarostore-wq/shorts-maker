@@ -123,7 +123,7 @@ extension/
 |---|---|---|
 | 순수 로직 단위 테스트 (화질 선택·MPD 파서·파일 이름) | CONFIRMED 12/12 | `npm test` |
 | 저장 엔진 (병합·HLS·Range·403) | CONFIRMED 7/7 | `npm run test:engine` (Chromium) |
-| E2E — **모의 사이트** (17개 사이트·사진·X 사진·일괄 저장·버튼 배치·스크롤 추종 포함) | CONFIRMED 39/39 | `npm run test:e2e` — 실제 Chromium 에 확장 로드, 버튼 클릭, 실제 파일 저장, ffprobe 로 해상도·코덱·음성 확인 |
+| E2E — **모의 사이트** (17개 사이트·X 타임라인·사진·일괄 저장·버튼 배치·스크롤 추종 포함) | CONFIRMED 44/44 | `npm run test:e2e` — 실제 Chromium 에 확장 로드, 버튼 클릭, 실제 파일 저장, ffprobe 로 해상도·코덱·음성 확인 |
 | 17개 사이트 — **실제 사이트** | UNVERIFIED | 개발 환경의 네트워크 정책이 대상 사이트 접속을 모두 차단(HTTP 403)해 실사이트 다운로드는 아직 확인하지 못함 |
 | 웨일 브라우저 실제 설치 | UNVERIFIED | 개발 환경에는 Chromium 만 있음 |
 | 폴더 직접 선택 대화상자 | UNVERIFIED (쓰기 경로만 CONFIRMED) | 대화상자는 자동화 불가 → 같은 타입의 폴더 핸들로 직접 저장 경로를 검증 |

@@ -88,8 +88,10 @@ $('#resetPlacement').addEventListener('click', async () => {
   try { host = new URL(tab.url).hostname; } catch {}
   const id = SITE_HOSTS.find(([re]) => re.test(host))?.[1] || 'generic';
   const placements = { ...(settings.placements || {}) };
+  const imagePlacements = { ...(settings.imagePlacements || {}) };
   delete placements[id];
-  await save({ placements });
+  delete imagePlacements[id];
+  await save({ placements, imagePlacements });
   $('#placeNote').textContent = '이 사이트의 직접 배치를 지웠어요. 위에서 고른 위치를 사용합니다.';
 });
 $('#genericButtons').checked = settings.genericButtons !== false;
