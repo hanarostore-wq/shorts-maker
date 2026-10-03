@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as B from '../../extension/background/builders.js';
 import { parseMpd, isoDuration } from '../../extension/background/mpd.js';
-import { buildFilename, sanitizeFolder, sanitizePart, countryFlag } from '../../extension/shared/filename.js';
+import { buildFilename, sanitizeFolder, sanitizePart, countryFlag, countryName } from '../../extension/shared/filename.js';
 import { xToken } from '../../extension/background/resolvers.js';
 
 const IG_MPD = `<?xml version="1.0"?><MPD xmlns="urn:mpeg:dash:schema:mpd:2011" mediaPresentationDuration="PT6S"><Period><AdaptationSet contentType="video" mimeType="video/mp4">
@@ -202,6 +202,14 @@ test('국적 깃발: 제목 글자로 추정, 사이트로 보완, 파일 이름
   assert.equal(countryFlag('Funny cat video'), '🇺🇸');
   assert.equal(countryFlag('', 'douyin'), '🇨🇳');
   assert.equal(countryFlag('สวัสดีครับ'), '🇹🇭');
-  assert.equal(buildFilename('{title}', { title: '여름 바다 브이로그', site: 'youtube' }, 'mp4'), '🇰🇷 여름 바다 브이로그.mp4');
+  assert.equal(buildFilename('{title}', { title: '여름 바다 브이로그', site: 'youtube' }, 'mp4'), '[한국] 여름 바다 브이로그.mp4');
+  assert.equal(buildFilename('{title}', { title: 'สวัสดีครับ วิดีโอ', site: 'tiktok' }, 'mp4'), '[태국] สวัสดีครับ วิดีโอ.mp4');
+  assert.equal(buildFilename('{title}', { title: '今天的视频', site: 'x', flag: 'emoji' }, 'mp4'), '🇨🇳 今天的视频.mp4');
+  assert.equal(countryName('', 'bilibili'), '중국');
   assert.equal(buildFilename('{title}', { title: '여름 바다', flag: false }, 'mp4'), '여름 바다.mp4');
+});
+
+test('AI 표시: 파일 이름 앞에 [AI] (국적 표시와 함께)', () => {
+  assert.equal(buildFilename('{title}', { title: '여름 바다', ai: true }, 'mp4'), '[한국][AI] 여름 바다.mp4');
+  assert.equal(buildFilename('{title}', { title: 'Funny cat', ai: true, flag: false }, 'mp4'), '[AI] Funny cat.mp4');
 });

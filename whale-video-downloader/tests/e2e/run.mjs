@@ -88,6 +88,12 @@ async function extPage(file = 'popup/popup.html') {
   return p;
 }
 
+async function clearDownloaded() {
+  const p = await extPage();
+  await p.evaluate(() => chrome.storage.local.remove('downloadedKeys'));
+  await p.close();
+}
+
 async function setSettings(patch) {
   const p = await extPage();
   await p.evaluate(async (patch) => {
@@ -311,6 +317,7 @@ if (!only || only === 'image' || '사진'.includes(only)) {
 if (!only || only === 'image' || '사진'.includes(only)) {
   const page = await ctx.newPage();
   try {
+    await clearDownloaded();
     await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1800);
     const vb = await page.locator('video').boundingBox();
@@ -437,6 +444,135 @@ if (!only || only === 'x' || '팔로우'.includes(only)) {
     record('[X] 영상 재생되면 소리 자동 켜기(X 음소거 버튼 사용)', !sound.muted && sound.clicked && !sound.paused, { note: JSON.stringify(sound) });
   } catch (err) {
     record('[X] 팔로우 버튼', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
+// ── 받은 적 있는 영상은 버튼이 초록 체크로 ──
+if (!only || only === 'x' || '받은'.includes(only)) {
+  const page = await ctx.newPage();
+  try {
+    await clearDownloaded();
+    await page.goto('https://www.example-videos.com/norange', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const cls = () => page.evaluate(() => document.querySelector('smd-anchor').shadowRoot.querySelector('.btn').className);
+    const before = await cls();
+    await page.locator('smd-anchor .btn.show').first().click();
+    await page.locator('smd-anchor .btn.done').waitFor({ timeout: 30000 });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const after = await cls();
+    await page.screenshot({ path: path.join(SHOTS, 'downloaded-mark.png') });
+    record('[버튼] 받은 적 있는 영상은 새로고침 후에도 초록 체크', !/downloaded/.test(before) && /downloaded/.test(after), { note: `처음: ${before} → 다시 방문: ${after}` });
+  } catch (err) {
+    record('[버튼] 받은 적 있는 영상 표시', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
+// ── AI 영상 표시 ──
+if (!only || only === 'ai') {
+  for (const [label, url, expectAi] of [['화면 해시태그 #sora', 'https://www.example-videos.com/ai', true], ['틱톡 AIGC 라벨 데이터', 'https://www.tiktok.com/@creator/video/7300000000000000005', true], ['일반 영상(표시 없음)', 'https://www.example-videos.com/watch', false]]) {
+    const page = await ctx.newPage();
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(2600);
+      const before = new Set(listFiles(DL));
+      await page.locator('smd-anchor .btn.show').first().click();
+      const saved = await waitFile(before, 30000);
+      await page.waitForTimeout(300);
+      const badge = await page.evaluate(() => [...document.querySelectorAll('smd-anchor')].some((h) => h.shadowRoot.querySelector('.aibadge.show')));
+      if (expectAi && label.includes('해시태그')) await page.screenshot({ path: path.join(SHOTS, 'ai-badge.png') });
+      const name = saved ? path.basename(saved) : '';
+      const ok = expectAi ? badge && name.includes('[AI]') : !badge && !name.includes('[AI]');
+      record(`[AI] ${label} → ${expectAi ? 'AI 영상 배지 + 파일 이름 [AI]' : '배지 없음'}`, ok, { note: `배지 ${badge ? '있음' : '없음'} · ${name}` });
+    } catch (err) {
+      record(`[AI] ${label}`, false, { note: err.message.split('\n')[0] });
+    } finally {
+      await page.close();
+    }
+  }
+}
+
+// ── 광고 차단 ──
+if (!only || only === 'ad' || '광고'.includes(only)) {
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://x.com/ads', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1800);
+    const vis = () => page.evaluate(() => Object.fromEntries(['normal', 'promoted', 'tracked'].map((id) => [id, getComputedStyle(document.getElementById(id)).display !== 'none'])));
+    const v1 = await vis();
+    const net1 = await page.evaluate(() => window.__adNet);
+    record('[광고] X 피드 광고(프로모션·placementTracking) 숨김, 일반 게시물 유지', v1.normal && !v1.promoted && !v1.tracked, { note: JSON.stringify(v1) });
+    record('[광고] 광고 서버 요청 차단', net1 === 'blocked', { note: `doubleclick 요청: ${net1}` });
+    await setSettings({ adBlock: false });
+    await page.waitForTimeout(800);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1800);
+    const v2 = await vis();
+    const net2 = await page.evaluate(() => window.__adNet);
+    record('[광고] 광고 차단 끄면 원래대로(게시물·요청)', v2.promoted && v2.tracked && /loaded 200/.test(net2), { note: `${JSON.stringify(v2)} · ${net2}` });
+    await setSettings({ adBlock: true });
+    await page.waitForTimeout(600);
+
+    await page.goto('https://www.youtube.com/adsfeed', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2000);
+    const yt = await page.evaluate(() => ({ ad: getComputedStyle(document.getElementById('ad1')).display, vid: getComputedStyle(document.getElementById('vid1')).display, skipped: !!window.__skipped }));
+    record('[광고] 유튜브 광고 칸 숨김 + 영상 광고 건너뛰기', yt.ad === 'none' && yt.vid !== 'none' && yt.skipped, { note: JSON.stringify(yt) });
+  } catch (err) {
+    record('[광고] 광고 차단', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
+// ── X 재생: 최고 화질 고정 · 재생바 항상 표시 · 진행 막대 두껍게 ──
+if (!only || only === 'x') {
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://x.com/hq', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const hq = await page.evaluate(() => ({ fetch: window.__fetchVariants, xhr: window.__xhrVariants, best: /1080x1920/.test(window.__fetchText || '') }));
+    record('[X] 재생 화질 항상 최고(재생목록에 1080p 하나만)', hq.fetch === 1 && hq.xhr === 1 && hq.best, { note: JSON.stringify(hq) });
+
+    await page.goto('https://x.com/controls', { waitUntil: 'domcontentloaded' });
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(5000);
+    const c = await page.evaluate(() => ({ controls: getComputedStyle(document.getElementById('ctl')).display, track: getComputedStyle(document.getElementById('track')).height, thumb: getComputedStyle(document.getElementById('thumb')).height }));
+    await page.screenshot({ path: path.join(SHOTS, 'x-controls.png') });
+    record('[X] 재생바 5초 뒤에도 계속 표시', c.controls === 'block', { note: JSON.stringify(c) });
+    record('[X] 진행 막대 4px → 8px, 손잡이 12px → 18px', c.track === '8px' && c.thumb === '18px', { note: JSON.stringify(c) });
+  } catch (err) {
+    record('[X] 재생 설정', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
+// ── X 넓은 화면: 오른쪽 사이드바 숨김 + 가운데 확대 ──
+if (!only || only === 'x' || '넓은'.includes(only)) {
+  const page = await ctx.newPage();
+  try {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto('https://x.com/layout', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1200);
+    const g = await page.evaluate(() => ({
+      sidebar: getComputedStyle(document.querySelector('[data-testid="sidebarColumn"]')).display,
+      center: Math.round(document.querySelector('[data-testid="primaryColumn"]').getBoundingClientRect().width),
+      video: Math.round(document.querySelector('video').getBoundingClientRect().width),
+      left: !!document.querySelector('header[role="banner"]').offsetWidth,
+    }));
+    await page.screenshot({ path: path.join(SHOTS, 'x-wide.png') });
+    record('[X] 넓은 화면: 오른쪽 숨김 + 가운데 600px → 확대, 왼쪽 메뉴 유지', g.sidebar === 'none' && g.center > 1000 && g.video > 1000 && g.left, { note: JSON.stringify(g) });
+    await setSettings({ xWideLayout: false });
+    await page.waitForTimeout(600);
+    const off = await page.evaluate(() => getComputedStyle(document.querySelector('[data-testid="sidebarColumn"]')).display);
+    record('[X] 넓은 화면 끄면 원래대로', off !== 'none', { note: `오른쪽 display=${off}` });
+    await setSettings({ xWideLayout: true });
+  } catch (err) {
+    record('[X] 넓은 화면', false, { note: err.message.split('\n')[0] });
   } finally {
     await page.close();
   }

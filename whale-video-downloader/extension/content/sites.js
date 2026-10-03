@@ -111,6 +111,21 @@
 
   U.durationClose = (a, b) => a > 0 && b > 0 && Math.abs(a - b) <= Math.max(1.5, b * 0.03);
 
+  // 사이트 데이터 안의 AI 생성 표시(틱톡 aigcLabelType, 도우인 aigc_info, 메타 gen_ai_* 등)
+  const AI_KEY = /aigc|ai_?generated|is_?ai\b|isai|gen_?ai|made_?with_?ai|synthetic|ai_?label|ai_?info/i;
+  U.aiFlag = (o, depth = 0) => {
+    if (!o || typeof o !== 'object' || depth > 2) return false;
+    for (const k of Object.keys(o)) {
+      const v = o[k];
+      if (AI_KEY.test(k)) {
+        if (v === true || (typeof v === 'number' && v > 0) || (typeof v === 'string' && v && !/^(0|false|none|null)$/i.test(v))) return true;
+        if (v && typeof v === 'object' && Object.values(v).some((x) => x === true || (typeof x === 'number' && x > 0))) return true;
+      }
+      if (v && typeof v === 'object' && !Array.isArray(v) && depth < 2 && k !== 'video' && U.aiFlag(v, depth + 1)) return true;
+    }
+    return false;
+  };
+
   U.cleanTitle = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 160);
 
   U.metaTitle = () =>
@@ -229,6 +244,7 @@
       if (o.id && v && typeof v === 'object' && (v.playAddr || v.bitrateInfo || v.PlayAddrStruct || v.downloadAddr)) {
         tiktok.put([o.id], {
           id: String(o.id),
+          ai: U.aiFlag(o),
           desc: o.desc || '',
           author: o.author?.uniqueId || o.author?.nickname || (typeof o.author === 'string' ? o.author : ''),
           duration: Number(v.duration) || 0,
@@ -287,6 +303,7 @@
   };
   const igPick = (o) => ({
     id: String(o.pk || o.id || ''),
+    ai: U.aiFlag(o),
     code: o.code || '',
     duration: Number(o.video_duration) || 0,
     video_versions: o.video_versions,
@@ -542,6 +559,7 @@
         if (id) {
           xhs.put([id], {
             id: String(id),
+            ai: U.aiFlag(card) || U.aiFlag(o),
             title: card.title || card.display_title || card.displayTitle || card.desc || '',
             author: card.user?.nickname || card.user?.nick_name || '',
             duration: Number(card.video?.capa?.duration || card.video?.media?.video?.duration) || 0,
@@ -628,6 +646,7 @@
       if (id && v && typeof v === 'object' && (v.play_addr || v.bit_rate || v.playAddr || v.bitRateList)) {
         douyin.put([id], {
           id: String(id),
+          ai: U.aiFlag(o),
           title: o.desc || '',
           author: o.author?.nickname || '',
           duration: (Number(o.duration || v.duration) || 0) / (Number(o.duration || v.duration) > 1000 ? 1000 : 1),

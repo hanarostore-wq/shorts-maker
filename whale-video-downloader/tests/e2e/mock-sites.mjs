@@ -143,6 +143,8 @@ function tiktokItem(id, desc, big) {
   };
 }
 
+const videoTwimg = (req, res, u) => serveFile(req, res, u.pathname.endsWith('high.mp4') || u.pathname.endsWith('synd.mp4') ? 'progressive_1080x1920.mp4' : 'progressive_360p.mp4');
+
 const handlers = {
   // ── 공용 테스트 CDN / 일반 사이트 ──
   'cdn.example-videos.com': (req, res, u) => {
@@ -174,6 +176,9 @@ const handlers = {
     if (u.pathname === '/watch') {
       return html(res, page('일반 사이트 영상', `<div class="card"><h3>일반 사이트</h3><video src="https://cdn.example-videos.com/progressive_1080p_land.mp4" controls muted style="width:640px;height:360px;background:#000"></video></div>`));
     }
+    if (u.pathname === '/ai') {
+      return html(res, page('AI 영상 모음', `<div class="card"><p>오늘 만든 영상 #sora #AI영상</p><video src="https://cdn.example-videos.com/progressive_360p.mp4" muted style="width:480px;height:270px;background:#000"></video></div>`));
+    }
     if (u.pathname === '/long') {
       return html(res, page('긴 영상', `<div class="card"><video src="https://cdn.example-videos.com/long_95s.webm" muted preload="metadata" style="width:640px;height:360px;background:#000"></video></div>`));
     }
@@ -203,6 +208,13 @@ const handlers = {
   // ── YouTube ──
   'www.youtube.com': (req, res, u) => {
     if (u.pathname === '/watch') return html(res, ytPage(u.searchParams.get('v'), false));
+    if (u.pathname === '/adsfeed') {
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>YouTube</title></head><body>
+        <ytd-rich-item-renderer id="vid1"><p>일반 영상</p></ytd-rich-item-renderer>
+        <ytd-rich-item-renderer id="ad1"><ytd-ad-slot-renderer><p>광고 영상</p></ytd-ad-slot-renderer></ytd-rich-item-renderer>
+        <div class="html5-video-player ad-showing" id="pl"><video id="v" src="https://cdn.example-videos.com/long_95s.webm" muted autoplay></video>
+          <button class="ytp-skip-ad-button" onclick="window.__skipped = true; document.getElementById('pl').classList.remove('ad-showing')">건너뛰기</button></div></body></html>`);
+    }
     if (u.pathname.startsWith('/shorts/')) return html(res, ytPage(u.pathname.split('/')[2], true));
     if (u.pathname === '/youtubei/v1/player') {
       let body = '';
@@ -232,6 +244,7 @@ const handlers = {
     if (/^\/@[^/]+\/video\/\d+/.test(u.pathname)) {
       const id = u.pathname.split('/').pop();
       const item = id.endsWith('9') ? tiktokItem(id, '만료된 영상', 'expired.mp4') : tiktokItem(id, '틱톡 상세 영상 테스트 #shorts', 'progressive_1080x1920.mp4');
+      if (id.endsWith('5')) item.aigcLabelType = 1; // 틱톡이 붙이는 AI 생성 라벨
       const data = { __DEFAULT_SCOPE__: { 'webapp.video-detail': { itemInfo: { itemStruct: item } } } };
       return html(res, page('틱톡 테스트 | TikTok',
         `<div id="xgwrapper-0-${id}" class="xgplayer">${vtag()}</div>
@@ -348,6 +361,40 @@ const handlers = {
           <img alt="이미지" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=large" style="max-width:80vw;max-height:80vh">
         </div>`));
     }
+    if (u.pathname === '/hq') {
+      return html(res, page('X 화질', '<p>화질 테스트</p>', `
+        fetch('https://video.twimg.com/ext_tw_video/1/pu/pl/master.m3u8').then((r) => r.text()).then((t) => (window.__fetchVariants = (t.match(/EXT-X-STREAM-INF/g) || []).length, window.__fetchText = t));
+        const x = new XMLHttpRequest(); x.open('GET', 'https://video.twimg.com/ext_tw_video/1/pu/pl/master.m3u8');
+        x.onreadystatechange = () => { if (x.readyState === 4) window.__xhrVariants = (x.responseText.match(/EXT-X-STREAM-INF/g) || []).length; };
+        x.send();`));
+    }
+    if (u.pathname === '/controls') {
+      // X 처럼: 마우스가 2초 동안 안 움직이면 재생바가 사라지는 플레이어, 진행 막대(4px)와 손잡이(12px)
+      return html(res, page('X 재생바', `<div data-testid="videoPlayer" id="pl" style="position:relative;width:360px;height:640px">
+          <video src="https://cdn.example-videos.com/preview.webm" muted loop autoplay playsinline style="width:100%;height:100%;background:#000"></video>
+          <div id="ctl" style="position:absolute;left:0;right:0;bottom:0;height:60px;background:rgba(0,0,0,.5)">
+            <div role="slider" aria-label="Seek slider" style="position:relative;margin:10px;height:16px">
+              <div id="track" style="position:absolute;top:6px;left:0;width:320px;height:4px;background:#888"></div>
+              <div id="thumb" style="position:absolute;top:2px;left:100px;width:12px;height:12px;border-radius:50%;background:#fff"></div>
+            </div></div></div>`,
+        `let last = Date.now(); document.getElementById('pl').addEventListener('mousemove', () => (last = Date.now()));
+         setInterval(() => { document.getElementById('ctl').style.display = Date.now() - last > 2000 ? 'none' : 'block'; }, 200);`));
+    }
+    if (u.pathname === '/ads') {
+      // X 피드: 보통 게시물 / '프로모션' 라벨 / placementTracking 광고 + 광고 서버 요청
+      const cell = (id, inner) => `<div data-testid="cellInnerDiv" id="${id}"><article data-testid="tweet"><p>${id} 게시물 본문입니다</p>${inner}</article></div>`;
+      return html(res, page('홈 / X', cell('normal', '') + cell('promoted', '<div><span>프로모션</span></div>') + cell('tracked', '<div data-testid="placementTracking"><span>영상</span></div>'),
+        `window.__adNet = 'pending'; setTimeout(() => fetch('https://googleads.g.doubleclick.net/pagead/ads?x=1').then((r) => (window.__adNet = 'loaded ' + r.status), () => (window.__adNet = 'blocked')), 300);`));
+    }
+    if (u.pathname === '/layout') {
+      // X 의 실제 3단 구조: 왼쪽 메뉴(header) / 가운데(primaryColumn 600px) / 오른쪽(sidebarColumn 350px)
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>홈 / X</title><style>body{margin:0;background:#000;color:#eee;font-family:sans-serif}</style></head>
+        <body><div style="display:flex;justify-content:center"><header role="banner" style="width:275px;flex:none">왼쪽 메뉴</header>
+        <main role="main" style="flex:1 1 auto;display:flex"><div style="width:990px"><div style="display:flex;justify-content:space-between;width:990px">
+          <div data-testid="primaryColumn" style="max-width:600px;width:100%;border:1px solid #333"><div style="max-width:600px"><article data-testid="tweet"><div data-testid="videoPlayer"><video src="https://cdn.example-videos.com/preview.webm" muted style="width:100%;aspect-ratio:16/9;display:block;background:#111"></video></div></article></div></div>
+          <div data-testid="sidebarColumn" style="width:350px">Premium 구독하기 · 트렌드 · 팔로우 추천</div>
+        </div></div></main></div></body></html>`);
+    }
     if (u.pathname === '/explore') {
       // 탐색 피드: @followed_user(팔로우 중), @new_user(팔로우 안 함) 은 타임라인 GraphQL 로, @react_user 는 화면 React 데이터에만 있다
       const art = (sn, name, id) => `<article data-testid="tweet" id="t-${sn}"><div data-testid="User-Name" style="display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:4px"><a href="/${sn}"><span>${name}</span></a></div><div><a href="/${sn}">@${sn}</a> · <a href="/${sn}/status/${id}"><time>1시간</time></a></div></div><p>게시물 본문</p></article>`;
@@ -425,7 +472,15 @@ const handlers = {
     res.writeHead(404);
     res.end();
   },
-  'video.twimg.com': (req, res, u) => serveFile(req, res, u.pathname.endsWith('high.mp4') || u.pathname.endsWith('synd.mp4') ? 'progressive_1080x1920.mp4' : 'progressive_360p.mp4'),
+  'googleads.g.doubleclick.net': (req, res) => json(req, res, { ad: true }),
+  'video.twimg.com': (req, res, u) => {
+    if (u.pathname.endsWith('/pl/master.m3u8')) {
+      res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl', 'Access-Control-Allow-Origin': '*' });
+      return res.end(['#EXTM3U', '#EXT-X-INDEPENDENT-SEGMENTS', '#EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=300000,BANDWIDTH=400000,RESOLUTION=320x568,CODECS="avc1.4d001e"', '/ext_tw_video/1/pu/pl/320x568/a.m3u8', '#EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=2000000,BANDWIDTH=2500000,RESOLUTION=1080x1920,CODECS="avc1.640028"', '/ext_tw_video/1/pu/pl/1080x1920/c.m3u8', '#EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=900000,BANDWIDTH=1000000,RESOLUTION=720x1280,CODECS="avc1.4d001f"', '/ext_tw_video/1/pu/pl/720x1280/b.m3u8', ''].join('\n'));
+    }
+    return videoTwimg(req, res, u);
+  },
+  '__unused_video_twimg': (req, res, u) => serveFile(req, res, u.pathname.endsWith('high.mp4') || u.pathname.endsWith('synd.mp4') ? 'progressive_1080x1920.mp4' : 'progressive_360p.mp4'),
   'pbs.twimg.com': (req, res, u) => {
     if (u.pathname === '/media/MockPic' || u.pathname === '/media/MockPic2') return serveFile(req, res, u.searchParams.get('name') === 'orig' ? 'images/x_orig.jpg' : 'images/x_small.jpg');
     res.writeHead(404);

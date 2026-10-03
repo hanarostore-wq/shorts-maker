@@ -477,7 +477,8 @@ async function runChain(job, desc, settings, req) {
       id: req.id,
       author: req.author || desc.author,
       quality: job.quality,
-      flag: settings.flagPrefix !== false,
+      ai: !!req.ai,
+      flag: settings.flagPrefix === false ? false : settings.flagStyle === 'emoji' ? 'emoji' : 'name',
     }, d.ext || 'mp4');
     try {
       await attempt(job, d, settings);
@@ -626,6 +627,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 getSettings().then((s) => chrome.storage.local.set({ settings: s })).catch(() => {});
+
+// ───────────── 광고 서버 요청 차단 (지원 사이트에서 시작된 요청만) ─────────────
+const AD_RULE_BASE = 9000;
+const AD_DOMAINS = ['doubleclick.net', 'googlesyndication.com', 'googleadservices.com', 'adservice.google.com', 'pagead2.googlesyndication.com', 'amazon-adsystem.com', 'taboola.com', 'outbrain.com', 'criteo.com', 'criteo.net', 'adnxs.com', 'pubmatic.com', 'rubiconproject.com', 'ads-twitter.com', 'static.ads-twitter.com', 'ads.tiktok.com', 'analytics.tiktok.com', 'veta.naver.com', 'adcr.naver.com', 'cm.bilibili.com', 'mobads.baidu.com', 'pos.baidu.com', 'ads.pinterest.com'];
+const SUPPORTED_DOMAINS = ['youtube.com', 'tiktok.com', 'bsky.app', 'instagram.com', 'xiaohongshu.com', 'snapchat.com', 'douyin.com', 'kuaishou.com', 'bilibili.com', 'weibo.com', 'weibo.cn', 'facebook.com', 'x.com', 'twitter.com', 'pinterest.com', 'pinterest.co.kr', 'naver.com', 'vimeo.com', 'dailymotion.com'];
+async function syncAdRules() {
+  const s = await getSettings();
+  const existing = (await chrome.declarativeNetRequest.getDynamicRules()).filter((r) => r.id >= AD_RULE_BASE && r.id < AD_RULE_BASE + 100).map((r) => r.id);
+  const addRules = s.adBlock === false ? [] : [{
+    id: AD_RULE_BASE,
+    priority: 1,
+    action: { type: 'block' },
+    condition: { requestDomains: AD_DOMAINS, initiatorDomains: SUPPORTED_DOMAINS, resourceTypes: ['script', 'image', 'sub_frame', 'xmlhttprequest', 'media', 'ping', 'other'] },
+  }];
+  await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: existing, addRules }).catch((err) => console.warn('[영상 다운로더] 광고 차단 규칙 적용 실패', err));
+}
+syncAdRules();
+chrome.storage.onChanged.addListener((c, area) => {
+  if (area === 'local' && c.settings && c.settings.oldValue?.adBlock !== c.settings.newValue?.adBlock) syncAdRules();
+});
 
 chrome.runtime.onInstalled.addListener(async (details) => {
   const r = await chrome.storage.local.get('settings');

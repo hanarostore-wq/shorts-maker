@@ -110,9 +110,14 @@
         </select>
         <p class="preview" id="filenamePreview"></p>
         <label class="row-toggle">
-          <div><b>제목 앞에 국적 깃발</b><small>제목·작성자 글자로 국적을 추정해 🇰🇷 🇯🇵 🇨🇳 🇺🇸 같은 깃발을 붙입니다</small></div>
+          <div><b>제목 앞에 국적 표시</b><small>제목·작성자 글자로 국적을 추정해 파일 이름 맨 앞에 붙입니다</small></div>
           <input type="checkbox" id="flagPrefix" /><span class="sw"><i></i></span>
         </label>
+        <div class="seg" id="flagStyle" style="margin-top:8px">
+          <button data-v="name">[한국] 글자 (윈도우 권장)</button>
+          <button data-v="emoji">🇰🇷 국기 이모지</button>
+        </div>
+        <p class="note" style="margin-top:-4px">윈도우 탐색기는 국기 이모지를 그림으로 못 보여 주고 KR·CN 같은 글자로 표시해요.</p>
       </div>
 
       <div class="card">
@@ -134,8 +139,28 @@
           <input type="checkbox" id="imageButtons" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
+          <div><b>광고 차단</b><small>지원 사이트의 피드 광고·광고 칸을 숨기고 유튜브 영상 광고를 건너뜁니다. 사이트가 이상하게 보이면 끄세요</small></div>
+          <input type="checkbox" id="adBlock" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>X 재생 화질 항상 최고</b><small>X 영상을 가장 높은 화질로만 재생합니다 (바꾼 뒤 X 새로고침)</small></div>
+          <input type="checkbox" id="xHighQuality" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>X 재생바 항상 표시</b><small>재생 중에도 재생바가 사라지지 않게 합니다</small></div>
+          <input type="checkbox" id="xKeepControls" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>X 진행 막대 두껍게</b><small>재생 위치 막대와 손잡이를 크게 키워 잡기 쉽게 합니다</small></div>
+          <input type="checkbox" id="xThickBar" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
           <div><b>X 팔로우 버튼</b><small>X 홈·탐색 피드의 작성자 이름 옆에 팔로우 / 팔로잉 상태를 보여 주고 눌러서 팔로우합니다</small></div>
           <input type="checkbox" id="xFollowButtons" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>X 넓은 화면</b><small>오른쪽 사이드바(추천·트렌드·Premium)를 숨기고 가운데 피드를 크게 키웁니다</small></div>
+          <input type="checkbox" id="xWideLayout" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
           <div><b>X 영상 소리 자동 켜기</b><small>영상이 재생되면 소리를 켭니다 (페이지를 한 번도 누르지 않았다면 첫 클릭 때 켜짐)</small></div>

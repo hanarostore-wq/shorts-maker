@@ -3,10 +3,16 @@ export const DEFAULT_SETTINGS = {
   subfolder: '', // 웨일 다운로드 폴더 안의 하위 폴더 (비우면 바로 저장)
   askEveryTime: false, // 다운로드마다 저장 위치 묻기
   imageButtons: true, // 사진에도 저장 버튼
+  adBlock: true, // 지원 사이트 광고 차단(피드 광고 숨김·유튜브 광고 건너뛰기·광고 서버 차단)
+  xKeepControls: true, // X 재생바 항상 표시
+  xThickBar: true, // X 진행 막대 두껍게
+  xHighQuality: true, // X 재생 화질 항상 최고
   xFollowButtons: true, // X 피드 작성자 옆 팔로우/팔로잉 버튼
-  xAutoSound: true, // X 영상 재생 시 소리 자동 켜기
+  xAutoSound: true,
+  xWideLayout: true, // X 오른쪽 사이드바 숨기고 가운데 피드 크게 // X 영상 재생 시 소리 자동 켜기
   sortFolders: true, // 사진 / 영상 1분30초 이하 / 영상 1분30초 초과 폴더로 자동 분류
-  flagPrefix: true, // 파일 이름 맨 앞에 영상 국적 깃발 이모지
+  flagPrefix: true,
+  flagStyle: 'name', // 'name' = [한국] (윈도우 권장), 'emoji' = 🇰🇷 (윈도우 탐색기에선 KR 글자로 보임) // 파일 이름 맨 앞에 영상 국적 깃발 이모지
   filenameTemplate: '{title} [{site}-{id}]',
   quality: 'best', // 'best' = 원본 최고화질, 'compat' = 호환성(H.264) 우선
   showButtons: true,

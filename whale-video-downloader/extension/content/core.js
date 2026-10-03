@@ -118,6 +118,10 @@
   .btn.done{background:linear-gradient(135deg,#0fb57d,#34d399);box-shadow:0 10px 26px -8px rgba(16,185,129,.8),inset 0 1px 0 rgba(255,255,255,.35)}
   .btn.err{background:linear-gradient(135deg,#ef4444,#f97316);box-shadow:0 10px 26px -8px rgba(239,68,68,.8),inset 0 1px 0 rgba(255,255,255,.35)}
   @keyframes smdspin{to{transform:rotate(360deg)}}
+  .aibadge{position:absolute;left:0;top:0;display:none;align-items:center;height:22px;padding:0 9px;border-radius:999px;pointer-events:auto;
+    font:800 11.5px/1 inherit;color:#fff;letter-spacing:.02em;background:linear-gradient(135deg,#f59e0b,#ef4444);box-shadow:0 6px 16px -6px rgba(239,68,68,.8);white-space:nowrap}
+  .aibadge.show{display:inline-flex}
+  .btn.downloaded{background:linear-gradient(135deg,#0fb57d,#34d399);box-shadow:0 8px 20px -8px rgba(16,185,129,.8),inset 0 1px 0 rgba(255,255,255,.35)}
   .btn.edit{cursor:grab;outline:2px dashed #fff;outline-offset:3px;animation:smdpulse 1.2s ease-in-out infinite}
   .btn.edit:active{cursor:grabbing}
   @keyframes smdpulse{50%{outline-color:rgba(255,255,255,.35)}}
@@ -158,11 +162,60 @@
     if (parent && entry.host.parentNode !== parent) parent.appendChild(entry.host);
   }
 
+  // ───────────── 이미 받은 영상·사진 기억 (버튼을 초록 체크로 표시) ─────────────
+  let downloaded = new Set();
+  chrome.storage.local.get('downloadedKeys').then((r) => {
+    downloaded = new Set(r.downloadedKeys || []);
+    for (const e of tracked.values()) e.state === 'idle' && setLook(e, 'idle');
+  }, () => {});
+  chrome.storage.onChanged.addListener((c, area) => {
+    if (area === 'local' && c.downloadedKeys) {
+      downloaded = new Set(c.downloadedKeys.newValue || []);
+      for (const e of tracked.values()) e.state === 'idle' && setLook(e, 'idle');
+    }
+  });
+  function keyFor(entry) {
+    const el = entry.el;
+    if (entry.kind === 'image') return `img:${(SITES.originalImageUrls(el)[0] || '').split('#')[0]}`;
+    const poster = el.getAttribute('poster') || '';
+    const src = /^https?:/.test(el.currentSrc || '') ? el.currentSrc.split('?')[0] : '';
+    const link = U.findLink(el, /\/(?:status|video|reel|reels|p|pin|short-video|explore|shorts)\/[\w-]+/)?.[0] || '';
+    return `${adapter.id}:${link || poster.split('?')[0] || src || location.pathname}`;
+  }
+  async function markDownloaded(entry) {
+    const k = keyFor(entry);
+    entry.dlKey = k;
+    downloaded.add(k);
+    const r = await chrome.storage.local.get('downloadedKeys').catch(() => ({}));
+    const list = [...new Set([...(r.downloadedKeys || []), k])].slice(-3000);
+    await chrome.storage.local.set({ downloadedKeys: list }).catch(() => {});
+  }
+
   const tracked = new Map(); // video -> entry
   const jobs = new Map(); // jobId -> entry
   let videoSeq = 0;
 
+  // 작성자·플랫폼이 붙인 AI 표시(화면 라벨·해시태그)를 찾는다. 표시가 없는 AI 영상은 알아낼 수 없다.
+  const AI_TEXT = /(AI\s*(로\s*)?(생성|제작|만든|정보|영상|이미지)|made\s+with\s+ai|ai[\s-]?generated|generated\s+(by|with)\s+ai|ai\s+info\b|altered\s+or\s+synthetic|합성된\s*콘텐츠|변경되거나\s*합성|AIGC|AI\s*生成|人工智能生成|内容由\s*AI|疑似包含\s*AI|#(ai|aiart|aivideo|ai영상|ai그림|aigc|aiart|sora|veo3?|kling|runway|midjourney|pika|hailuo|luma|genai)(?![\w가-힣]))/i;
+  function aiInDom(entry) {
+    try {
+      const box = U.container(entry.el, 18);
+      const text = (box.innerText || '').slice(0, 4000);
+      if (AI_TEXT.test(text)) return true;
+      for (const el of box.querySelectorAll('[aria-label],[title]')) {
+        if (AI_TEXT.test(el.getAttribute('aria-label') || el.getAttribute('title') || '')) return true;
+      }
+    } catch {}
+    return false;
+  }
+
   function makeButton(entry) {
+    const badge = document.createElement('span');
+    badge.className = 'aibadge';
+    badge.textContent = 'AI 영상';
+    badge.title = '작성자나 플랫폼이 AI 생성 콘텐츠로 표시한 영상입니다';
+    entry.layer.appendChild(badge);
+    entry.badge = badge;
     const b = document.createElement('button');
     b.className = 'btn';
     b.type = 'button';
@@ -209,10 +262,13 @@
     b.classList.remove('busy', 'spin', 'done', 'err');
     const ico = b.querySelector('.ico');
     const txt = b.querySelector('.txt');
+    b.classList.remove('downloaded');
     if (state === 'idle') {
-      ico.innerHTML = ICON_DL;
-      txt.textContent = '다운로드';
-      b.title = '원본 화질로 다운로드';
+      const done = downloaded.has(entry.dlKey || keyFor(entry));
+      b.classList.toggle('downloaded', done);
+      ico.innerHTML = done ? ICON_OK : ICON_DL;
+      txt.textContent = done ? '받은 적 있음' : '다운로드';
+      b.title = done ? '이미 다운로드한 적이 있어요 · 누르면 다시 받기' : entry.kind === 'image' ? '사진 원본 저장' : '원본 화질로 다운로드';
     } else if (state === 'resolving') {
       b.classList.add('busy', 'spin');
       ico.innerHTML = '';
@@ -318,6 +374,11 @@
     req.pageUrl = location.href;
     req.duration = Number.isFinite(video.duration) ? video.duration : 0;
     req.kind = entry.kind;
+    if (!entry.ai && (U.aiFlag(req.info || {}) || req.info?.item?.ai || req.info?.media?.ai || req.info?.aweme?.ai || req.info?.note?.ai)) {
+      entry.ai = true;
+      if (entry.kind === 'image') entry.badge.textContent = 'AI 이미지';
+    }
+    req.ai = !!entry.ai;
     req.title = U.cleanTitle(req.title);
     let res;
     try {
@@ -362,6 +423,7 @@
       if (j.state === 'done') {
         // 완료 창은 띄우지 않고 버튼만 잠깐 '저장 완료'로 바꾼다.
         setLook(entry, 'done', '저장 완료');
+        markDownloaded(entry);
         setTimeout(() => entry.state === 'done' && setLook(entry, 'idle'), 3000);
       } else if (j.state === 'error') {
         showError(entry, j.error);
@@ -587,7 +649,7 @@
     const entry = { el, video: el, kind, key: `${kind[0]}${++videoSeq}`, state: 'idle', visible: false, measured: 0 };
     makeAnchor(entry);
     entry.btn = makeButton(entry);
-    if (kind === 'image') entry.btn.title = '사진 원본 저장';
+    setLook(entry, 'idle'); // 이미 받은 적 있으면 초록 체크로
     tracked.set(el, entry);
   }
 
@@ -719,6 +781,17 @@
       }
       if (!entry.visible) b.classList.add('show');
       entry.visible = true;
+      if (!entry.ai && now - (entry.aiCheck || 0) > 2000) {
+        entry.aiCheck = now;
+        entry.ai = aiInDom(entry);
+        if (entry.ai && isImg) entry.badge.textContent = 'AI 이미지';
+      }
+      const showBadge = entry.ai && (!isImg || visible);
+      entry.badge.classList.toggle('show', !!showBadge);
+      if (showBadge) {
+        const bw2 = entry.badge.offsetWidth || 60;
+        entry.badge.style.transform = `translate3d(${Math.round(x - bw2 - 6)}px,${Math.round(y + (bh - 22) / 2)}px,0)`;
+      }
       if (entry.panel) {
         const pw = 300;
         const ph = entry.panel.offsetHeight || 150;
