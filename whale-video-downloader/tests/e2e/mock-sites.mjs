@@ -219,6 +219,23 @@ const handlers = {
           <button class="ytp-skip-ad-button" onclick="window.__skipped = true; document.getElementById('pl').classList.remove('ad-showing')">건너뛰기</button></div></body></html>`);
     }
     if (u.pathname.startsWith('/shorts/')) return html(res, ytPage(u.pathname.split('/')[2], true));
+    if (u.pathname === '/youtubei/v1/next') {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        const b = JSON.parse(body || '{}');
+        log.push({ host: 'www.youtube.com', path: u.pathname, videoId: b.videoId, hl: b.context?.client?.hl });
+        if (b.videoId === 'YTshortErr1') {
+          res.writeHead(503);
+          return res.end();
+        }
+        json(req, res, { contents: { twoColumnWatchNextResults: { results: { results: { contents: [
+          { videoPrimaryInfoRenderer: { viewCount: { videoViewCountRenderer: { viewCount: { simpleText: '조회수 1,234,567회' }, shortViewCount: { simpleText: '조회수 123만회' } } } } },
+          { videoSecondaryInfoRenderer: { owner: { videoOwnerRenderer: { subscriberCountText: { simpleText: '구독자 3.4만명' } } } } },
+        ] } } } } });
+      });
+      return;
+    }
     if (u.pathname === '/youtubei/v1/player') {
       let body = '';
       req.on('data', (c) => (body += c));
@@ -359,7 +376,7 @@ const handlers = {
     }
     if (u.pathname === '/tester/status/1790000000000000003/photo/1') {
       // X 사진 확대 보기(모달). 닫기 버튼을 누르면 window.__closed = true
-      return html(res, page('X 사진 보기', `<div role="dialog" aria-modal="true" style="position:fixed;inset:0;background:rgba(0,0,0,.9);display:grid;place-items:center">
+      return html(res, page('X 사진 보기', `<div role="dialog" aria-modal="true" onclick="if (event.target === this || event.target.tagName === 'SMD-ANCHOR') { window.__bgClosed = true; this.remove(); }" style="position:fixed;inset:0;background:rgba(0,0,0,.9);display:grid;place-items:center">
           <button data-testid="app-bar-close" aria-label="Close" onclick="window.__closed = true" style="position:absolute;left:12px;top:12px">×</button>
           <img alt="이미지" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=large" style="max-width:80vw;max-height:80vh">
         </div>`));

@@ -154,6 +154,8 @@
     host.setAttribute('style', 'all:initial;position:absolute;left:0;top:0;width:0;height:0;margin:0;padding:0;border:0;display:block;overflow:visible;pointer-events:none;z-index:2147483647');
     const sh = host.attachShadow({ mode: 'open' });
     sh.innerHTML = `<style>${CSS}</style><div class="layer"></div>`;
+    // 버튼을 누른 클릭이 사이트(예: X 사진 확대 창의 '배경 클릭 → 닫기')로 전달되지 않게 막는다
+    for (const t of ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'touchstart', 'touchend', 'dblclick']) host.addEventListener(t, (ev) => ev.stopPropagation());
     entry.host = host;
     entry.layer = sh.querySelector('.layer');
   }
@@ -354,6 +356,45 @@
     showPanel(entry, 'e', entry.lastError);
   }
 
+  // 피드 게시물(글+영상) 영역을 화면 좌표로 구한다. iframe 안에서는 탭 화면 좌표와 달라 쓰지 않는다.
+  const POST_SEL = 'article, [role="article"], [data-testid="tweet"], [data-testid="cellInnerDiv"], ytd-rich-item-renderer, ytd-reel-video-renderer, ytd-watch-metadata, [data-e2e="recommend-list-item-container"], .note-item, .feed-item';
+  function postRect(el) {
+    if (window.top !== window) return null;
+    let box = el.closest(POST_SEL);
+    if (!box) {
+      // 게시물 표시가 없으면 영상보다 조금 크고 글이 들어 있는 조상을 쓴다
+      const vr = el.getBoundingClientRect();
+      for (let p = el.parentElement, i = 0; p && p !== document.body && i < 8; p = p.parentElement, i++) {
+        const r = p.getBoundingClientRect();
+        if (r.height > vr.height * 1.12 && (p.innerText || '').trim().length > 10) {
+          box = p;
+          break;
+        }
+        if (r.height > innerHeight * 1.5) break;
+      }
+    }
+    const r = (box || el).getBoundingClientRect();
+    const x = Math.max(0, r.left);
+    const y = Math.max(0, r.top);
+    const w = Math.min(innerWidth, r.right) - x;
+    const h = Math.min(innerHeight, r.bottom) - y;
+    if (w < 40 || h < 40) return null;
+    return { x, y, w, h, vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio || 1 };
+  }
+
+  let shotStyle = null;
+  async function hideButtonsForShot(on) {
+    if (!on) {
+      shotStyle?.remove();
+      shotStyle = null;
+      return;
+    }
+    shotStyle = document.createElement('style');
+    shotStyle.textContent = 'smd-anchor, smd-toolbar, smd-follow, smd-ytstats { visibility: hidden !important; }';
+    (document.head || document.documentElement).appendChild(shotStyle);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  }
+
   async function start(entry) {
     const video = entry.el;
     closePanel(entry);
@@ -381,16 +422,24 @@
     req.ai = !!entry.ai;
     req.captionText = String(req.title || '').slice(0, 1000);
     req.title = U.cleanTitle(req.title);
+    // ②·③ 방식: 클릭한 순간의 피드(게시물) 화면을 찍을 영역. 버튼은 잠깐 숨긴다.
+    const wantShot = entry.kind === 'video' && (settings.captionCover || settings.captionIntro);
+    if (wantShot) {
+      req.shot = postRect(video);
+      if (req.shot) await hideButtonsForShot(true);
+    }
     let res;
     try {
       res = await chrome.runtime.sendMessage({ type: 'smd:download', request: req });
     } catch (err) {
+      if (req.shot) hideButtonsForShot(false);
       return showError(entry, {
         step: '확장프로그램 연결',
         reason: `확장프로그램 백그라운드와 연결이 끊겼습니다 (${err?.message || err}). 확장프로그램이 업데이트되었거나 다시 시작된 경우입니다.`,
         action: '페이지를 새로고침(F5)한 뒤 다시 시도하세요.',
       });
     }
+    if (req.shot) hideButtonsForShot(false);
     if (!res || res.error) return showError(entry, res?.error || { step: '다운로드 요청', reason: '백그라운드가 응답하지 않았습니다.', action: '페이지를 새로고침한 뒤 다시 시도하세요.' });
     entry.jobId = res.jobId;
     entry.lastMsg = Date.now();
@@ -433,7 +482,7 @@
         const label =
           j.phase === 'resolve' ? '원본 찾는 중…'
           : j.phase === 'queue' ? '대기 중…'
-          : j.phase === 'caption' ? `요약 글자 넣는 중 ${Math.floor(j.percent || 0)}%`
+          : j.phase === 'caption' ? `피드 내용 넣는 중 ${Math.floor(j.percent || 0)}%`
           : j.phase === 'mux' ? `${q}합치는 중 ${Math.floor(j.percent || 0)}%`
           : j.phase === 'save' ? '저장 중…'
           : j.percent != null ? `${q}${Math.floor(j.percent)}%`
@@ -479,6 +528,8 @@
       (ev) => {
         if (!/\/photo\/\d+/.test(location.pathname)) return;
         const t = ev.target;
+        // 저장 버튼(smd-anchor)을 누른 경우에는 확대 창을 닫지 않는다
+        if (ev.composedPath().some((n) => n?.tagName === 'SMD-ANCHOR')) return;
         if (!(t instanceof HTMLImageElement) && !t.closest?.('[data-testid="swipe-to-dismiss"]')) return;
         const modal = t.closest('[aria-modal="true"], [role="dialog"]');
         if (!modal) return;

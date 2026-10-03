@@ -5,6 +5,9 @@ export const DEFAULT_SETTINGS = {
   imageButtons: true, // 사진에도 저장 버튼
   captionOnMedia: true, // 사진·영상 빈 공간에 피드 내용 요약 넣기(영상은 재인코딩)
   captionKeepOriginal: false, // 요약 넣을 때 원본도 함께 저장
+  captionCover: false, // [재인코딩 없음] 영상 표지(썸네일)에 피드 스크린샷 + 설명 정보에 피드 내용 + 같은 이름 PNG
+  captionIntro: false, // 영상 맨 앞에 피드 스크린샷 3초(재인코딩)
+  ytShortsStats: true, // 유튜브 쇼츠 오른쪽 위에 조회수·구독자 수
   adBlock: true, // 지원 사이트 광고 차단(피드 광고 숨김·유튜브 광고 건너뛰기·광고 서버 차단)
   xKeepControls: true, // X 재생바 항상 표시
   xThickBar: true, // X 진행 막대 두껍게

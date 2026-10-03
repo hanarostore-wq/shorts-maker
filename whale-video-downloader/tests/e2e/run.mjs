@@ -407,6 +407,59 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── X 사진 확대 보기에서 저장 버튼 → 창이 닫히지 않고 저장됨 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ captionOnMedia: false });
+    await clearDownloaded();
+    await page.goto('https://x.com/tester/status/1790000000000000003/photo/1', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const ib = await page.locator('[role="dialog"] img').boundingBox();
+    await page.mouse.move(ib.x + ib.width / 2, ib.y + ib.height / 2);
+    await page.waitForTimeout(500);
+    const before = new Set(listFiles(DL));
+    await page.locator('smd-anchor .btn.show').first().click();
+    const saved = await waitFile(before, 30000);
+    const st = await page.evaluate(() => ({ closed: window.__closed === true, bg: window.__bgClosed === true, dialog: !!document.querySelector('[role="dialog"] img') }));
+    record('[X] 사진 확대 보기에서 저장 버튼 → 창 안 닫히고 사진 저장', !!saved && !st.closed && !st.bg && st.dialog, { note: `${saved ? path.basename(saved) : '저장 안 됨'} · 확대 창 ${st.dialog && !st.closed && !st.bg ? '유지' : '닫힘'}` });
+  } catch (err) {
+    record('[X] 확대 보기 사진 저장', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
+// ── 유튜브 쇼츠 오른쪽 위 조회수·구독자 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://www.youtube.com/shorts/YTshort0001', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => /구독자/.test(document.querySelector('smd-ytstats')?.shadowRoot?.textContent || ''), null, { timeout: 15000 });
+    const r = await page.evaluate(() => {
+      const h = document.querySelector('smd-ytstats');
+      const b = h.shadowRoot.querySelector('.b').getBoundingClientRect();
+      const p = document.querySelector('#shorts-player').getBoundingClientRect();
+      return { text: h.shadowRoot.textContent.replace(/\s+/g, ' ').trim(), right: p.right - b.right, top: b.top - p.top };
+    });
+    await page.screenshot({ path: path.join(SHOTS, 'shorts-stats.png') });
+    record('[유튜브] 쇼츠 오른쪽 위에 조회수·구독자 표시', /조회수 1,234,567회/.test(r.text) && /구독자 3\.4만명/.test(r.text) && r.right >= 0 && r.right < 40 && r.top >= 0 && r.top < 40, { note: `${r.text} · 오른쪽 여백 ${r.right.toFixed(0)}px · 위 여백 ${r.top.toFixed(0)}px` });
+    await page.goto('https://www.youtube.com/shorts/YTshortErr1', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => /실패/.test(document.querySelector('smd-ytstats')?.shadowRoot?.textContent || ''), null, { timeout: 15000 });
+    const e = await page.evaluate(() => document.querySelector('smd-ytstats').shadowRoot.textContent.replace(/\s+/g, ' ').trim());
+    record('[유튜브] 쇼츠 통계 실패 시 원인·조치 안내', /HTTP 503/.test(e) && /새로고침/.test(e), { note: e });
+    await setSettings({ ytShortsStats: false });
+    await page.waitForTimeout(800);
+    const hidden = await page.evaluate(() => getComputedStyle(document.querySelector('smd-ytstats')).display === 'none');
+    record('[유튜브] 쇼츠 통계 설정 끄면 숨김', hidden, { note: hidden ? '숨겨짐' : '여전히 보임' });
+  } catch (err) {
+    record('[유튜브] 쇼츠 통계', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ ytShortsStats: true });
+    await page.close();
+  }
+}
+
 // ── X 팔로우 버튼 + 소리 자동 켜기 ──
 if (!only || only === 'x' || '팔로우'.includes(only)) {
   const page = await ctx.newPage();
@@ -590,6 +643,80 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       await page.close();
     }
   }
+  // ② 재인코딩 없이: 표지(피드 스크린샷) + 같은 이름 PNG, 영상 데이터는 그대로
+  const grab = async (url, need, settle = 800) => {
+    const page = await ctx.newPage();
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      await page.bringToFront();
+      const before = new Set(listFiles(DL));
+      await page.locator('smd-anchor .btn.show').first().click();
+      const t1 = Date.now();
+      let added = [];
+      while (Date.now() - t1 < 120000) {
+        added = listFiles(DL).filter((f) => !before.has(f) && !/\.crdownload$/.test(f));
+        if (added.length >= need) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      await new Promise((r) => setTimeout(r, settle));
+      const pp = await extPage();
+      const warn = await pp.evaluate(async () => (await chrome.storage.local.get('history')).history?.[0]?.warning || '');
+      await pp.close();
+      return { added, warn };
+    } finally {
+      await page.close();
+    }
+  };
+  {
+    await setSettings({ captionOnMedia: false, captionCover: true, captionIntro: false, captionKeepOriginal: false });
+    await clearDownloaded();
+    try {
+      const { added, warn } = await grab('https://www.example-videos.com/watch-vp9', 2);
+      const vid = added.find((f) => /\.mp4$/.test(f));
+      const png = added.find((f) => /\.png$/.test(f));
+      const streams = vid ? JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_name:stream_disposition=attached_pic', '-of', 'json', vid]).toString()).streams : [];
+      const cover = streams.find((x) => x.disposition?.attached_pic === 1);
+      const main = streams.find((x) => x.codec_name === 'vp9' && x.disposition?.attached_pic !== 1);
+      const info = vid && probe(vid);
+      const sameName = vid && png && path.basename(vid).replace(/\.mp4$/, '') === path.basename(png).replace(/\.png$/, '');
+      if (png) execFileSync('cp', [png, path.join(SHOTS, 'cover-shot.png')]);
+      record('[피드②] 재인코딩 없이 표지에 피드 스크린샷 + 같은 이름 PNG', !!main && !!cover && !!sameName && !!info?.acodec && info.duration > 5 && !/카드/.test(warn), { note: `${vid ? path.basename(vid) : '없음'} · 표지 ${cover ? cover.codec_name : '없음'} · 영상 ${main?.codec_name || '?'}(복사) · PNG ${png ? '있음' : '없음'} · 안내: ${warn.slice(0, 60) || '없음'}` });
+    } catch (err) {
+      record('[피드②] 표지', false, { note: err.message.split('\n')[0] });
+    }
+  }
+  // ③ 영상 시작에 피드 화면 3초
+  {
+    await setSettings({ captionOnMedia: false, captionCover: false, captionIntro: true, captionKeepOriginal: true });
+    await clearDownloaded();
+    try {
+      const { added, warn } = await grab('https://www.example-videos.com/watch-vp9', 2);
+      const vid = added.find((f) => !/\(원본\)/.test(f));
+      const orig = added.find((f) => /\(원본\)/.test(f));
+      const a = vid && probe(vid);
+      const b = orig && probe(orig);
+      const astart = vid ? Number(JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'packet=pts_time', '-read_intervals', '%+#1', '-of', 'json', vid]).toString()).packets?.[0]?.pts_time) : NaN;
+      if (vid) execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '1.5', '-i', vid, '-frames:v', '1', path.join(SHOTS, 'intro-frame.png')]);
+      const grow = a && b ? a.duration - b.duration : 0;
+      record('[피드③] 영상 시작에 피드 화면 3초 + 소리 3초 뒤로', !!a?.vcodec && !!a.acodec && grow > 2.5 && grow < 3.6 && astart > 2.8 && astart < 3.3, { note: `${vid ? path.basename(vid) : '없음'} (${a?.vcodec}+${a?.acodec}) · 길이 +${grow.toFixed(2)}s · 소리 시작 ${astart}s · 안내: ${warn.slice(0, 60) || '없음'}` });
+    } catch (err) {
+      record('[피드③] 인트로', false, { note: err.message.split('\n')[0] });
+    }
+  }
+  // ③ 실패 경로: 이 Chromium 이 해독 못 하는 H.264 → 원본 저장 + 안내
+  {
+    await setSettings({ captionIntro: true, captionKeepOriginal: false });
+    await clearDownloaded();
+    try {
+      const { added, warn } = await grab('https://www.example-videos.com/watch', 1);
+      const info = added[0] && probe(added[0]);
+      record('[피드③] 인트로 실패 시 원본 저장 + 단계·원인 안내', info?.vcodec === 'h264' && /피드 화면 3초를 넣지 못해 원본으로 저장/.test(warn), { note: `${info?.vcodec} · 안내: ${warn.slice(0, 100)}` });
+    } catch (err) {
+      record('[피드③] 실패 경로', false, { note: err.message.split('\n')[0] });
+    }
+  }
+  await setSettings({ captionCover: false, captionIntro: false });
   await setSettings({ captionOnMedia: false, captionKeepOriginal: false });
 }
 

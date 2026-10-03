@@ -2,7 +2,7 @@
 //   OPFS 임시 파일에 쓴 뒤 blob 주소를 서비스워커에 넘겨 웨일 다운로드 폴더(사용자가 지정한 폴더)로 저장한다.
 //   사진은 원본 그대로, jpg·png·gif 가 아니면 PNG 로 변환한다.
 import { copyFile, mergeStreams, remuxHls, StepError, STEP } from './engine.js';
-import { summarize, captionImage, captionVideo } from './caption.js';
+import { summarize, captionImage, captionVideo, feedImage, canvasPng, coverVideo, introVideo } from './caption.js';
 
 const running = new Map(); // jobId -> { ac, target }
 const finished = new Map(); // jobId -> { url, cleanup }
@@ -103,7 +103,7 @@ async function saveImage(jobId, desc) {
   }
   let extra = null;
   let warning = '';
-  if (desc.caption?.text && ext !== 'gif') {
+  if (desc.caption?.overlay && desc.caption.text && ext !== 'gif') {
     try {
       const summary = await summarize(desc.caption.text);
       if (summary) {
@@ -169,36 +169,76 @@ async function run({ jobId, desc, filename, mode, prefer }) {
     let ext = (filename.split('.').pop() || 'mp4').toLowerCase();
     let outFile = file;
     let cleanup = target.cleanup;
-    let extra = null;
     let warning = '';
-    // 피드 내용 요약을 영상에 새기기(다시 인코딩)
-    if (desc.caption?.text) {
-      const summary = await summarize(desc.caption.text);
-      if (summary) {
-        const cap = await opfsTarget(`${jobId}-cap`, filename);
+    const extras = [];
+    const warns = [];
+    const cap = desc.caption;
+    if (cap && (cap.overlay || cap.cover || cap.intro)) {
+      const summary = cap.text ? await summarize(cap.text) : '';
+      const overlayText = cap.overlay ? summary : '';
+      let feed = null;
+      if (cap.cover || cap.intro) {
+        send({ type: 'smd:engine-progress', jobId, phase: 'shot', percent: null, quality });
+        feed = await feedImage(cap, summary);
+        if (feed.from === 'card') warns.push(`피드 화면 대신 요약 글자 카드를 썼습니다 (${feed.why}).`);
+      }
+      const origFile = file;
+      const cleanups = [target.cleanup];
+      // ①·③: 다시 인코딩 (③ 이 켜져 있으면 ① 글자도 같은 과정에서 함께 그린다)
+      if (cap.intro || overlayText) {
+        const re = await opfsTarget(`${jobId}-cap`, filename);
         try {
           send({ type: 'smd:engine-progress', jobId, phase: 'caption', percent: 0, quality });
-          await captionVideo(file, summary, cap.writable, (pct) => onProgress({ phase: 'caption', percent: Math.min(99, pct) }));
-          const capFile = await cap.fh.getFile();
-          if (!capFile.size) throw new Error('결과 파일이 비어 있음');
-          if (desc.caption.keepOriginal) extra = { blobUrl: URL.createObjectURL(file.slice(0, file.size, MIME[ext] || 'video/mp4')), ext };
-          else await target.cleanup();
-          outFile = capFile;
+          const prog = (pct) => onProgress({ phase: 'caption', percent: Math.min(99, pct) });
+          if (cap.intro) await introVideo(outFile, { image: feed.canvas, seconds: 3, overlayText }, re.writable, prog);
+          else await captionVideo(outFile, overlayText, re.writable, prog);
+          const reFile = await re.fh.getFile();
+          if (!reFile.size) throw new Error('결과 파일이 비어 있음');
+          outFile = reFile;
           ext = 'mp4';
-          const origCleanup = target.cleanup;
-          cleanup = async () => {
-            await cap.cleanup();
-            if (desc.caption.keepOriginal) await origCleanup();
-          };
+          cleanups.push(re.cleanup);
         } catch (err) {
-          await cap.fail().catch(() => {});
-          warning = `영상에 요약 글자를 넣지 못해 원본으로 저장했습니다 (${err?.message || err}).`;
+          await re.fail().catch(() => {});
+          const what = cap.intro ? '영상 시작에 피드 화면 3초를 넣지' : '영상에 요약 글자를 넣지';
+          warns.push(`${what} 못해 원본으로 저장했습니다 (${err?.message || err}).`);
         }
       }
+      // ②: 재인코딩 없이 표지·설명 정보 + 같은 이름 PNG
+      if (cap.cover) {
+        let png = null;
+        try {
+          png = await canvasPng(feed.canvas);
+        } catch (err) {
+          warns.push(`피드 스크린샷 PNG 를 만들지 못했습니다 (${err?.message || err}).`);
+        }
+        if (png) {
+          extras.push({ blobUrl: URL.createObjectURL(png), ext: 'png', suffix: '', label: '피드 스크린샷 PNG' });
+          const cv = await opfsTarget(`${jobId}-cov`, filename);
+          try {
+            await coverVideo(outFile, { cover: png, title: desc.title || '', comment: [cap.text, cap.pageUrl].filter(Boolean).join('\n\n') }, cv.writable);
+            const cvFile = await cv.fh.getFile();
+            if (!cvFile.size) throw new Error('결과 파일이 비어 있음');
+            outFile = cvFile;
+            ext = 'mp4';
+            cleanups.push(cv.cleanup);
+          } catch (err) {
+            await cv.fail().catch(() => {});
+            warns.push(`영상 표지에 피드 화면을 넣지 못했습니다(스크린샷 PNG 는 옆에 저장) (${err?.message || err}).`);
+          }
+        }
+      }
+      if (outFile !== origFile && cap.keepOriginal && (cap.overlay || cap.intro)) {
+        const oext = (filename.split('.').pop() || 'mp4').toLowerCase();
+        extras.push({ blobUrl: URL.createObjectURL(origFile.slice(0, origFile.size, MIME[oext] || 'video/mp4')), ext: oext, suffix: ' (원본)', label: '원본 영상' });
+      }
+      cleanup = async () => {
+        for (const c of cleanups) await c().catch(() => {});
+      };
     }
+    warning = warns.join(' ');
     const url = URL.createObjectURL(outFile.slice(0, outFile.size, MIME[ext] || 'video/mp4'));
-    finished.set(jobId, { url, cleanup, extraUrl: extra?.blobUrl });
-    send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: outFile.size, quality, duration: measured, ext: ext !== (filename.split('.').pop() || '').toLowerCase() ? ext : undefined, extra, warning });
+    finished.set(jobId, { url, cleanup, extraUrls: extras.map((x) => x.blobUrl) });
+    send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: outFile.size, quality, duration: measured, ext: ext !== (filename.split('.').pop() || '').toLowerCase() ? ext : undefined, extras, warning });
   } catch (err) {
     running.delete(jobId);
     await target?.fail().catch(() => {});
@@ -233,6 +273,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       finished.delete(msg.jobId);
       URL.revokeObjectURL(f.url);
       if (f.extraUrl) URL.revokeObjectURL(f.extraUrl);
+      for (const u of f.extraUrls || []) URL.revokeObjectURL(u);
       f.cleanup?.();
     }
     sendResponse({ ok: true });

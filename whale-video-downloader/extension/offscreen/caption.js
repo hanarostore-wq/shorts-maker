@@ -179,3 +179,189 @@ export async function captionVideo(file, text, writable, onProgress) {
     try { input.dispose(); } catch {}
   }
 }
+
+// ── 피드 스크린샷 ──
+// 탭 화면 전체 캡처(dataUrl)에서 게시물 영역만 잘라 낸다. 없으면 요약 글자로 카드를 그린다.
+export async function cropShot(shot) {
+  if (!shot?.dataUrl || !shot.rect) throw new Error('찍어 둔 피드 화면이 없습니다');
+  const blob = await (await fetch(shot.dataUrl)).blob();
+  const bmp = await createImageBitmap(blob);
+  const r = shot.rect;
+  const sx = bmp.width / (r.vw || bmp.width);
+  const sy = bmp.height / (r.vh || bmp.height);
+  const x = Math.max(0, Math.round(r.x * sx));
+  const y = Math.max(0, Math.round(r.y * sy));
+  const w = Math.min(bmp.width - x, Math.round(r.w * sx));
+  const h = Math.min(bmp.height - y, Math.round(r.h * sy));
+  if (w < 20 || h < 20) throw new Error(`잘라 낼 게시물 영역이 너무 작습니다 (${w}×${h})`);
+  const c = new OffscreenCanvas(w, h);
+  c.getContext('2d').drawImage(bmp, x, y, w, h, 0, 0, w, h);
+  bmp.close?.();
+  return c;
+}
+
+export function textCard(summary, meta = {}) {
+  const w = 1080;
+  const h = 1080;
+  const c = new OffscreenCanvas(w, h);
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, w, h);
+  g.addColorStop(0, '#1d1b3a');
+  g.addColorStop(1, '#0b0b12');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font = '600 40px "Pretendard","Malgun Gothic","Noto Sans KR",sans-serif';
+  ctx.textBaseline = 'top';
+  const head = [meta.site, meta.author].filter(Boolean).join(' · ');
+  if (head) ctx.fillText(head, 80, 90);
+  drawCaption(ctx, w, h, summary || meta.site || '피드', 'bottom');
+  // 가운데에 크게 한 번 더(카드 본문)
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 64px "Pretendard","Malgun Gothic","Noto Sans KR",sans-serif';
+  const lines = wrap(ctx, summary || '', w - 160, 5);
+  lines.forEach((l, i) => ctx.fillText(l, 80, 260 + i * 86));
+  return c;
+}
+
+// 스크린샷(또는 카드)을 얻는다. 실패 이유는 경고로 돌려준다.
+export async function feedImage(caption, summary) {
+  try {
+    return { canvas: await cropShot(caption.shot), from: 'shot' };
+  } catch (err) {
+    const why = caption.shotError || err?.message || String(err);
+    return { canvas: textCard(summary, caption), from: 'card', why };
+  }
+}
+
+export async function canvasPng(canvas) {
+  return canvas.convertToBlob({ type: 'image/png' });
+}
+
+// ── ② 재인코딩 없이: 영상 데이터는 그대로 복사하고 표지 사진·설명 정보만 넣는다 ──
+export async function coverVideo(file, { cover, title, comment }, writable) {
+  const input = new MB.Input({ source: new MB.BlobSource(file), formats: MB.ALL_FORMATS });
+  try {
+    const data = new Uint8Array(await cover.arrayBuffer());
+    const output = new MB.Output({ format: new MB.Mp4OutputFormat({ fastStart: false }), target: new MB.StreamTarget(writable, { chunked: true, chunkSize: 4 * 1024 * 1024 }) });
+    const conv = await MB.Conversion.init({
+      input,
+      output,
+      showWarnings: false,
+      tags: (t) => ({
+        ...t,
+        title: title || t.title,
+        comment: comment || t.comment,
+        description: comment || t.description,
+        images: [{ data, mimeType: cover.type || 'image/png', kind: 'coverFront', name: 'feed.png' }],
+      }),
+    });
+    if (!conv.isValid) throw new Error(`변환 불가: ${conv.discardedTracks.map((d) => d.reason).join(', ')}`);
+    const vDrop = conv.discardedTracks.find((d) => d.track?.type === 'video' || d.track?.isVideoTrack?.());
+    if (vDrop) throw new Error(`영상 트랙을 그대로 옮기지 못했습니다: ${vDrop.reason}`);
+    await conv.execute();
+  } finally {
+    try { input.dispose(); } catch {}
+  }
+}
+
+// ── ③ 영상 맨 앞에 피드 화면 N초 (영상은 다시 인코딩, 소리는 그대로 복사해 뒤로 민다) ──
+function fitDraw(ctx, src, w, h) {
+  ctx.fillStyle = '#0b0b12';
+  ctx.fillRect(0, 0, w, h);
+  const sw = src.width;
+  const sh = src.height;
+  // 흐린 배경으로 빈칸을 채우고, 가운데에 원본 비율로 놓는다
+  const cover = Math.max(w / sw, h / sh);
+  ctx.save();
+  ctx.filter = 'blur(24px) brightness(0.45)';
+  ctx.drawImage(src, (w - sw * cover) / 2, (h - sh * cover) / 2, sw * cover, sh * cover);
+  ctx.restore();
+  const k = Math.min((w * 0.94) / sw, (h * 0.94) / sh);
+  ctx.drawImage(src, (w - sw * k) / 2, (h - sh * k) / 2, sw * k, sh * k);
+}
+
+export async function introVideo(file, { image, seconds = 3, overlayText = '' }, writable, onProgress) {
+  const input = new MB.Input({ source: new MB.BlobSource(file), formats: MB.ALL_FORMATS });
+  try {
+    const vt = await input.getPrimaryVideoTrack();
+    if (!vt) throw new Error('비디오 트랙 없음');
+    if (!(await vt.canDecode())) throw new Error(`이 브라우저가 영상(${await vt.getCodec().catch(() => '?')})을 해독할 수 없습니다`);
+    const at = await input.getPrimaryAudioTrack();
+    let w = await vt.getDisplayWidth();
+    let h = await vt.getDisplayHeight();
+    w -= w % 2;
+    h -= h % 2;
+    const codec = await MB.getFirstEncodableVideoCodec(['avc', 'hevc', 'vp9', 'av1'], { width: w, height: h });
+    if (!codec) throw new Error('이 브라우저에서 쓸 수 있는 영상 인코더가 없습니다');
+    const total = (await input.computeDuration()) || 1;
+    const stats = await vt.computePacketStats(60).catch(() => null);
+    const fps = Math.min(60, Math.max(15, Math.round(stats?.averagePacketRate || 30)));
+
+    const output = new MB.Output({ format: new MB.Mp4OutputFormat({ fastStart: false }), target: new MB.StreamTarget(writable, { chunked: true, chunkSize: 4 * 1024 * 1024 }) });
+    const vSrc = new MB.VideoSampleSource({ codec, bitrate: MB.QUALITY_VERY_HIGH, keyFrameInterval: 2 });
+    output.addVideoTrack(vSrc, { frameRate: fps });
+    let aSrc = null;
+    let aCfg = null;
+    if (at) {
+      const acodec = await at.getCodec();
+      aCfg = await at.getDecoderConfig();
+      if (acodec && aCfg) {
+        aSrc = new MB.EncodedAudioPacketSource(acodec);
+        output.addAudioTrack(aSrc);
+      }
+    }
+    const tags = await input.getMetadataTags().catch(() => ({}));
+    output.setMetadataTags({ ...tags, images: undefined });
+    await output.start();
+
+    const canvas = new OffscreenCanvas(w, h);
+    const ctx = canvas.getContext('2d');
+    // 1) 인트로 프레임
+    fitDraw(ctx, image, w, h);
+    const introFrames = Math.round(seconds * fps);
+    for (let i = 0; i < introFrames; i++) {
+      const s = new MB.VideoSample(canvas, { timestamp: i / fps, duration: 1 / fps });
+      await vSrc.add(s, i === 0 ? { keyFrame: true } : undefined);
+      s.close();
+    }
+    // 2) 본 영상 프레임(필요하면 요약 글자도 그린다)
+    const vSink = new MB.VideoSampleSink(vt);
+    let t0 = null;
+    let pos = null;
+    let first = true;
+    for await (const sample of vSink.samples()) {
+      if (t0 === null) t0 = Math.max(0, sample.timestamp);
+      sample.draw(ctx, 0, 0, w, h);
+      if (overlayText) {
+        if (!pos) pos = chooseRegion(canvas, w, h);
+        drawCaption(ctx, w, h, overlayText, pos);
+      }
+      const ts = seconds + Math.max(0, sample.timestamp - t0);
+      const out = new MB.VideoSample(canvas, { timestamp: ts, duration: sample.duration || 1 / fps });
+      await vSrc.add(out, first ? { keyFrame: true } : undefined);
+      first = false;
+      out.close();
+      sample.close();
+      onProgress?.(Math.min(95, ((ts - seconds) / total) * 95));
+    }
+    if (t0 === null) throw new Error('영상 프레임을 하나도 읽지 못했습니다');
+    vSrc.close();
+    // 3) 소리: 그대로 복사하되 인트로 길이만큼 뒤로 민다
+    if (aSrc) {
+      const pSink = new MB.EncodedPacketSink(at);
+      let firstA = true;
+      for await (const p of pSink.packets()) {
+        const shifted = p.clone({ timestamp: seconds + Math.max(0, p.timestamp - t0) });
+        await aSrc.add(shifted, firstA ? { decoderConfig: aCfg } : undefined);
+        firstA = false;
+      }
+      aSrc.close();
+    }
+    await output.finalize();
+    onProgress?.(100);
+    return { codec, fps };
+  } finally {
+    try { input.dispose(); } catch {}
+  }
+}

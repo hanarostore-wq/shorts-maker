@@ -391,13 +391,20 @@ async function runEngine(job, d, settings) {
   notify(job);
   try {
     await startBrowserDownload(job, result.blobUrl, settings, 'save');
-    if (result.extra?.blobUrl) {
-      // 원본도 함께 저장: 이름 끝에 (원본)
+    // 함께 저장할 파일: 원본은 이름 끝에 (원본), 피드 스크린샷은 같은 이름 .png
+    const extras = result.extras || (result.extra ? [{ ...result.extra, suffix: ' (원본)' }] : []);
+    for (const ex of extras) {
+      if (!ex?.blobUrl) continue;
       const main = job.filename;
       const dl = job.downloadId;
-      job.filename = `${main.replace(/\.[^.]+$/, '')} (원본).${result.extra.ext || main.split('.').pop()}`;
+      // 같은 이름 파일이 있어 '(1)' 처럼 바뀌어 저장됐으면 함께 저장하는 파일도 그 이름을 따른다
+      const savedStem = (job.where || '').split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '');
+      const stem = savedStem ? main.replace(/[^/]+$/, savedStem) : main.replace(/\.[^.]+$/, '');
+      job.filename = `${stem}${ex.suffix || ''}.${ex.ext || main.split('.').pop()}`;
       try {
-        await startBrowserDownload(job, result.extra.blobUrl, settings, 'save');
+        await startBrowserDownload(job, ex.blobUrl, settings, 'save');
+      } catch (err) {
+        job.warning = [job.warning, `${ex.label || '추가 파일'}을 저장하지 못했습니다 (${err?.reason || err?.message || err}).`].filter(Boolean).join(' ');
       } finally {
         job.filename = main;
         job.downloadId = dl;
@@ -458,9 +465,27 @@ async function runJob(job) {
   job.duration = Number(req.duration) || Number(desc.duration) || 0;
   applyCredentials(desc, req);
   const capText = String(req.captionText || req.title || desc.title || '').trim();
-  if (settings.captionOnMedia !== false && capText) {
-    for (const d of [desc, ...(desc.fallbacks || [])]) d.caption = { text: capText, keepOriginal: !!settings.captionKeepOriginal };
+  const isImage = desc.type === 'image';
+  const cap = {
+    overlay: settings.captionOnMedia !== false && !!capText,
+    // ②·③ 은 영상에만 (사진은 ① 만)
+    cover: !isImage && !!settings.captionCover,
+    intro: !isImage && !!settings.captionIntro,
+  };
+  if (cap.overlay || cap.cover || cap.intro) {
+    const caption = {
+      text: capText,
+      ...cap,
+      keepOriginal: !!settings.captionKeepOriginal,
+      shot: req.shotData || null,
+      shotError: req.shotError || '',
+      site: req.siteName || req.site || '',
+      author: req.author || desc.author || '',
+      pageUrl: req.pageUrl || '',
+    };
+    for (const d of [desc, ...(desc.fallbacks || [])]) d.caption = caption;
   }
+  delete req.shotData;
   // 동시에 너무 많이 받지 않도록 최대 3개씩(사진 일괄 저장 대비)
   if (active >= MAX_ACTIVE) {
     job.phase = 'queue';
@@ -540,6 +565,20 @@ function buildImage(image, pageUrl) {
   return { ...mk(urls[0]), fallbacks: urls.slice(1).map(mk) };
 }
 
+// ②·③ 방식에 쓸 피드 화면 스크린샷 (보이는 탭 화면 → 게시물 영역은 저장 엔진에서 잘라 냄)
+let lastShot = 0;
+async function captureShot(req, sender) {
+  if (!req.shot || req.kind === 'image' || sender.tab?.windowId == null) return null;
+  const s = await getSettings();
+  if (!s.captionCover && !s.captionIntro) return null;
+  // captureVisibleTab 은 초당 2회 제한이 있다
+  const wait = 550 - (Date.now() - lastShot);
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastShot = Date.now();
+  const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: 'png' });
+  return { dataUrl, rect: req.shot };
+}
+
 function createJob(request, sender) {
   const job = {
     id: `j${Date.now().toString(36)}${(++jobSeq).toString(36)}`,
@@ -576,9 +615,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || msg.target === 'offscreen') return;
   switch (msg.type) {
     case 'smd:download': {
-      const job = createJob(msg.request || {}, sender);
-      sendResponse({ jobId: job.id });
-      return;
+      const req = msg.request || {};
+      // 클릭한 순간의 화면을 먼저 찍어 둔다(스크롤하면 피드가 바뀌므로). 실패해도 다운로드는 진행.
+      captureShot(req, sender)
+        .then((shot) => {
+          if (shot) req.shotData = shot;
+        })
+        .catch((err) => {
+          req.shotError = `피드 화면 찍기 실패: ${err?.message || err}`;
+        })
+        .finally(() => {
+          delete req.shot;
+          const job = createJob(req, sender);
+          sendResponse({ jobId: job.id });
+        });
+      return true;
     }
     case 'smd:videos': {
       if (sender.tab?.id == null) return;

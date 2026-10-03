@@ -110,11 +110,19 @@
         </select>
         <p class="preview" id="filenamePreview"></p>
         <label class="row-toggle">
-          <div><b>사진·영상에 피드 내용 요약 넣기</b><small>인물이 적은 위/아래 빈 공간에 게시물 내용을 짧게 요약해 써 넣습니다. 영상은 다시 인코딩해서 저장이 느려지고 원본과 완전히 같지는 않습니다</small></div>
+          <div><b>① 사진·영상 빈 공간에 요약 글자</b><small>인물이 적은 위/아래 빈 공간에 게시물 내용을 짧게 요약해 써 넣습니다. 영상은 다시 인코딩해서 저장이 느려지고 원본과 완전히 같지는 않습니다</small></div>
           <input type="checkbox" id="captionOnMedia" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
-          <div><b>요약 넣을 때 원본도 함께 저장</b><small>글자 없는 원본을 "(원본)" 이름으로 하나 더 저장합니다</small></div>
+          <div><b>② 영상 표지에 피드 스크린샷 (재인코딩 없음)</b><small>영상은 그대로 두고 표지(썸네일)·설명 정보에 피드 화면과 내용을 넣고, 같은 이름의 PNG 스크린샷도 옆에 저장합니다</small></div>
+          <input type="checkbox" id="captionCover" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>③ 영상 시작에 피드 스크린샷 3초</b><small>영상 맨 앞에 피드 화면을 3초 동안 보여 줍니다. 다시 인코딩해서 저장이 느려집니다</small></div>
+          <input type="checkbox" id="captionIntro" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>①·③ 사용 시 원본도 함께 저장</b><small>글자·인트로 없는 원본을 "(원본)" 이름으로 하나 더 저장합니다</small></div>
           <input type="checkbox" id="captionKeepOriginal" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
@@ -145,6 +153,10 @@
         <label class="row-toggle">
           <div><b>사진에도 버튼 표시</b><small>사진에 마우스를 올리면 원본 저장 버튼이 나타납니다 (jpg·png·gif 외 형식은 PNG 로 변환)</small></div>
           <input type="checkbox" id="imageButtons" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>유튜브 쇼츠 조회수·구독자 표시</b><small>재생 중인 쇼츠 오른쪽 위에 조회수와 구독자 수를 띄웁니다</small></div>
+          <input type="checkbox" id="ytShortsStats" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
           <div><b>광고 차단</b><small>지원 사이트의 피드 광고·광고 칸을 숨기고 유튜브 영상 광고를 건너뜁니다. 사이트가 이상하게 보이면 끄세요</small></div>
