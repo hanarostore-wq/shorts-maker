@@ -379,6 +379,7 @@
       if (entry.kind === 'image') entry.badge.textContent = 'AI 이미지';
     }
     req.ai = !!entry.ai;
+    req.captionText = String(req.title || '').slice(0, 1000);
     req.title = U.cleanTitle(req.title);
     let res;
     try {
@@ -432,6 +433,7 @@
         const label =
           j.phase === 'resolve' ? '원본 찾는 중…'
           : j.phase === 'queue' ? '대기 중…'
+          : j.phase === 'caption' ? `요약 글자 넣는 중 ${Math.floor(j.percent || 0)}%`
           : j.phase === 'mux' ? `${q}합치는 중 ${Math.floor(j.percent || 0)}%`
           : j.phase === 'save' ? '저장 중…'
           : j.percent != null ? `${q}${Math.floor(j.percent)}%`

@@ -128,7 +128,7 @@ async function renderFolder() {
   renderPreview();
 }
 renderFolder();
-for (const id of ['adBlock', 'xHighQuality', 'xKeepControls', 'xThickBar', 'xFollowButtons', 'xAutoSound', 'xWideLayout']) {
+for (const id of ['captionOnMedia', 'captionKeepOriginal', 'adBlock', 'xHighQuality', 'xKeepControls', 'xThickBar', 'xFollowButtons', 'xAutoSound', 'xWideLayout']) {
   $(`#${id}`).checked = settings[id] !== false;
   $(`#${id}`).addEventListener('change', (e) => save({ [id]: e.target.checked }));
 }
@@ -246,7 +246,7 @@ renderPage();
 
 // ───────────── 다운로드 기록 ─────────────
 const fmtBytes = (n) => (n >= 1073741824 ? `${(n / 1073741824).toFixed(2)}GB` : n >= 1048576 ? `${(n / 1048576).toFixed(1)}MB` : n > 0 ? `${Math.max(1, Math.round(n / 1024))}KB` : '');
-const PHASE = { queue: '대기 중', resolve: '원본 주소 찾는 중', download: '받는 중', mux: '영상·음성 합치는 중', save: '파일 저장 중' };
+const PHASE = { caption: '요약 글자 넣는 중', queue: '대기 중', resolve: '원본 주소 찾는 중', download: '받는 중', mux: '영상·음성 합치는 중', save: '파일 저장 중' };
 
 async function renderJobs() {
   const [{ jobs = [] }, { history = [] }] = await Promise.all([chrome.storage.session.get('jobs'), chrome.storage.local.get('history')]);

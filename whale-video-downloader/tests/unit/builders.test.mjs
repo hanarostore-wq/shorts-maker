@@ -213,3 +213,10 @@ test('AI 표시: 파일 이름 앞에 [AI] (국적 표시와 함께)', () => {
   assert.equal(buildFilename('{title}', { title: '여름 바다', ai: true }, 'mp4'), '[한국][AI] 여름 바다.mp4');
   assert.equal(buildFilename('{title}', { title: 'Funny cat', ai: true, flag: false }, 'mp4'), '[AI] Funny cat.mp4');
 });
+
+test('요약: URL·해시태그·이모지 빼고 첫 문장, 60자 이내', async () => {
+  const { quickSummary } = await import('../../extension/offscreen/caption.js').catch(() => ({}));
+  if (!quickSummary) return; // 브라우저 전용 모듈(OffscreenCanvas)이라 노드에서 못 불러오면 E2E 에서 검증
+  assert.equal(quickSummary('오늘 바다에 다녀왔어요! 날씨 최고 🌊 #여행 https://t.co/x'), '오늘 바다에 다녀왔어요!');
+  assert.ok([...quickSummary('가'.repeat(200))].length <= 60);
+});

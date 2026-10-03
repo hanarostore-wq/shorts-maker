@@ -176,6 +176,9 @@ const handlers = {
     if (u.pathname === '/watch') {
       return html(res, page('일반 사이트 영상', `<div class="card"><h3>일반 사이트</h3><video src="https://cdn.example-videos.com/progressive_1080p_land.mp4" controls muted style="width:640px;height:360px;background:#000"></video></div>`));
     }
+    if (u.pathname === '/watch-vp9') {
+      return html(res, page('VP9 영상 게시물 오늘 공원에서 강아지와 산책했어요', `<div class="card"><video src="https://cdn.example-videos.com/preview.webm" muted style="width:640px;height:360px;background:#000"></video></div>`));
+    }
     if (u.pathname === '/ai') {
       return html(res, page('AI 영상 모음', `<div class="card"><p>오늘 만든 영상 #sora #AI영상</p><video src="https://cdn.example-videos.com/progressive_360p.mp4" muted style="width:480px;height:270px;background:#000"></video></div>`));
     }

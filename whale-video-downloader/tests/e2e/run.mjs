@@ -229,6 +229,8 @@ const scenarios = [
 ];
 
 console.log(`확장프로그램 ID: ${extId}\n`);
+// 일반 시나리오는 원본 그대로 저장되는지 보므로 요약 글자 넣기는 끄고, 아래 전용 테스트에서 켠다.
+await setSettings({ captionOnMedia: false });
 for (const s of scenarios) await scenario(s);
 
 // ── 저장 위치: 하위 폴더 설정 반영 ──
@@ -494,6 +496,101 @@ if (!only || only === 'ai') {
       await page.close();
     }
   }
+}
+
+// ── 피드 내용 요약을 사진·영상 빈 공간에 넣기 ──
+if (!only || only === 'caption' || '요약'.includes(only)) {
+  await setSettings({ captionOnMedia: true, captionKeepOriginal: false });
+  await clearDownloaded();
+  const bandDiff = (a, b, w, h, y0, y1) => {
+    // 두 영상/사진의 같은 띠 영역 평균 차이(0~255)
+    const crop = `crop=${w}:${Math.round(h * (y1 - y0))}:0:${Math.round(h * y0)}`;
+    const out = execFileSync('ffmpeg', ['-v', 'error', '-i', a, '-i', b, '-filter_complex', `[0:v]${crop},format=gray[x];[1:v]${crop},format=gray[y];[x][y]blend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-`, '-frames:v', '1', '-f', 'null', '-']).toString();
+    return Number(/YAVG=([\d.]+)/.exec(out)?.[1] || 0);
+  };
+  // 사진
+  {
+    const page = await ctx.newPage();
+    try {
+      await page.goto('https://www.example-videos.com/photos', { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      const img = page.locator('img.photo').nth(1);
+      const ib = await img.boundingBox();
+      await page.mouse.move(ib.x + ib.width / 2, ib.y + ib.height / 2);
+      await page.waitForTimeout(400);
+      const before = new Set(listFiles(DL));
+      await page.locator('smd-anchor .btn.show').first().click();
+      const saved = await waitFile(before, 30000);
+      const orig = path.join(ROOT, 'tests/fixtures/media/images/photo.jpg');
+      const top = bandDiff(orig, saved, 1600, 1000, 0.03, 0.22);
+      const mid = bandDiff(orig, saved, 1600, 1000, 0.40, 0.60);
+      const bottom = bandDiff(orig, saved, 1600, 1000, 0.76, 0.95);
+      execFileSync('cp', [saved, path.join(SHOTS, 'caption-photo.jpg')]);
+      record('[요약] 사진 빈 공간(위/아래)에 요약 글자, 가운데(인물 자리)는 그대로', Math.max(top, bottom) > 3 && mid < 1.5, { note: `${path.basename(saved)} · 차이 위 ${top.toFixed(1)} / 가운데 ${mid.toFixed(1)} / 아래 ${bottom.toFixed(1)}` });
+    } catch (err) {
+      record('[요약] 사진', false, { note: err.message.split('\n')[0] });
+    } finally {
+      await page.close();
+    }
+  }
+  // 영상 (+ 원본도 함께 저장) — 이 테스트용 Chromium 이 해독할 수 있는 VP9 영상
+  {
+    await setSettings({ captionKeepOriginal: true });
+    const page = await ctx.newPage();
+    try {
+      await page.goto('https://www.example-videos.com/watch-vp9', { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      const before = new Set(listFiles(DL));
+      await page.locator('smd-anchor .btn.show').first().click();
+      const t1 = Date.now();
+      let added = [];
+      while (Date.now() - t1 < 120000) {
+        added = listFiles(DL).filter((f) => !before.has(f) && !/\.crdownload$/.test(f));
+        if (added.length >= 2) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      await new Promise((r) => setTimeout(r, 800));
+      const capped = added.find((f) => !/\(원본\)/.test(f));
+      const original = added.find((f) => /\(원본\)/.test(f));
+      const info = capped && probe(capped);
+      let top = 0, mid = 0, bottom = 0;
+      if (capped && original && info?.vcodec) {
+        top = bandDiff(original, capped, 640, 360, 0.03, 0.22);
+        mid = bandDiff(original, capped, 640, 360, 0.40, 0.60);
+        bottom = bandDiff(original, capped, 640, 360, 0.76, 0.95);
+        execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '1', '-i', capped, '-frames:v', '1', path.join(SHOTS, 'caption-video.png')]);
+      }
+      const ok = !!info?.vcodec && info.width === 640 && info.height === 360 && !!info.acodec && info.duration > 5 && !!original && Math.max(top, bottom) > 3 && mid < Math.max(top, bottom) / 2;
+      record('[요약] 영상 빈 공간에 요약 글자(모든 프레임) + 원본도 함께 저장', ok, { note: `${capped ? path.basename(capped) : '없음'} (${info?.vcodec}+${info?.acodec}, ${info?.duration?.toFixed(1)}s) · 원본 ${original ? '있음' : '없음'} · 차이 위 ${top.toFixed(1)} / 가운데 ${mid.toFixed(1)} / 아래 ${bottom.toFixed(1)}` });
+    } catch (err) {
+      record('[요약] 영상', false, { note: err.message.split('\n')[0] });
+    } finally {
+      await page.close();
+    }
+  }
+  // 다시 인코딩할 수 없는 영상(이 Chromium 의 H.264) → 원본으로 저장 + 안내
+  {
+    await setSettings({ captionKeepOriginal: false });
+    await clearDownloaded();
+    const page = await ctx.newPage();
+    try {
+      await page.goto('https://www.example-videos.com/watch', { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      const before = new Set(listFiles(DL));
+      await page.locator('smd-anchor .btn.show').first().click();
+      const saved = await waitFile(before, 60000);
+      const info = saved && probe(saved);
+      const pp = await extPage();
+      const warn = await pp.evaluate(async () => (await chrome.storage.local.get('history')).history?.[0]?.warning || '');
+      await pp.close();
+      record('[요약] 글자 넣기 실패 시 영상이 사라지지 않고 원본 저장 + 안내', info?.vcodec === 'h264' && !!info.acodec && /요약 글자를 넣지 못해 원본으로 저장/.test(warn), { note: `${saved ? path.basename(saved) : '없음'} · ${info?.vcodec} · 안내: ${warn.slice(0, 90)}` });
+    } catch (err) {
+      record('[요약] 실패 시 원본 저장', false, { note: err.message.split('\n')[0] });
+    } finally {
+      await page.close();
+    }
+  }
+  await setSettings({ captionOnMedia: false, captionKeepOriginal: false });
 }
 
 // ── 광고 차단 ──

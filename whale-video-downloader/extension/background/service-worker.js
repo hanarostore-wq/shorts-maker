@@ -384,12 +384,25 @@ async function runEngine(job, d, settings) {
   // 사진은 실제 형식에 맞춰 확장자를 정한다(jpg/png/gif 그대로, 그 밖은 PNG 로 변환됨)
   if (result.ext) job.filename = job.filename.replace(/\.[^.]+$/, `.${result.ext}`);
   if (!job.duration && result.duration) job.duration = result.duration;
+  if (result.warning) job.warning = result.warning;
   // OPFS 임시 파일 → 웨일 다운로드 폴더로 저장
   job.phase = 'save';
   job.percent = null;
   notify(job);
   try {
     await startBrowserDownload(job, result.blobUrl, settings, 'save');
+    if (result.extra?.blobUrl) {
+      // 원본도 함께 저장: 이름 끝에 (원본)
+      const main = job.filename;
+      const dl = job.downloadId;
+      job.filename = `${main.replace(/\.[^.]+$/, '')} (원본).${result.extra.ext || main.split('.').pop()}`;
+      try {
+        await startBrowserDownload(job, result.extra.blobUrl, settings, 'save');
+      } finally {
+        job.filename = main;
+        job.downloadId = dl;
+      }
+    }
   } finally {
     toOffscreen({ type: 'cleanup', jobId: job.id }).catch(() => {});
   }
@@ -400,7 +413,7 @@ async function attempt(job, d, settings) {
   try {
     // 브라우저 다운로드 관리자 요청에는 declarativeNetRequest 헤더가 붙지 않는다(실측).
     // Referer/User-Agent 가 필요한 CDN 은 처음부터 확장 엔진으로 받아 웨일 다운로드 목록에 실패 항목이 남지 않게 한다.
-    const native = d.type === 'file' && !d.rangeParam && d.credentials !== 'omit' && !headerOps(d.headers || {}).length;
+    const native = d.type === 'file' && !d.caption && !d.rangeParam && d.credentials !== 'omit' && !headerOps(d.headers || {}).length;
     if (native) {
       job.phase = 'download';
       notify(job);
@@ -444,6 +457,10 @@ async function runJob(job) {
   if (!job.title && desc.title) job.title = desc.title;
   job.duration = Number(req.duration) || Number(desc.duration) || 0;
   applyCredentials(desc, req);
+  const capText = String(req.captionText || req.title || desc.title || '').trim();
+  if (settings.captionOnMedia !== false && capText) {
+    for (const d of [desc, ...(desc.fallbacks || [])]) d.caption = { text: capText, keepOriginal: !!settings.captionKeepOriginal };
+  }
   // 동시에 너무 많이 받지 않도록 최대 3개씩(사진 일괄 저장 대비)
   if (active >= MAX_ACTIVE) {
     job.phase = 'queue';

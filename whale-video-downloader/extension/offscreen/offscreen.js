@@ -2,6 +2,7 @@
 //   OPFS 임시 파일에 쓴 뒤 blob 주소를 서비스워커에 넘겨 웨일 다운로드 폴더(사용자가 지정한 폴더)로 저장한다.
 //   사진은 원본 그대로, jpg·png·gif 가 아니면 PNG 로 변환한다.
 import { copyFile, mergeStreams, remuxHls, StepError, STEP } from './engine.js';
+import { summarize, captionImage, captionVideo } from './caption.js';
 
 const running = new Map(); // jobId -> { ac, target }
 const finished = new Map(); // jobId -> { url, cleanup }
@@ -100,9 +101,23 @@ async function saveImage(jobId, desc) {
     }
     ext = 'png';
   }
+  let extra = null;
+  let warning = '';
+  if (desc.caption?.text && ext !== 'gif') {
+    try {
+      const summary = await summarize(desc.caption.text);
+      if (summary) {
+        const orig = blob;
+        blob = await captionImage(blob, summary, ext);
+        if (desc.caption.keepOriginal) extra = { blobUrl: URL.createObjectURL(orig.slice(0, orig.size, MIME[ext] || 'image/png')), ext };
+      }
+    } catch (err) {
+      warning = `사진에 요약 글자를 넣지 못해 원본으로 저장했습니다 (${err?.message || err}).`;
+    }
+  }
   const url = URL.createObjectURL(blob.slice(0, blob.size, MIME[ext] || 'image/png'));
-  finished.set(jobId, { url });
-  send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: blob.size, ext });
+  finished.set(jobId, { url, extraUrl: extra?.blobUrl });
+  send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: blob.size, ext, extra, warning });
 }
 
 async function run({ jobId, desc, filename, mode, prefer }) {
@@ -151,10 +166,39 @@ async function run({ jobId, desc, filename, mode, prefer }) {
     const file = await target.fh.getFile();
     if (!file.size) throw new StepError(STEP.WRITE, '저장된 파일 크기가 0 바이트입니다.', '다시 시도하세요.');
     // MIME 타입이 없으면 브라우저가 확장자를 .txt 등으로 바꿔 버린다 → 확장자에 맞는 타입을 붙인다(복사 없음).
-    const ext = (filename.split('.').pop() || 'mp4').toLowerCase();
-    const url = URL.createObjectURL(file.slice(0, file.size, MIME[ext] || 'video/mp4'));
-    finished.set(jobId, { url, cleanup: target.cleanup });
-    send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: file.size, quality, duration: measured });
+    let ext = (filename.split('.').pop() || 'mp4').toLowerCase();
+    let outFile = file;
+    let cleanup = target.cleanup;
+    let extra = null;
+    let warning = '';
+    // 피드 내용 요약을 영상에 새기기(다시 인코딩)
+    if (desc.caption?.text) {
+      const summary = await summarize(desc.caption.text);
+      if (summary) {
+        const cap = await opfsTarget(`${jobId}-cap`, filename);
+        try {
+          send({ type: 'smd:engine-progress', jobId, phase: 'caption', percent: 0, quality });
+          await captionVideo(file, summary, cap.writable, (pct) => onProgress({ phase: 'caption', percent: Math.min(99, pct) }));
+          const capFile = await cap.fh.getFile();
+          if (!capFile.size) throw new Error('결과 파일이 비어 있음');
+          if (desc.caption.keepOriginal) extra = { blobUrl: URL.createObjectURL(file.slice(0, file.size, MIME[ext] || 'video/mp4')), ext };
+          else await target.cleanup();
+          outFile = capFile;
+          ext = 'mp4';
+          const origCleanup = target.cleanup;
+          cleanup = async () => {
+            await cap.cleanup();
+            if (desc.caption.keepOriginal) await origCleanup();
+          };
+        } catch (err) {
+          await cap.fail().catch(() => {});
+          warning = `영상에 요약 글자를 넣지 못해 원본으로 저장했습니다 (${err?.message || err}).`;
+        }
+      }
+    }
+    const url = URL.createObjectURL(outFile.slice(0, outFile.size, MIME[ext] || 'video/mp4'));
+    finished.set(jobId, { url, cleanup, extraUrl: extra?.blobUrl });
+    send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: outFile.size, quality, duration: measured, ext: ext !== (filename.split('.').pop() || '').toLowerCase() ? ext : undefined, extra, warning });
   } catch (err) {
     running.delete(jobId);
     await target?.fail().catch(() => {});
@@ -188,6 +232,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (f) {
       finished.delete(msg.jobId);
       URL.revokeObjectURL(f.url);
+      if (f.extraUrl) URL.revokeObjectURL(f.extraUrl);
       f.cleanup?.();
     }
     sendResponse({ ok: true });
