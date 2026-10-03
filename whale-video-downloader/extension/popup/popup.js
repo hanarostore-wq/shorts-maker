@@ -128,6 +128,10 @@ async function renderFolder() {
   renderPreview();
 }
 renderFolder();
+for (const id of ['xFollowButtons', 'xAutoSound']) {
+  $(`#${id}`).checked = settings[id] !== false;
+  $(`#${id}`).addEventListener('change', (e) => save({ [id]: e.target.checked }));
+}
 $('#sortFolders').checked = settings.sortFolders !== false;
 $('#sortFolders').addEventListener('change', (e) => save({ sortFolders: e.target.checked }));
 $('#flagPrefix').checked = settings.flagPrefix !== false;

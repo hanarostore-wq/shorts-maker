@@ -434,8 +434,26 @@
   // ── X (Twitter) ──
   const xs = new Store();
   const xTweets = new Store();
+  // X 사용자(팔로우 상태): 화면 이름(소문자) → { id, screenName, following }
+  const xUsers = new Map();
+  const xFollowState = (o) => {
+    if (typeof o.relationship_perspectives?.following === 'boolean') return o.relationship_perspectives.following;
+    if (typeof o.legacy?.following === 'boolean') return o.legacy.following;
+    // X 는 팔로우하지 않은 경우 following 값을 아예 빼고 보내는 일이 많다 → 전체 사용자 정보가 있으면 false 로 본다
+    if (o.legacy && typeof o.legacy.followers_count === 'number') return false;
+    return undefined;
+  };
+  const ingestXUser = (o) => {
+    const sn = o.legacy?.screen_name || o.core?.screen_name;
+    if (!sn || !o.rest_id || (o.__typename && o.__typename !== 'User')) return;
+    const f = xFollowState(o);
+    const key = sn.toLowerCase();
+    const prev = xUsers.get(key);
+    xUsers.set(key, { id: String(o.rest_id), screenName: sn, following: f ?? prev?.following, t: Date.now() });
+  };
   const ingestX = (json) =>
     U.walk(json, (o) => {
+      ingestXUser(o);
       const legacy = o.legacy && typeof o.legacy === 'object' ? o.legacy : o;
       const media = legacy.extended_entities?.media;
       const tweetId = o.rest_id || legacy.id_str;
@@ -1040,5 +1058,5 @@
     };
   }
 
-  globalThis.__SMD_SITES = { sites, generic, pick, U, SiteError, igMediaId, imageRequest, originalImageUrls };
+  globalThis.__SMD_SITES = { sites, generic, pick, U, SiteError, igMediaId, imageRequest, originalImageUrls, xUsers };
 })();

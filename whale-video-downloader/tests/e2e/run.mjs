@@ -398,6 +398,50 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── X 팔로우 버튼 + 소리 자동 켜기 ──
+if (!only || only === 'x' || '팔로우'.includes(only)) {
+  const page = await ctx.newPage();
+  page.on('dialog', (d) => d.accept());
+  try {
+    await page.goto('https://x.com/explore', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2500);
+    const state = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('article')].map((a) => [a.id.slice(2), a.querySelector('smd-follow')?.shadowRoot.querySelector('button')?.textContent || '(없음)'])));
+    const s0 = await state();
+    record('[X] 팔로우 상태 표시 (팔로잉/팔로우/React 데이터/내 계정 제외)', s0.followed_user === '팔로잉' && s0.new_user === '팔로우' && s0.react_user === '팔로잉' && s0.me_account === '(없음)', { note: JSON.stringify(s0) });
+    await page.screenshot({ path: path.join(SHOTS, 'x-follow.png') });
+
+    const logStart = log.length;
+    await page.locator('#t-new_user smd-follow button').click();
+    await page.mouse.move(5, 5); // 마우스가 버튼 위에 있으면 '언팔로우'로 보이므로 치운다
+    await page.waitForTimeout(800);
+    const s1 = await state();
+    const req1 = log.slice(logStart).find((l) => l.follow === 'create');
+    record('[X] 팔로우 누르기 → 팔로잉으로 바뀜', s1.new_user === '팔로잉' && req1?.ok && req1.user_id === '2002' && req1.auth === 'Bearer PAGE-AUTH-TOKEN', { note: `${s1.new_user} · 요청 ${JSON.stringify(req1)}` });
+
+    const logStart2 = log.length;
+    await page.locator('#t-followed_user smd-follow button').click();
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(800);
+    const s2 = await state();
+    const req2 = log.slice(logStart2).find((l) => l.follow === 'destroy');
+    record('[X] 팔로잉 누르기(확인) → 언팔로우', s2.followed_user === '팔로우' && req2?.ok && req2.user_id === '1001', { note: `${s2.followed_user} · 요청 ${JSON.stringify(req2)}` });
+
+    // 쿠키가 없으면 단계·원인·해결 안내
+    await page.evaluate(() => (document.cookie = 'ct0=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'));
+    await page.locator('#t-react_user smd-follow button').click();
+    await page.waitForTimeout(500);
+    const err = await page.locator('#t-react_user smd-follow').evaluate((h) => h.shadowRoot.querySelector('.err')?.textContent || '');
+    record('[X] 로그인 쿠키 없을 때 오류 안내', /로그인/.test(err) && /새로고침/.test(err), { note: err });
+
+    const sound = await page.evaluate(() => ({ muted: document.getElementById('xv').muted, clicked: !!window.__unmuteClicked, paused: document.getElementById('xv').paused }));
+    record('[X] 영상 재생되면 소리 자동 켜기(X 음소거 버튼 사용)', !sound.muted && sound.clicked && !sound.paused, { note: JSON.stringify(sound) });
+  } catch (err) {
+    record('[X] 팔로우 버튼', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
 // ── 버튼 위치: 기본 오른쪽 가운데 + 직접 배치 후 저장 ──
 if (!only || only === 'place' || '배치'.includes(only)) {
   const page = await ctx.newPage();

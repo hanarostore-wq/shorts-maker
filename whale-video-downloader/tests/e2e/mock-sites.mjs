@@ -348,6 +348,38 @@ const handlers = {
           <img alt="이미지" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=large" style="max-width:80vw;max-height:80vh">
         </div>`));
     }
+    if (u.pathname === '/explore') {
+      // 탐색 피드: @followed_user(팔로우 중), @new_user(팔로우 안 함) 은 타임라인 GraphQL 로, @react_user 는 화면 React 데이터에만 있다
+      const art = (sn, name, id) => `<article data-testid="tweet" id="t-${sn}"><div data-testid="User-Name" style="display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:4px"><a href="/${sn}"><span>${name}</span></a></div><div><a href="/${sn}">@${sn}</a> · <a href="/${sn}/status/${id}"><time>1시간</time></a></div></div><p>게시물 본문</p></article>`;
+      return html(res, page('탐색하기 / X', `<a data-testid="AppTabBar_Profile_Link" href="/me_account">프로필</a>
+          <div style="display:flex;flex-direction:column;gap:12px;width:560px">${art('followed_user', '팔로우한 사람', '1801')}${art('new_user', '처음 보는 사람', '1802')}${art('react_user', '리액트 사람', '1803')}${art('me_account', '나', '1804')}</div>
+          <div data-testid="videoPlayer" style="position:relative;width:360px;height:200px"><video id="xv" src="https://cdn.example-videos.com/preview.webm" muted loop playsinline style="width:100%;height:100%"></video>
+            <button data-testid="unmuteButton" aria-label="Unmute" onclick="document.getElementById('xv').muted=false; window.__unmuteClicked=true" style="position:absolute;right:4px;bottom:4px">🔇</button></div>`,
+        `document.cookie = 'ct0=mockcsrf123; path=/';
+         fetch('/i/api/graphql/q1/HomeTimeline?variables=%7B%7D', { headers: { authorization: 'Bearer PAGE-AUTH-TOKEN' } }).then((r) => r.json());
+         const art = document.getElementById('t-react_user');
+         art['__reactFiber$mockx2'] = { memoizedProps: { tweet: { core: { user_results: { result: { __typename: 'User', rest_id: '3003', core: { screen_name: 'react_user' }, legacy: { followers_count: 5 }, relationship_perspectives: { following: true } } } } } }, return: null };
+         setTimeout(() => document.getElementById('xv').play(), 400);`));
+    }
+    if (u.pathname.startsWith('/i/api/graphql/q1/HomeTimeline')) {
+      const user = (id, sn, following) => ({ __typename: 'User', rest_id: id, core: { screen_name: sn }, legacy: { screen_name: sn, followers_count: 10, ...(following ? { following: true } : {}) } });
+      return json(req, res, { data: { home: { home_timeline_urt: { instructions: [{ entries: [
+        { content: { itemContent: { tweet_results: { result: { rest_id: '1801', core: { user_results: { result: user('1001', 'followed_user', true) } }, legacy: { full_text: 'a' } } } } } },
+        { content: { itemContent: { tweet_results: { result: { rest_id: '1802', core: { user_results: { result: user('2002', 'new_user', false) } }, legacy: { full_text: 'b', extended_entities: { media: [{ id_str: '9', type: 'video', video_info: { variants: [] } }] } } } } } } },
+      ] }] } } } });
+    }
+    if (u.pathname === '/i/api/1.1/friendships/create.json' || u.pathname === '/i/api/1.1/friendships/destroy.json') {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        const p = new URLSearchParams(body);
+        const ok = req.method === 'POST' && req.headers['x-csrf-token'] === 'mockcsrf123' && /ct0=mockcsrf123/.test(req.headers.cookie || '') && /^Bearer /.test(req.headers.authorization || '');
+        log.push({ host: 'x.com', follow: u.pathname.includes('create') ? 'create' : 'destroy', user_id: p.get('user_id'), screen_name: p.get('screen_name'), auth: req.headers.authorization, ok });
+        if (!ok) return json(req, res, { errors: [{ message: 'bad auth' }] }, 403);
+        json(req, res, { id_str: p.get('user_id') || '0', screen_name: p.get('screen_name') || '', following: u.pathname.includes('create') });
+      });
+      return;
+    }
     if (u.pathname === '/home') {
       // 타임라인: GraphQL 가로채기 데이터 없음 + 신디케이션 실패(404) → 화면 게시물의 React 데이터로 찾아야 한다.
       // 영상 위에는 실제 X 처럼 썸네일 <img> 가 겹쳐 있다(여기에 사진 버튼이 뜨면 안 됨).

@@ -56,10 +56,22 @@
     }
   }
 
+  // X: 페이지가 쓰는 인증 헤더(웹 공개 Bearer)를 기억해 둔다 → 팔로우 버튼이 같은 방식으로 요청
+  const isX = /(^|\.)(x|twitter)\.com$/.test(host);
+  const rememberAuth = (v) => {
+    if (isX && typeof v === 'string' && /^Bearer /.test(v)) window.__smdXAuth = v;
+  };
+
   // ── fetch ──
   const nativeFetch = window.fetch;
   if (rule && typeof nativeFetch === 'function') {
     const wrapped = function (input, init) {
+      try {
+        if (isX) {
+          const h = init?.headers || (typeof input === 'object' ? input.headers : null);
+          rememberAuth(h instanceof Headers ? h.get('authorization') : h?.authorization || h?.Authorization);
+        }
+      } catch {}
       const p = nativeFetch.apply(this, arguments);
       try {
         const url = typeof input === 'string' ? input : input?.url || String(input);
@@ -83,6 +95,13 @@
 
   // ── XMLHttpRequest ──
   const XHR = window.XMLHttpRequest;
+  if (isX && XHR) {
+    const setHeader = XHR.prototype.setRequestHeader;
+    XHR.prototype.setRequestHeader = function (name, value) {
+      try { if (/^authorization$/i.test(name)) rememberAuth(value); } catch {}
+      return setHeader.apply(this, arguments);
+    };
+  }
   if (rule && XHR) {
     const open = XHR.prototype.open;
     const send = XHR.prototype.send;
@@ -151,6 +170,34 @@
           const v = readPath(name);
           if (v !== undefined) res.data[name] = safeJson(v);
         }
+      } else if (req.kind === 'reactuser') {
+        // 화면 게시물(React)이 들고 있는 작성자 정보에서 팔로우 상태를 찾는다
+        const el = document.querySelector(`[data-smd-q="${CSS.escape(req.token)}"]`);
+        const want = String(req.screenName || '').toLowerCase();
+        let user = null;
+        const seen = new WeakSet();
+        const scan = (obj, depth) => {
+          if (user || !obj || typeof obj !== 'object' || depth > 8 || seen.has(obj)) return;
+          seen.add(obj);
+          const sn = obj.legacy?.screen_name || obj.core?.screen_name || obj.screen_name;
+          if (sn && String(sn).toLowerCase() === want && (obj.rest_id || obj.id_str)) {
+            const rp = obj.relationship_perspectives?.following;
+            const lf = obj.legacy ? obj.legacy.following : obj.following;
+            user = { id: String(obj.rest_id || obj.id_str), screenName: sn, following: typeof rp === 'boolean' ? rp : typeof lf === 'boolean' ? lf : (obj.legacy && typeof obj.legacy.followers_count === 'number' ? false : null) };
+            return;
+          }
+          for (const k of Object.keys(obj)) {
+            if (k === 'children' || k === '_owner' || k.startsWith('__')) continue;
+            let v;
+            try { v = obj[k]; } catch { continue; }
+            if (v && typeof v === 'object') scan(v, depth + 1);
+          }
+        };
+        for (let node = el, i = 0; node && i < 25 && !user; i++, node = node.parentElement) {
+          const key = Object.keys(node).find((k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
+          for (let f = key ? node[key] : null, j = 0; f && j < 80 && !user; j++, f = f.return) if (f.memoizedProps) scan(f.memoizedProps, 0);
+        }
+        res.data = { user, auth: window.__smdXAuth || '' };
       } else if (req.kind === 'reactmedia') {
         // 화면에 그려진 게시물(React 컴포넌트)이 들고 있는 원본 데이터에서 영상 정보를 찾는다(X 타임라인용).
         const el = document.querySelector(`[data-smd-q="${CSS.escape(req.token)}"]`);
