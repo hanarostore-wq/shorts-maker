@@ -1,6 +1,5 @@
 import { getSettings, saveSettings, SITE_LIST } from '../shared/settings.js';
 import { buildFilename, sanitizeFolder } from '../shared/filename.js';
-import { dirStatus } from '../shared/idb.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -44,18 +43,6 @@ const save = async (patch) => {
 $('#showButtons').checked = settings.showButtons !== false;
 $('#showButtons').addEventListener('change', (e) => save({ showButtons: e.target.checked }));
 
-const paintMode = (v) => $$('.mode').forEach((m) => m.classList.toggle('on', m.dataset.mode === v));
-paintMode(settings.saveMode);
-seg($('#saveMode'), settings.saveMode, async (v) => {
-  paintMode(v);
-  await save({ saveMode: v });
-  if (v === 'folder') {
-    const st = await dirStatus();
-    if (st.state === 'none') openPicker('pick');
-  }
-  renderFolder();
-});
-
 $('#subfolder').value = settings.subfolder || '';
 $('#subfolder').addEventListener('change', (e) => {
   const clean = sanitizeFolder(e.target.value);
@@ -79,7 +66,8 @@ tplSel.addEventListener('change', () => save({ filenameTemplate: tplSel.value })
 
 function renderPreview() {
   const name = buildFilename(settings.filenameTemplate, { title: '여름 바다 브이로그', site: 'youtube', siteName: '유튜브', id: 'dQw4w9WgXcQ', author: '하나로', quality: '1080p' }, 'mp4');
-  const where = settings.saveMode === 'folder' ? `${settings.folderName || '선택한 폴더'}/` : `다운로드/${sanitizeFolder(settings.subfolder) ? `${sanitizeFolder(settings.subfolder)}/` : ''}`;
+  const sub = sanitizeFolder(settings.subfolder);
+  const where = `${shownFolder}/${sub ? `${sub}/` : ''}`;
   $('#filenamePreview').innerHTML = `예시: ${escapeHtml(where)}<b>${escapeHtml(name)}</b>`;
 }
 
@@ -87,36 +75,38 @@ seg($('#buttonPosition'), settings.buttonPosition || 'right', (v) => save({ butt
 $('#genericButtons').checked = settings.genericButtons !== false;
 $('#genericButtons').addEventListener('change', (e) => save({ genericButtons: e.target.checked }));
 
-// ───────────── 저장 폴더 ─────────────
-function openPicker(mode) {
-  chrome.runtime.sendMessage({ type: 'smd:open-picker', mode });
-}
-$('#pickFolder').addEventListener('click', () => openPicker('pick'));
-$('#regrant').addEventListener('click', () => openPicker('regrant'));
+// ───────────── 저장 폴더 (웨일 다운로드 폴더) ─────────────
+let shownFolder = '다운로드 폴더';
+$('#changeFolder').addEventListener('click', async () => {
+  for (const url of ['whale://settings/downloads', 'chrome://settings/downloads']) {
+    try {
+      await chrome.tabs.create({ url });
+      return;
+    } catch {}
+  }
+  $('#folderHint').textContent = '설정 창을 열지 못했어요. 주소창에 whale://settings/downloads 를 입력하세요.';
+});
 
 async function renderFolder() {
-  const st = await dirStatus();
-  const name = $('#folderName');
-  const state = $('#folderState');
-  state.className = '';
-  if (st.state === 'none') {
-    name.textContent = '선택된 폴더 없음';
-    state.textContent = '"폴더 선택"을 눌러 영상을 저장할 폴더를 고르세요';
-    $('#regrant').style.display = 'none';
-  } else if (st.state === 'granted') {
-    name.textContent = st.name;
-    state.textContent = '✓ 쓰기 권한 허용됨 — 이 폴더에 바로 저장됩니다';
-    state.className = 'ok';
-    $('#regrant').style.display = 'none';
+  // 이 확장프로그램이 마지막으로 저장한 파일 위치로 현재 저장 폴더를 보여 준다.
+  const items = await chrome.downloads.search({ orderBy: ['-startTime'], limit: 50, state: 'complete' }).catch(() => []);
+  const mine = items.find((i) => i.byExtensionId === chrome.runtime.id && i.filename) || items.find((i) => i.filename);
+  if (mine) {
+    const sep = mine.filename.includes('\\') ? '\\' : '/';
+    let dir = mine.filename.slice(0, mine.filename.lastIndexOf(sep));
+    const sub = sanitizeFolder(settings.subfolder).split('/').join(sep);
+    if (sub && dir.endsWith(sep + sub)) dir = dir.slice(0, -(sub.length + 1));
+    shownFolder = dir;
+    $('#folderPath').textContent = dir;
+    $('#folderPath').title = dir;
   } else {
-    name.textContent = st.name;
-    state.textContent = '권한 다시 허용 필요 — 허용 전에는 다운로드 폴더에 대신 저장됩니다';
-    state.className = 'warn';
-    $('#regrant').style.display = '';
+    $('#folderPath').textContent = '웨일 다운로드 폴더';
   }
-  $('#pickFolder').textContent = st.state === 'none' ? '폴더 선택' : '다른 폴더로 변경';
+  renderPreview();
 }
 renderFolder();
+$('#imageButtons').checked = settings.imageButtons !== false;
+$('#imageButtons').addEventListener('change', (e) => save({ imageButtons: e.target.checked }));
 
 // ───────────── 지원 사이트 ─────────────
 function renderSites() {

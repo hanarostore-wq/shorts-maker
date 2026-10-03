@@ -1,9 +1,8 @@
 // 설정 기본값과 읽기/쓰기 (서비스워커·팝업·폴더 선택 창에서 공용)
 export const DEFAULT_SETTINGS = {
-  saveMode: 'downloads', // 'downloads' = 브라우저 기본 다운로드 폴더(+하위 폴더), 'folder' = 직접 선택한 폴더
-  subfolder: '영상 다운로드',
-  askEveryTime: false, // 다운로드마다 저장 위치 묻기 (saveMode = downloads 일 때)
-  folderName: '', // 직접 선택한 폴더 이름(표시용)
+  subfolder: '', // 웨일 다운로드 폴더 안의 하위 폴더 (비우면 바로 저장)
+  askEveryTime: false, // 다운로드마다 저장 위치 묻기
+  imageButtons: true, // 사진에도 저장 버튼
   filenameTemplate: '{title} [{site}-{id}]',
   quality: 'best', // 'best' = 원본 최고화질, 'compat' = 호환성(H.264) 우선
   showButtons: true,
@@ -14,7 +13,15 @@ export const DEFAULT_SETTINGS = {
 
 export async function getSettings() {
   const r = await chrome.storage.local.get('settings');
-  return { ...DEFAULT_SETTINGS, ...(r.settings || {}) };
+  const s = { ...DEFAULT_SETTINGS, ...(r.settings || {}) };
+  // v1.0.0 의 "폴더 직접 선택" 방식은 없앴다(권한 재요청·시스템 폴더 오류 때문) → 웨일 다운로드 폴더로 통일
+  if (s.saveMode || s.folderName !== undefined || s.v1Subfolder !== false) {
+    if (s.subfolder === '영상 다운로드' && s.v1Subfolder !== false) s.subfolder = '';
+    delete s.saveMode;
+    delete s.folderName;
+    s.v1Subfolder = false;
+  }
+  return s;
 }
 
 export async function saveSettings(patch) {

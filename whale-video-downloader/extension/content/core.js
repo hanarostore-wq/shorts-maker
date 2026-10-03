@@ -8,7 +8,7 @@
   const { pick, U } = SITES;
   const adapter = pick(location.hostname);
 
-  const DEFAULTS = { showButtons: true, buttonPosition: 'right', disabledSites: [], genericButtons: true };
+  const DEFAULTS = { showButtons: true, imageButtons: true, buttonPosition: 'right', disabledSites: [], genericButtons: true };
   let settings = { ...DEFAULTS };
   const enabled = () =>
     settings.showButtons !== false &&
@@ -92,7 +92,7 @@
 
   const CSS = `
   :host{all:initial}
-  .layer{position:fixed;inset:0;pointer-events:none;font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+  .layer{position:absolute;left:0;top:0;width:0;height:0;overflow:visible;pointer-events:none;font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
   .btn{position:absolute;left:0;top:0;pointer-events:auto;display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 15px 0 7px;border:0;border-radius:999px;color:#fff;font:700 13px/1 inherit;letter-spacing:-.01em;white-space:nowrap;cursor:pointer;opacity:0;visibility:hidden;
     background:linear-gradient(135deg,#5b5cff 0%,#9b4dff 52%,#ff4f8b 100%);
     box-shadow:0 10px 26px -8px rgba(84,47,219,.75),0 2px 6px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.38);
@@ -131,20 +131,27 @@
   .acts button.pri{background:linear-gradient(135deg,#5b5cff,#9b4dff);color:#fff}
   `;
 
-  // 확장프로그램이 다시 로드되면 이전 버전이 남긴 오버레이를 치운다.
-  for (const old of document.querySelectorAll('smd-overlay')) old.remove();
-  const hostEl = document.createElement('smd-overlay');
-  hostEl.setAttribute('style', 'all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;display:block');
-  const shadow = hostEl.attachShadow({ mode: 'open' });
-  shadow.innerHTML = `<style>${CSS}</style><div class="layer"></div>`;
-  const layer = shadow.querySelector('.layer');
-  const mountHost = () => {
-    const fs = document.fullscreenElement || document.webkitFullscreenElement;
-    const parent = fs && fs.tagName !== 'VIDEO' && fs.tagName !== 'IFRAME' ? fs : document.documentElement;
-    if (hostEl.parentNode !== parent) parent.appendChild(hostEl);
+  // 확장프로그램이 다시 로드되면 이전 버전이 남긴 버튼을 치운다.
+  for (const old of document.querySelectorAll('smd-overlay, smd-anchor')) old.remove();
+
+  // 버튼은 영상(사진) 바로 옆 DOM 에 붙는다 → 스크롤하면 브라우저가 영상과 함께 움직여 준다.
+  const anchorParent = (el) => {
+    const p = el.parentElement;
+    if (!p) return null;
+    return p.tagName === 'PICTURE' || p.tagName === 'VIDEO' ? p.parentElement : p;
   };
-  document.addEventListener('fullscreenchange', mountHost);
-  document.addEventListener('webkitfullscreenchange', mountHost);
+  function makeAnchor(entry) {
+    const host = document.createElement('smd-anchor');
+    host.setAttribute('style', 'all:initial;position:absolute;left:0;top:0;width:0;height:0;margin:0;padding:0;border:0;display:block;overflow:visible;pointer-events:none;z-index:2147483647');
+    const sh = host.attachShadow({ mode: 'open' });
+    sh.innerHTML = `<style>${CSS}</style><div class="layer"></div>`;
+    entry.host = host;
+    entry.layer = sh.querySelector('.layer');
+  }
+  function mountAnchor(entry) {
+    const parent = anchorParent(entry.el);
+    if (parent && entry.host.parentNode !== parent) parent.appendChild(entry.host);
+  }
 
   const tracked = new Map(); // video -> entry
   const jobs = new Map(); // jobId -> entry
@@ -166,7 +173,7 @@
     for (const t of ['mousedown', 'mouseup', 'pointerdown', 'pointerup', 'dblclick', 'touchstart']) {
       b.addEventListener(t, (ev) => ev.stopPropagation());
     }
-    layer.appendChild(b);
+    entry.layer.appendChild(b);
     return b;
   }
 
@@ -246,8 +253,9 @@
       }
     });
     for (const t of ['mousedown', 'pointerdown', 'mouseup', 'pointerup']) p.addEventListener(t, (ev) => ev.stopPropagation());
-    layer.appendChild(p);
+    entry.layer.appendChild(p);
     entry.panel = p;
+    entry.measured = 0;
     entry.panelKind = kind;
   }
 
@@ -262,16 +270,16 @@
   }
 
   async function start(entry) {
-    const video = entry.video;
+    const video = entry.el;
     closePanel(entry);
     entry.lastError = null;
     setLook(entry, 'resolving', '분석 중…');
     let req;
     try {
-      req = await adapter.resolve(video, ctx);
+      req = await (entry.kind === 'image' ? SITES.imageRequest(video) : adapter.resolve(video, ctx));
     } catch (err) {
       return showError(entry, {
-        step: err.step || '영상 정보 찾기',
+        step: err.step || (entry.kind === 'image' ? '사진 정보 찾기' : '영상 정보 찾기'),
         reason: err.reason || `영상 정보를 읽는 중 오류가 발생했습니다: ${err.message || err}`,
         action: err.action || '페이지를 새로고침한 뒤 다시 시도하세요.',
       });
@@ -280,6 +288,7 @@
     req.siteName = adapter.name;
     req.pageUrl = location.href;
     req.duration = Number.isFinite(video.duration) ? video.duration : 0;
+    req.kind = entry.kind;
     req.title = U.cleanTitle(req.title);
     let res;
     try {
@@ -322,9 +331,9 @@
       entry.lastMsg = Date.now();
       const j = msg.job;
       if (j.state === 'done') {
+        // 완료 창은 띄우지 않고 버튼만 잠깐 '저장 완료'로 바꾼다.
         setLook(entry, 'done', '저장 완료');
-        showPanel(entry, 's', { file: j.filename, where: j.where, quality: j.quality, warning: j.warning, canShow: !!j.downloadId });
-        setTimeout(() => entry.state === 'done' && setLook(entry, 'idle'), 6000);
+        setTimeout(() => entry.state === 'done' && setLook(entry, 'idle'), 3000);
       } else if (j.state === 'error') {
         showError(entry, j.error);
       } else {
@@ -359,7 +368,8 @@
   function listVideos() {
     const out = [];
     for (const e of tracked.values()) {
-      const v = e.video;
+      if (e.kind !== 'video') continue;
+      const v = e.el;
       if (!v.isConnected) continue;
       const r = v.getBoundingClientRect();
       if (r.width < 120 || r.height < 80) continue;
@@ -378,32 +388,50 @@
     return out;
   }
 
-  // ───────────── 영상 찾기 & 버튼 위치 ─────────────
+  // ───────────── 영상·사진 찾기 & 버튼 위치 ─────────────
   function collectVideos(root, out, depth = 0) {
     for (const v of root.querySelectorAll('video')) out.push(v);
     if (depth > 1) return;
-    // 열린 shadow DOM 안의 영상(일부 사이트)
     if (adapter.id === 'generic') {
       for (const el of root.querySelectorAll('*')) if (el.shadowRoot) collectVideos(el.shadowRoot, out, depth + 1);
     }
   }
 
+  const imagesOn = () => settings.imageButtons !== false && enabled();
+  function collectImages(out) {
+    if (!imagesOn()) return;
+    const vh = window.innerHeight;
+    for (const img of document.images) {
+      if (img.closest('smd-anchor')) continue;
+      if ((img.naturalWidth || 0) < 200 || (img.naturalHeight || 0) < 150) continue;
+      const r = img.getBoundingClientRect();
+      if (r.width < 120 || r.height < 100) continue;
+      if (r.bottom < -600 || r.top > vh + 600) continue; // 화면 근처 사진만
+      out.push(img);
+    }
+  }
+
+  function track(el, kind) {
+    const entry = { el, video: el, kind, key: `${kind[0]}${++videoSeq}`, state: 'idle', visible: false, measured: 0 };
+    makeAnchor(entry);
+    entry.btn = makeButton(entry);
+    if (kind === 'image') entry.btn.title = '사진 원본 저장';
+    tracked.set(el, entry);
+  }
+
   function scan() {
     const vids = [];
     collectVideos(document, vids);
-    const set = new Set(vids);
-    for (const v of vids) {
-      if (!tracked.has(v)) {
-        const entry = { video: v, key: `v${++videoSeq}`, state: 'idle', visible: false, coverCheck: 0, measured: 0 };
-        entry.btn = makeButton(entry);
-        tracked.set(v, entry);
-      }
-    }
-    for (const [v, e] of tracked) {
-      if (!set.has(v) || !v.isConnected) {
-        e.btn.remove();
-        closePanel(e);
-        tracked.delete(v);
+    const imgs = [];
+    collectImages(imgs);
+    const set = new Set([...vids, ...imgs]);
+    for (const v of vids) if (!tracked.has(v)) track(v, 'video');
+    for (const im of imgs) if (!tracked.has(im)) track(im, 'image');
+    for (const [el, e] of tracked) {
+      const keepImage = e.kind === 'image' && e.state !== 'idle';
+      if ((!set.has(el) && !keepImage) || !el.isConnected) {
+        e.host.remove();
+        tracked.delete(el);
       }
     }
     reportVideos();
@@ -414,7 +442,8 @@
     const list = listVideos().map((v) => `${v.key}:${v.width}x${v.height}:${v.state}`).join('|');
     if (list === lastReport) return;
     lastReport = list;
-    chrome.runtime.sendMessage({ type: 'smd:videos', count: tracked.size, site: adapter.id }).catch(() => {});
+    const count = [...tracked.values()].filter((e) => e.kind === 'video').length;
+    chrome.runtime.sendMessage({ type: 'smd:videos', count, site: adapter.id }).catch(() => {});
   }
 
   let sniffCount = 0;
@@ -427,16 +456,6 @@
   }
   setInterval(refreshSniff, 3000);
 
-  function coveredCheck(entry, x, y) {
-    const v = entry.video;
-    const pts = document.elementsFromPoint(x, y);
-    const top = pts.find((el) => el !== hostEl);
-    if (!top) return true;
-    if (top === v || v.contains(top) || top.contains(v)) return true;
-    const box = U.container(v);
-    return box.contains(top);
-  }
-
   function offsetFor(video) {
     const o = typeof adapter.offset === 'function' ? adapter.offset(video) : adapter.offset;
     return Number(o) || 56;
@@ -448,41 +467,38 @@
     return /^https?:/.test(src) || sniffCount > 0;
   }
 
+  // 사진 버튼은 마우스가 사진 위에 있을 때만 보인다.
+  let pointer = { x: -1, y: -1 };
+  document.addEventListener('pointermove', (e) => (pointer = { x: e.clientX, y: e.clientY }), { capture: true, passive: true });
+  const pointerIn = (r) => pointer.x >= r.left && pointer.x <= r.right && pointer.y >= r.top && pointer.y <= r.bottom;
+
   function place() {
     const on = enabled();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
     const now = performance.now();
     for (const entry of tracked.values()) {
-      const v = entry.video;
+      const v = entry.el;
       const b = entry.btn;
+      mountAnchor(entry);
       const r = v.getBoundingClientRect();
-      let show =
-        on &&
-        r.width >= 140 &&
-        r.height >= 100 &&
-        r.bottom > 40 &&
-        r.top < vh - 20 &&
-        r.right > 40 &&
-        r.left < vw - 40 &&
-        hasSource(v);
-      if (show && now - (entry.styleCheck || 0) > 350) {
+      const isImg = entry.kind === 'image';
+      let show = on && (isImg ? r.width >= 120 && r.height >= 100 : r.width >= 140 && r.height >= 100 && hasSource(v));
+      if (show && now - (entry.styleCheck || 0) > 600) {
         entry.styleCheck = now;
         const cs = getComputedStyle(v);
         entry.hiddenStyle = cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0;
       }
       if (entry.hiddenStyle) show = false;
       const busy = entry.state !== 'idle';
-      if (!show && !busy) {
+      const visible = show && (busy || !isImg || pointerIn(r) || pointerIn(b.getBoundingClientRect()));
+      if (!visible) {
         if (entry.visible) {
           b.classList.remove('show');
           entry.visible = false;
         }
-        if (entry.panel) closePanel(entry);
+        if (entry.panel && !show) closePanel(entry);
         continue;
       }
-      const compact = r.width < 300 && entry.state === 'idle';
-      b.classList.toggle('compact', compact);
+      b.classList.toggle('compact', isImg ? entry.state === 'idle' : r.width < 300 && entry.state === 'idle');
       if (!entry.measured) {
         entry.w = b.offsetWidth || 120;
         entry.h = b.offsetHeight || 36;
@@ -490,35 +506,29 @@
       }
       const bw = entry.w;
       const bh = entry.h;
-      const bottom = Math.min(offsetFor(v), Math.max(8, r.height * 0.25));
-      const visBottom = Math.min(r.bottom, vh);
-      let y = visBottom - bottom - bh;
-      y = Math.max(Math.max(r.top, 0) + 6, Math.min(y, vh - bh - 6));
+      // 앵커(0,0)의 화면 위치 = 이 버튼들이 기준으로 삼는 좌표 원점
+      const o = entry.host.getBoundingClientRect();
+      const bottom = isImg ? 10 : Math.min(offsetFor(v), Math.max(8, r.height * 0.25));
       const pos = settings.buttonPosition;
-      let x = pos === 'left' ? r.left + 12 : pos === 'center' ? r.left + (r.width - bw) / 2 : r.right - bw - 12;
-      x = Math.max(6, Math.min(x, vw - bw - 6));
-      if (now - entry.coverCheck > 350) {
-        entry.coverCheck = now;
-        entry.covered = show && !coveredCheck(entry, x + bw / 2, y + bh / 2);
-      }
-      const visible = (show && !entry.covered) || (busy && show);
+      let x = isImg || pos === 'right' || !pos ? r.right - bw - 10 : pos === 'left' ? r.left + 10 : r.left + (r.width - bw) / 2;
+      let y = r.bottom - bottom - bh;
+      if (y < r.top + 4) y = r.top + 4;
+      x -= o.left;
+      y -= o.top;
       const tf = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
       if (entry.tf !== tf) {
         entry.tf = tf;
         b.style.transform = tf;
       }
-      if (entry.visible !== visible) b.classList.toggle('show', visible);
-      entry.visible = visible;
+      if (!entry.visible) b.classList.add('show');
+      entry.visible = true;
       if (entry.panel) {
-        if (!visible) closePanel(entry);
-        else {
-          const pw = 300;
-          const ph = entry.panel.offsetHeight || 150;
-          let px = Math.max(8, Math.min(x + bw - pw, vw - pw - 8));
-          let py = y - ph - 10;
-          if (py < 8) py = Math.min(vh - ph - 8, y + bh + 10);
-          entry.panel.style.transform = `translate3d(${Math.round(px)}px,${Math.round(py)}px,0)`;
-        }
+        const pw = 300;
+        const ph = entry.panel.offsetHeight || 150;
+        let px = Math.max(r.left - o.left + 4, x + bw - pw);
+        let py = y - ph - 10;
+        if (py + o.top < 4) py = y + bh + 10;
+        entry.panel.style.transform = `translate3d(${Math.round(px)}px,${Math.round(py)}px,0)`;
       }
     }
   }
@@ -535,19 +545,17 @@
   const loop = (t) => {
     if (!alive()) {
       // 확장프로그램이 업데이트/재시작되어 이 스크립트는 더 이상 쓸 수 없다 → 화면에서 치운다.
-      hostEl.remove();
+      for (const e of tracked.values()) e.host.remove();
       return;
     }
     raf = requestAnimationFrame(loop);
     if (!tracked.size || document.hidden) return;
-    if (t - lastPlace < 33) return;
+    if (t - lastPlace < 50) return;
     lastPlace = t;
-    mountHost();
     place();
   };
 
   const boot = () => {
-    mountHost();
     scan();
     let pending = 0;
     new MutationObserver(() => {

@@ -964,5 +964,74 @@
 
   const pick = (host) => sites.find((s) => s.match(host)) || generic;
 
-  globalThis.__SMD_SITES = { sites, generic, pick, U, SiteError, igMediaId };
+  // ── 사진: 화면의 <img> 에서 원본(가장 큰) 주소 찾기 ──
+  function largestFromSrcset(img) {
+    const set = img.getAttribute('srcset') || img.closest('picture')?.querySelector('source[srcset]')?.getAttribute('srcset') || '';
+    let best = '';
+    let bestW = 0;
+    for (const part of set.split(/,\s+(?=\S)/)) {
+      const [u, d] = part.trim().split(/\s+/);
+      const w = d ? parseFloat(d) * (/x$/.test(d) ? 1000 : 1) : 1;
+      if (u && w >= bestW) {
+        bestW = w;
+        best = u;
+      }
+    }
+    return best ? U.abs(best) : '';
+  }
+
+  function originalImageUrls(img) {
+    const cur = img.currentSrc || img.src || '';
+    const big = largestFromSrcset(img) || cur;
+    const out = [];
+    const add = (u) => u && !out.includes(u) && out.push(u);
+    try {
+      const u = new URL(big, location.href);
+      const h = u.hostname;
+      if (h === 'pbs.twimg.com') {
+        u.searchParams.set('name', 'orig');
+        add(u.href);
+      } else if (/(^|\.)pinimg\.com$/.test(h) && /^\/\d+x\d*\//.test(u.pathname)) {
+        add(u.href.replace(/\/\d+x\d*\//, '/originals/'));
+        add(u.href.replace(/\/\d+x\d*\//, '/736x/'));
+      } else if (h === 'cdn.bsky.app') {
+        add(u.href.replace(/\/img\/[a-z_]+\//, '/img/feed_fullsize/'));
+      } else if (/sinaimg\.cn$/.test(h)) {
+        add(u.href.replace(/\/(?:orj\d+|mw\d+|thumb\d+|bmiddle|wap\d+|small|square|crop\.[^/]+)\//, '/large/'));
+      } else if (/pstatic\.net$/.test(h) && u.searchParams.has('type')) {
+        const o = new URL(u.href);
+        o.searchParams.delete('type');
+        add(o.href);
+      } else if (/googleusercontent\.com$|ggpht\.com$/.test(h)) {
+        add(u.href.replace(/=[sw]\d+[^/?]*$/, '=s0'));
+      }
+    } catch {}
+    add(big);
+    add(cur);
+    return out;
+  }
+
+  async function imageRequest(img) {
+    const urls = originalImageUrls(img);
+    if (!urls.length) throw new SiteError('사진 주소를 찾지 못했습니다.', '사진이 다 불러와진 뒤 다시 눌러 주세요.');
+    const site = pick(location.hostname);
+    // blob:/data: 사진은 페이지 안에서만 읽을 수 있어 여기서 데이터로 바꿔 넘긴다.
+    if (/^blob:/.test(urls[0])) {
+      const blob = await (await fetch(urls[0])).blob();
+      urls[0] = await new Promise((r) => {
+        const fr = new FileReader();
+        fr.onload = () => r(fr.result);
+        fr.readAsDataURL(blob);
+      });
+    }
+    const alt = (img.getAttribute('alt') || '').trim();
+    return {
+      id: '',
+      title: alt && alt.length > 2 && !/^(image|이미지|사진|photo)$/i.test(alt) ? alt.slice(0, 80) : `${U.metaTitle().slice(0, 60)} 사진`,
+      info: { image: { url: urls[0], fallbacks: urls.slice(1), width: img.naturalWidth, height: img.naturalHeight } },
+      siteNameOverride: site.name,
+    };
+  }
+
+  globalThis.__SMD_SITES = { sites, generic, pick, U, SiteError, igMediaId, imageRequest, originalImageUrls };
 })();

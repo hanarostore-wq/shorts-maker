@@ -118,13 +118,13 @@ function record(name, ok, detail) {
 }
 
 async function buttonIn(target, index) {
-  const loc = target.locator('smd-overlay .btn.show');
+  const loc = target.locator('smd-anchor .btn.show');
   await loc.nth(index).waitFor({ state: 'visible', timeout: 20000 });
   return loc.nth(index);
 }
 
 async function panelText(target) {
-  const p = target.locator('smd-overlay .panel');
+  const p = target.locator('smd-anchor .panel');
   return (await p.count()) ? (await p.first().innerText()).replace(/\s+/g, ' ') : '';
 }
 
@@ -143,14 +143,14 @@ async function scenario(s) {
     const before = new Set(listFiles(DL));
     await btn.click();
     if (s.expectError) {
-      await target.locator('smd-overlay .panel.e').waitFor({ timeout: 60000 });
+      await target.locator('smd-anchor .panel.e').waitFor({ timeout: 60000 });
       await page.waitForTimeout(400); // 패널 페이드인이 끝난 뒤 캡처
       const text = await panelText(target);
       if (s.shot) await page.screenshot({ path: path.join(SHOTS, `${s.shot}-error.png`) });
       const ok = s.expectError.every((needle) => text.includes(needle));
       return record(s.name, ok, { note: text.slice(0, 220), ms: Date.now() - t0 });
     }
-    const done = target.locator('smd-overlay .btn.done, smd-overlay .panel.e').first();
+    const done = target.locator('smd-anchor .btn.done, smd-anchor .panel.e').first();
     const file = await Promise.race([waitFile(before), done.waitFor({ timeout: 90000 }).then(() => null).catch(() => null)]);
     let saved = file || (await waitFile(before, 8000));
     const errText = await panelText(target);
@@ -167,7 +167,7 @@ async function scenario(s) {
     if (!(info.duration > 5)) problems.push(`길이 ${info.duration}s`);
     await page.waitForTimeout(300);
     const okText = await panelText(target);
-    if (e.warning && !okText.includes(e.warning)) problems.push(`안내 문구 없음: ${okText}`);
+    if (e.noSuccessPanel && okText) problems.push(`완료 창이 떴음: ${okText}`);
     const reqs = log.slice(logStart).filter((l) => s.cdn && l.host === s.cdn && l.method);
     const via = reqs.length ? (reqs.some((r) => r.range) ? '확장 엔진' : '브라우저 다운로드') : '';
     if (process.env.DEBUG_E2E) console.log(reqs.map((r) => `${r.path} range=${r.range} ref=${r.referer}`).join('\n'));
@@ -185,9 +185,9 @@ async function scenario(s) {
   }
 }
 
-const SUB = '영상 다운로드';
+const SUB = 'downloads';
 const scenarios = [
-  { name: '일반 사이트(직접 mp4)', url: 'https://www.example-videos.com/watch', expect: { width: 1920, height: 1080, audio: true, dir: SUB }, cdn: 'cdn.example-videos.com', shot: 'generic' },
+  { name: '일반 사이트(직접 mp4)', url: 'https://www.example-videos.com/watch', expect: { width: 1920, height: 1080, audio: true, dir: SUB, noSuccessPanel: true }, cdn: 'cdn.example-videos.com', shot: 'generic' },
   { name: '유튜브 일반 영상', url: 'https://www.youtube.com/watch?v=YTwatch0001', expect: { width: 1920, height: 1080, vcodec: 'h264', audio: true }, cdn: 'rr1---sn-mock.googlevideo.com', shot: 'youtube' },
   { name: '유튜브 쇼츠', url: 'https://www.youtube.com/shorts/YTshort0001', expect: { width: 1080, height: 1920, vcodec: 'h264', audio: true }, shot: 'shorts' },
   { name: '틱톡 상세(SSR 데이터)', url: 'https://www.tiktok.com/@creator/video/7300000000000000001', expect: { width: 1080, height: 1920, audio: true }, cdn: 'v16-webapp-prime.tiktok.com', shot: 'tiktok' },
@@ -222,64 +222,74 @@ const scenarios = [
 console.log(`확장프로그램 ID: ${extId}\n`);
 for (const s of scenarios) await scenario(s);
 
-// ── 저장 위치: 폴더 직접 선택 모드 ──
-if (!only || 'folder'.includes(only) || only === 'folder') {
-  // 1) 폴더가 아직 선택되지 않은 상태 → 다운로드 폴더에 대신 저장 + 안내
-  await setSettings({ saveMode: 'folder', folderName: '' });
-  await scenario({ name: '[폴더 모드] 폴더 미선택 → 다운로드 폴더 대체 저장 + 안내', url: 'https://www.tiktok.com/@creator/video/7300000000000000001', expect: { width: 1080, height: 1920, audio: true, warning: '폴더가 아직 선택되지 않아' } });
+// ── 저장 위치: 하위 폴더 설정 반영 ──
+if (!only || only === 'folder') {
+  await setSettings({ subfolder: '쇼츠 소스/2026' });
+  await scenario({ name: '[저장 위치] 하위 폴더 설정 반영', url: 'https://www.example-videos.com/watch', expect: { width: 1920, height: 1080, audio: true, dir: '쇼츠 소스/2026' } });
+  await setSettings({ subfolder: '' });
+}
 
-  // 2) 사용자 폴더(FileSystemDirectoryHandle) 지정 → 그 폴더에 직접 저장
-  //    showDirectoryPicker 대화상자는 자동화할 수 없어, 같은 타입(FileSystemDirectoryHandle)인 OPFS 폴더 핸들을 넣어 쓰기 경로를 검증한다.
-  const ep = await extPage();
-  await ep.evaluate(async () => {
-    const root = await navigator.storage.getDirectory();
-    const dir = await root.getDirectoryHandle('내 영상 폴더', { create: true });
-    const { idbSet } = await import(chrome.runtime.getURL('shared/idb.js'));
-    await idbSet('saveDir', dir);
-    const r = await chrome.storage.local.get('settings');
-    await chrome.storage.local.set({ settings: { ...r.settings, saveMode: 'folder', folderName: '내 영상 폴더' } });
-  });
-  for (const [label, url, w, h] of [['틱톡', 'https://www.tiktok.com/@creator/video/7300000000000000001', 1080, 1920], ['유튜브(병합)', 'https://www.youtube.com/watch?v=YTwatch0001', 1920, 1080], ['핀터레스트(HLS)', 'https://www.pinterest.com/pin/9876543210/', 1920, 1080]]) {
+// ── 사진 저장 ──
+if (!only || only === 'image' || '사진'.includes(only)) {
+  for (const [label, idx, ext, w, h] of [['WEBP → PNG 변환', 0, 'png', 1200, 800], ['JPG 원본 그대로', 1, 'jpg', 1600, 1000], ['X 사진 name=orig 원본', 2, 'jpg', 2000, 1500]]) {
     const page = await ctx.newPage();
     const t0 = Date.now();
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded' });
-      await page.waitForTimeout(1500);
-      const btn = await buttonIn(page, 0);
+      await page.goto('https://www.example-videos.com/photos', { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1800);
+      const img = page.locator('img.photo').nth(idx);
+      await img.scrollIntoViewIfNeeded();
+      await img.hover();
+      await page.waitForTimeout(400);
+      const btn = page.locator(`smd-anchor .btn.show`).first();
+      await btn.waitFor({ timeout: 10000 });
+      const before = new Set(listFiles(DL));
       await btn.click();
-      await page.locator('smd-overlay .btn.done, smd-overlay .panel.e').first().waitFor({ timeout: 90000 });
-      const text = await panelText(page);
-      const files = await ep.evaluate(async () => {
-        const root = await navigator.storage.getDirectory();
-        const dir = await root.getDirectoryHandle('내 영상 폴더');
-        const out = [];
-        for await (const [name, h] of dir.entries()) out.push({ name, size: (await h.getFile()).size });
-        return out;
-      });
-      const newest = files.sort((a, b) => b.name.length - a.name.length).find((f) => text.includes(f.name.slice(0, 10)));
-      let info = null;
-      if (newest) {
-        await ep.evaluate(async (name) => {
-          const root = await navigator.storage.getDirectory();
-          const dir = await root.getDirectoryHandle('내 영상 폴더');
-          const file = await (await dir.getFileHandle(name)).getFile();
-          await fetch(`https://cdn.example-videos.com/__upload?name=folder-${encodeURIComponent(name)}`, { method: 'POST', body: file });
-        }, newest.name);
-        info = probe(path.join(OUT, `folder-${newest.name}`));
-      }
-      const ok = !!newest && info.width === w && info.height === h && !!info.acodec && text.includes('내 영상 폴더');
-      record(`[폴더 모드] 선택한 폴더에 직접 저장 · ${label}`, ok, { note: newest ? `내 영상 폴더/${newest.name} · ${info.width}x${info.height} ${info.vcodec}+${info.acodec} · 패널: ${text.slice(0, 80)}` : `폴더에 파일 없음. 패널: ${text}`, ms: Date.now() - t0 });
+      const saved = await waitFile(before, 30000);
+      const out = saved ? execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_name,width,height', '-of', 'csv=p=0', saved]).toString().trim() : '';
+      const ok = !!saved && saved.endsWith(`.${ext}`) && out.includes(`${w},${h}`);
+      record(`[사진] ${label}`, ok, { note: saved ? `${path.relative(DL, saved)} · ${out}` : '파일 없음', ms: Date.now() - t0 });
     } catch (err) {
-      record(`[폴더 모드] 선택한 폴더에 직접 저장 · ${label}`, false, { note: err.message.split('\n')[0] });
+      record(`[사진] ${label}`, false, { note: err.message.split('\n')[0] });
     } finally {
       await page.close();
     }
   }
-  // 3) 다운로드 폴더 모드로 되돌리고 하위 폴더 이름 변경 반영 확인
-  await setSettings({ saveMode: 'downloads', subfolder: '쇼츠 소스/2026' });
-  await scenario({ name: '[저장 위치] 하위 폴더 변경 반영', url: 'https://www.example-videos.com/watch', expect: { width: 1920, height: 1080, audio: true, dir: '쇼츠 소스/2026' } });
-  await setSettings({ subfolder: SUB });
-  await ep.close();
+}
+
+// ── 버튼이 스크롤해도 영상에 붙어 있는지 ──
+if (!only || only === 'scroll' || '스크롤'.includes(only)) {
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://www.example-videos.com/feed', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const gaps = [];
+    for (const y of [0, 300, 700, 1300]) {
+      await page.mouse.wheel(0, y ? 400 : 0);
+      await page.waitForTimeout(16); // 다음 프레임 직후 측정(지연 없이 붙어 있어야 함)
+      const g = await page.evaluate(() => {
+        const out = [];
+        for (const v of document.querySelectorAll('video')) {
+          const host = v.parentElement.querySelector('smd-anchor');
+          const b = host?.shadowRoot?.querySelector('.btn.show');
+          if (!b) continue;
+          const vr = v.getBoundingClientRect();
+          const br = b.getBoundingClientRect();
+          if (vr.bottom < 0 || vr.top > innerHeight) continue;
+          out.push({ dx: Math.round(vr.right - br.right), dy: Math.round(vr.bottom - br.bottom), inside: br.top >= vr.top && br.bottom <= vr.bottom });
+        }
+        return out;
+      });
+      gaps.push(...g);
+    }
+    const stable = gaps.length > 0 && gaps.every((g) => g.inside && g.dx === gaps[0].dx && g.dy === gaps[0].dy);
+    await page.screenshot({ path: path.join(SHOTS, 'scroll-feed.png') });
+    record('[버튼] 스크롤해도 각 영상 하단에 붙어 이동', stable, { note: JSON.stringify(gaps.slice(0, 6)) });
+  } catch (err) {
+    record('[버튼] 스크롤해도 각 영상 하단에 붙어 이동', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
 }
 
 // ── 팝업: 현재 탭 영상 목록에서 다운로드 ──
@@ -321,10 +331,6 @@ if (!only || '팝업'.includes(only) || only === 'popup') {
   await p.click('.tab[data-tab="settings"]');
   await p.waitForTimeout(400);
   await p.screenshot({ path: path.join(SHOTS, 'popup-settings.png'), fullPage: true });
-  await p.click('#saveMode button[data-v="folder"]');
-  await p.waitForTimeout(500);
-  await p.screenshot({ path: path.join(SHOTS, 'popup-settings-folder.png') });
-  await p.click('#saveMode button[data-v="downloads"]');
   await p.click('.tab[data-tab="sites"]');
   await p.waitForTimeout(400);
   await p.screenshot({ path: path.join(SHOTS, 'popup-sites.png') });
@@ -332,12 +338,6 @@ if (!only || '팝업'.includes(only) || only === 'popup') {
   await p.click('.tab[data-tab="home"]');
   await p.waitForTimeout(400);
   await p.screenshot({ path: path.join(SHOTS, 'popup-home-dark.png') });
-  const pk = await ctx.newPage();
-  await pk.setViewportSize({ width: 480, height: 640 });
-  await pk.goto(`chrome-extension://${extId}/picker/picker.html?mode=pick`);
-  await pk.waitForTimeout(500);
-  await pk.screenshot({ path: path.join(SHOTS, 'picker.png') });
-  await pk.close();
   await p.close();
 }
 

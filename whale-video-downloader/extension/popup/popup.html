@@ -56,41 +56,30 @@
     <section class="pane" data-pane="settings">
       <div class="card">
         <div class="card-head"><div class="grow"><strong>저장 위치</strong><small>다운로드한 영상이 저장될 곳</small></div></div>
-        <div class="seg" id="saveMode">
-          <button data-v="downloads">다운로드 폴더</button>
-          <button data-v="folder">폴더 직접 선택</button>
-        </div>
-
-        <div class="mode" data-mode="downloads">
-          <label class="field">
-            <span>다운로드 폴더 안의 하위 폴더</span>
-            <div class="path">
-              <span class="pfx">다운로드 /</span>
-              <input id="subfolder" type="text" placeholder="(비우면 다운로드 폴더에 바로 저장)" maxlength="80" spellcheck="false" />
-            </div>
-          </label>
-          <label class="row-toggle">
-            <div><b>다운로드마다 저장 위치 묻기</b><small>저장할 때마다 폴더와 파일 이름을 고르는 창을 띄웁니다</small></div>
-            <input type="checkbox" id="askEveryTime" /><span class="sw"><i></i></span>
-          </label>
-        </div>
-
-        <div class="mode" data-mode="folder">
-          <div class="folder" id="folderBox">
-            <div class="ficon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>
-            </div>
-            <div class="grow">
-              <strong id="folderName">선택된 폴더 없음</strong>
-              <small id="folderState">폴더를 선택하면 영상이 그곳에 바로 저장됩니다</small>
-            </div>
+        <div class="folder">
+          <div class="ficon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>
           </div>
-          <div class="btns">
-            <button class="btn" id="pickFolder">폴더 선택</button>
-            <button class="btn ghost" id="regrant">권한 다시 허용</button>
+          <div class="grow">
+            <strong id="folderPath">웨일 다운로드 폴더</strong>
+            <small id="folderHint">지정한 폴더에 권한 요청 없이 바로 저장됩니다</small>
           </div>
-          <p class="note">브라우저 보안 정책상 브라우저를 다시 켜면 폴더 쓰기 권한을 한 번 더 허용해야 할 수 있어요. 권한이 없을 때는 영상이 사라지지 않도록 <b>다운로드 폴더</b>에 대신 저장하고 알려 드려요.</p>
         </div>
+        <div class="btns">
+          <button class="btn" id="changeFolder">저장 폴더 바꾸기</button>
+        </div>
+        <p class="note">버튼을 누르면 웨일 다운로드 설정이 열려요. <b>위치 → 변경</b>에서 원하는 폴더(바탕화면, D 드라이브 등 어디든)를 고르면, 그 다음부터 모든 영상·사진이 그 폴더에 바로 저장됩니다.</p>
+        <label class="field" style="margin-top:12px">
+          <span>그 폴더 안에 하위 폴더 만들기 (선택)</span>
+          <div class="path">
+            <span class="pfx">저장 폴더 /</span>
+            <input id="subfolder" type="text" placeholder="(비우면 저장 폴더에 바로 저장)" maxlength="80" spellcheck="false" />
+          </div>
+        </label>
+        <label class="row-toggle">
+          <div><b>다운로드마다 저장 위치 묻기</b><small>저장할 때마다 폴더와 파일 이름을 고르는 창을 띄웁니다</small></div>
+          <input type="checkbox" id="askEveryTime" /><span class="sw"><i></i></span>
+        </label>
       </div>
 
       <div class="card">
@@ -125,6 +114,10 @@
           <button data-v="center">가운데</button>
           <button data-v="right">오른쪽</button>
         </div>
+        <label class="row-toggle">
+          <div><b>사진에도 버튼 표시</b><small>사진에 마우스를 올리면 원본 저장 버튼이 나타납니다 (jpg·png·gif 외 형식은 PNG 로 변환)</small></div>
+          <input type="checkbox" id="imageButtons" /><span class="sw"><i></i></span>
+        </label>
         <label class="row-toggle">
           <div><b>그 밖의 사이트에서도 표시</b><small>목록에 없는 사이트도 실제 영상 파일이 감지되면 버튼을 띄웁니다</small></div>
           <input type="checkbox" id="genericButtons" /><span class="sw"><i></i></span>

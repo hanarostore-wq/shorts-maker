@@ -35,3 +35,13 @@
 - 실사이트 구조가 모의 데이터와 다르면 해당 어댑터(`extension/content/sites.js`, `extension/background/builders.js`) 수정 필요. 특히 유튜브 앱 클라이언트 버전(`resolvers.js` YT_CLIENTS)은 주기적 갱신 필요.
 - 중앙 기록(`obsidian-main` AI-TEAM/WORK_LOG, HANDOFF)은 이 세션에 쓰기 권한이 없어 갱신하지 못함 → 이 파일 내용을 중앙에 옮겨 적어야 함.
 - GitHub 새 저장소 생성은 연결된 GitHub 앱 권한 부족(403 "Resource not accessible by integration")으로 실패 → 사용자가 빈 저장소를 만들면 push.
+
+## 2026-10-03 · WVD-002 · v1.1.0 사용자 피드백 반영
+
+- 요청: 유튜브 오류(HTTP 403), 완료 창 제거, 저장 폴더는 권한·시스템 폴더 오류 없이 지정 폴더로, 버튼이 스크롤 시 영상에서 떨어지는 문제, 사진 저장(jpg/png 외 PNG 변환)
+- 변경
+  - 버튼: 화면 고정 레이어 → 각 영상·사진 옆 DOM 앵커(스크롤해도 영상과 함께 이동). 완료 창 제거(버튼만 3초 '저장 완료')
+  - 저장 위치: "폴더 직접 선택"(File System Access) 제거 → 웨일 다운로드 폴더 설정을 여는 '저장 폴더 바꾸기' + 실제 저장 경로 표시. 기본 하위 폴더 없음
+  - 사진: 마우스 올리면 저장 버튼, 사이트별 원본 주소, jpg/png/gif 그대로·그 밖 PNG 변환
+  - 유튜브: ANDROID_VR·IOS·WEB(사파리 HLS)·페이지 플레이어 결과를 모두 이어서 시도, googlevideo 요청의 Origin/Referer 제거
+- 검증: 단위 12/12, E2E 35/35 (모의 사이트). 실제 유튜브 403 해결 여부는 UNVERIFIED (실사이트 접속 차단 환경)

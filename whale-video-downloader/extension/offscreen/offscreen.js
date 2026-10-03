@@ -1,14 +1,13 @@
 // 오프스크린 문서: 영상 데이터를 받아 합치고(필요 시) 파일로 쓴다.
-//   mode = 'folder'    → 사용자가 고른 폴더(File System Access)에 바로 저장
-//   mode = 'downloads' → OPFS 임시 파일에 쓴 뒤 blob 주소를 서비스워커에 넘겨 브라우저 다운로드 폴더로 저장
+//   OPFS 임시 파일에 쓴 뒤 blob 주소를 서비스워커에 넘겨 웨일 다운로드 폴더(사용자가 지정한 폴더)로 저장한다.
+//   사진은 원본 그대로, jpg·png·gif 가 아니면 PNG 로 변환한다.
 import { copyFile, mergeStreams, remuxHls, StepError, STEP } from './engine.js';
-import { idbGet, DIR_KEY } from '../shared/idb.js';
 
 const running = new Map(); // jobId -> { ac, target }
 const finished = new Map(); // jobId -> { url, cleanup }
 const reserved = new Set();
 
-const MIME = { mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', mkv: 'video/x-matroska', flv: 'video/x-flv', mpg: 'video/mpeg', m4a: 'audio/mp4' };
+const MIME = { jpg: 'image/jpeg', png: 'image/png', gif: 'image/gif', mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', mkv: 'video/x-matroska', flv: 'video/x-flv', mpg: 'video/mpeg', m4a: 'audio/mp4' };
 
 const send = (msg) => chrome.runtime.sendMessage(msg).catch(() => {});
 
@@ -24,47 +23,6 @@ async function tmpDir() {
     for await (const [name] of dir.entries()) await dir.removeEntry(name).catch(() => {});
   } catch {}
 })();
-
-async function uniqueName(dir, name) {
-  const dot = name.lastIndexOf('.');
-  const base = dot > 0 ? name.slice(0, dot) : name;
-  const ext = dot > 0 ? name.slice(dot) : '';
-  for (let i = 0; i < 1000; i++) {
-    const n = i ? `${base} (${i})${ext}` : name;
-    if (reserved.has(n)) continue;
-    try {
-      await dir.getFileHandle(n);
-    } catch (err) {
-      if (err?.name === 'NotFoundError') {
-        reserved.add(n);
-        return n;
-      }
-      if (err?.name === 'TypeMismatchError') continue;
-      throw err;
-    }
-  }
-  throw new StepError(STEP.WRITE, '같은 이름의 파일이 너무 많습니다.', '저장 폴더를 정리하거나 파일 이름 형식을 바꾸세요.');
-}
-
-async function folderTarget(dir, filename) {
-  const name = await uniqueName(dir, filename);
-  const fh = await dir.getFileHandle(name, { create: true });
-  const writable = await fh.createWritable();
-  return {
-    kind: 'folder',
-    name,
-    folder: dir.name,
-    writable,
-    async fail() {
-      await writable.abort().catch(() => {});
-      await dir.removeEntry(name).catch(() => {});
-      reserved.delete(name);
-    },
-    release() {
-      reserved.delete(name);
-    },
-  };
-}
 
 async function opfsTarget(jobId, filename) {
   const dir = await tmpDir();
@@ -87,29 +45,64 @@ async function opfsTarget(jobId, filename) {
   };
 }
 
-async function chooseTarget(jobId, filename, mode) {
-  let warning = '';
-  if (mode === 'folder') {
-    let dir = null;
-    try { dir = await idbGet(DIR_KEY); } catch {}
-    let state = 'none';
-    if (dir) {
-      try { state = await dir.queryPermission({ mode: 'readwrite' }); } catch { state = 'denied'; }
-    }
-    if (state === 'granted') {
-      try {
-        return { target: await folderTarget(dir, filename), warning };
-      } catch (err) {
-        if (err instanceof StepError) throw err;
-        warning = `선택한 폴더(${dir.name})에 파일을 만들지 못해 기본 다운로드 폴더에 저장했습니다 (${err?.name || err}). 폴더가 삭제·이동됐다면 팝업에서 저장 폴더를 다시 선택하세요.`;
-      }
-    } else if (state === 'none') {
-      warning = '저장 폴더가 아직 선택되지 않아 기본 다운로드 폴더에 저장했습니다. 확장프로그램 아이콘 → 저장 위치 → "폴더 선택"을 누르세요.';
-    } else {
-      warning = `선택한 폴더(${dir.name})의 쓰기 권한이 만료되어(브라우저를 다시 켜면 한 번 더 허용해야 함) 기본 다운로드 폴더에 저장했습니다. 확장프로그램 아이콘 → 저장 위치 → "권한 다시 허용"을 누르세요.`;
+// ── 사진 ──
+function imageKind(head) {
+  if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return 'jpg';
+  if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) return 'png';
+  if (head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46) return 'gif';
+  return '';
+}
+
+async function toPng(blob) {
+  let w, h, draw;
+  try {
+    const bmp = await createImageBitmap(blob);
+    w = bmp.width;
+    h = bmp.height;
+    draw = (ctx) => ctx.drawImage(bmp, 0, 0);
+  } catch {
+    // SVG 등 createImageBitmap 이 못 읽는 형식은 <img> 로 그린다.
+    const url = URL.createObjectURL(blob);
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      w = img.naturalWidth || 1024;
+      h = img.naturalHeight || 1024;
+      draw = (ctx) => ctx.drawImage(img, 0, 0, w, h);
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
   }
-  return { target: await opfsTarget(jobId, filename), warning };
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  draw(canvas.getContext('2d'));
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG 변환 실패'))), 'image/png'));
+}
+
+async function saveImage(jobId, desc) {
+  let res;
+  try {
+    res = await fetch(desc.url, { credentials: desc.credentials || 'include', cache: 'no-store' });
+  } catch (err) {
+    throw new StepError('사진 저장', '사진 서버에 연결하지 못했습니다.', '인터넷 연결을 확인한 뒤 다시 시도하세요.', err?.message);
+  }
+  if (!res.ok) throw new StepError('사진 저장', `사진 서버가 HTTP ${res.status} 로 응답했습니다.`, '페이지를 새로고침한 뒤 다시 시도하세요.', desc.url);
+  let blob = await res.blob();
+  if (!blob.size) throw new StepError('사진 저장', '사진 데이터가 비어 있습니다.', '페이지를 새로고침한 뒤 다시 시도하세요.');
+  let ext = imageKind(new Uint8Array(await blob.slice(0, 8).arrayBuffer()));
+  if (!ext) {
+    try {
+      blob = await toPng(blob);
+    } catch (err) {
+      throw new StepError('사진 변환', `이 사진 형식(${blob.type || '알 수 없음'})을 PNG 로 바꾸지 못했습니다.`, '다른 사진으로 시도하거나 페이지를 새로고침하세요.', err?.message);
+    }
+    ext = 'png';
+  }
+  const url = URL.createObjectURL(blob.slice(0, blob.size, MIME[ext] || 'image/png'));
+  finished.set(jobId, { url });
+  send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: blob.size, ext });
 }
 
 async function run({ jobId, desc, filename, mode, prefer }) {
@@ -125,8 +118,11 @@ async function run({ jobId, desc, filename, mode, prefer }) {
   };
   let target;
   try {
-    const chosen = await chooseTarget(jobId, filename, mode);
-    target = chosen.target;
+    if (desc.type === 'image') {
+      await saveImage(jobId, desc);
+      return;
+    }
+    target = await opfsTarget(jobId, filename);
     running.set(jobId, { ac, target });
     const hooks = {
       counter,
@@ -151,18 +147,13 @@ async function run({ jobId, desc, filename, mode, prefer }) {
       throw new StepError(STEP.PARSE, `지원하지 않는 다운로드 방식입니다 (${desc.type}).`, '확장프로그램을 최신 버전으로 업데이트하세요.');
     }
     running.delete(jobId);
-    target.release();
-    if (target.kind === 'folder') {
-      send({ type: 'smd:engine-result', jobId, kind: 'written', name: target.name, folder: target.folder, quality });
-      return;
-    }
     const file = await target.fh.getFile();
     if (!file.size) throw new StepError(STEP.WRITE, '저장된 파일 크기가 0 바이트입니다.', '다시 시도하세요.');
     // MIME 타입이 없으면 브라우저가 확장자를 .txt 등으로 바꿔 버린다 → 확장자에 맞는 타입을 붙인다(복사 없음).
     const ext = (filename.split('.').pop() || 'mp4').toLowerCase();
     const url = URL.createObjectURL(file.slice(0, file.size, MIME[ext] || 'video/mp4'));
     finished.set(jobId, { url, cleanup: target.cleanup });
-    send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: file.size, warning: chosen.warning, quality });
+    send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: file.size, quality });
   } catch (err) {
     running.delete(jobId);
     await target?.fail().catch(() => {});

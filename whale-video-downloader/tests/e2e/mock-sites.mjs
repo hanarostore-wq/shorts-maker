@@ -10,7 +10,7 @@ const here = path.dirname(new URL(import.meta.url).pathname);
 const MEDIA = path.resolve(here, '../fixtures/media');
 export const log = [];
 
-const TYPES = { '.mp4': 'video/mp4', '.m4a': 'audio/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.m3u8': 'application/vnd.apple.mpegurl', '.ts': 'video/mp2t', '.m4s': 'video/iso.segment', '.jpg': 'image/jpeg' };
+const TYPES = { '.webp': 'image/webp', '.png': 'image/png', '.mp4': 'video/mp4', '.m4a': 'audio/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.m3u8': 'application/vnd.apple.mpegurl', '.ts': 'video/mp2t', '.m4s': 'video/iso.segment', '.jpg': 'image/jpeg' };
 
 function serveFile(req, res, file, { type, extra = {} } = {}) {
   const full = path.join(MEDIA, file);
@@ -154,6 +154,7 @@ const handlers = {
       return;
     }
     if (u.pathname.startsWith('/hls_ts/')) return serveFile(req, res, u.pathname.slice(1));
+    if (u.pathname.startsWith('/img/')) return serveFile(req, res, `images/${path.basename(u.pathname)}`);
     if (u.pathname === '/live/index.m3u8') {
       // 끝나지 않은 라이브 재생목록(#EXT-X-ENDLIST 없음)
       const seq = Math.floor(Date.now() / 2000);
@@ -172,6 +173,15 @@ const handlers = {
   'www.example-videos.com': (req, res, u) => {
     if (u.pathname === '/watch') {
       return html(res, page('일반 사이트 영상', `<div class="card"><h3>일반 사이트</h3><video src="https://cdn.example-videos.com/progressive_1080p_land.mp4" controls muted style="width:640px;height:360px;background:#000"></video></div>`));
+    }
+    if (u.pathname === '/photos') {
+      return html(res, page('사진 페이지', `<div class="card"><img class="photo" src="https://cdn.example-videos.com/img/photo.webp" style="width:480px"></div>
+        <div class="card"><a href="/somewhere"><img class="photo" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px"></a></div>
+        <div class="card"><img class="photo" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=small" style="width:480px"></div>`));
+    }
+    if (u.pathname === '/feed') {
+      const items = Array.from({ length: 4 }, (_, i) => `<div class="card" style="position:relative;margin:30px 0"><p>게시물 ${i + 1}</p><video src="https://cdn.example-videos.com/progressive_360p.mp4" muted style="width:360px;height:420px;background:#000;display:block"></video></div>`).join('');
+      return html(res, page('피드', `<div style="display:block">${items}</div>`));
     }
     if (u.pathname === '/norange') {
       return html(res, page('Range 미지원 서버', `<div class="card"><video src="https://cdn.example-videos.com/progressive_1080x1920.mp4?norange=1" muted style="width:360px;height:640px;background:#000"></video></div>`));
@@ -352,7 +362,8 @@ const handlers = {
     res.end();
   },
   'video.twimg.com': (req, res, u) => serveFile(req, res, u.pathname.endsWith('high.mp4') || u.pathname.endsWith('synd.mp4') ? 'progressive_1080x1920.mp4' : 'progressive_360p.mp4'),
-  'pbs.twimg.com': (req, res) => {
+  'pbs.twimg.com': (req, res, u) => {
+    if (u.pathname === '/media/MockPic') return serveFile(req, res, u.searchParams.get('name') === 'orig' ? 'images/x_orig.jpg' : 'images/x_small.jpg');
     res.writeHead(404);
     res.end();
   },

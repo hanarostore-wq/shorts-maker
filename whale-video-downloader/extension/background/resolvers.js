@@ -59,6 +59,14 @@ export const YT_CLIENTS = [
     ctx: { clientName: 'IOS', clientVersion: '20.10.4', deviceMake: 'Apple', deviceModel: 'iPhone16,2', osName: 'iPhone', osVersion: '18.3.2.22D82' },
     ua: 'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)',
   },
+  {
+    // 웹(사파리) 클라이언트는 서명 해독 없이 쓸 수 있는 HLS 재생목록(최대 1080p)을 준다.
+    key: 'web_safari',
+    nameId: 1,
+    ctx: { clientName: 'WEB', clientVersion: '2.20250925.01.00' },
+    ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)',
+    hlsOnly: true,
+  },
 ];
 
 const YT_STATUS = {
@@ -71,6 +79,9 @@ const YT_STATUS = {
 
 export async function resolveYouTube(bg, ctx) {
   const errors = [];
+  const found = [];
+  let title = '';
+  let author = '';
   for (const client of YT_CLIENTS) {
     const body = {
       context: { client: { ...client.ctx, userAgent: client.ua, hl: 'ko', gl: 'KR', ...(bg.visitorData ? { visitorData: bg.visitorData } : {}) } },
@@ -111,11 +122,14 @@ export async function resolveYouTube(bg, ctx) {
     if (pr?.videoDetails?.isLive || pr?.videoDetails?.isLiveContent && !pr?.streamingData?.adaptiveFormats?.length) {
       throw new ResolveError('진행 중인 라이브 방송은 다운로드할 수 없습니다.', '방송이 끝나 다시보기로 올라온 뒤 시도하세요.');
     }
-    const d = buildYouTube(pr, ctx.prefer, client.ua);
+    const src = client.hlsOnly ? { ...pr, streamingData: { hlsManifestUrl: pr?.streamingData?.hlsManifestUrl } } : pr;
+    const d = buildYouTube(src, ctx.prefer, client.ua);
     if (d) {
-      d.title = pr?.videoDetails?.title || '';
-      d.author = pr?.videoDetails?.author || '';
-      return d;
+      title ||= pr?.videoDetails?.title || '';
+      author ||= pr?.videoDetails?.author || '';
+      // 한 클라이언트의 주소가 막혀도(403) 다음 클라이언트 주소로 이어서 시도하도록 모두 모은다.
+      found.push(d, ...(d.fallbacks || []));
+      continue;
     }
     errors.push(new ResolveError(`유튜브(${client.key}) 응답에 바로 받을 수 있는 영상 주소가 없습니다.`));
   }
@@ -126,8 +140,16 @@ export async function resolveYouTube(bg, ctx) {
         d.video.credentials = 'include';
         if (d.audio) d.audio.credentials = 'include';
       }
-      return d;
+      found.push(d, ...(d.fallbacks || []));
     }
+  }
+  if (found.length) {
+    const chain = found.map((d) => {
+      const { fallbacks, ...rest } = d;
+      // googlevideo 는 확장프로그램 출처(Origin: chrome-extension://)를 싫어할 수 있어 Origin/Referer 를 지운다.
+      return { ...rest, headers: { ...(rest.headers || {}), stripOrigin: true } };
+    });
+    return { ...chain[0], title, author, fallbacks: chain.slice(1) };
   }
   const first = errors.find((e) => /로그인|연령|재생할 수 없는|찾을 수 없습니다|라이브/.test(e.reason || '')) || errors[0];
   throw first || new ResolveError('유튜브 재생 정보를 받지 못했습니다.');

@@ -95,6 +95,10 @@ function headerOps(h) {
   if (h.referer) ops.push({ header: 'referer', operation: 'set', value: h.referer });
   if (h.origin) ops.push({ header: 'origin', operation: 'set', value: h.origin });
   if (h.ua) ops.push({ header: 'user-agent', operation: 'set', value: h.ua });
+  if (h.stripOrigin) {
+    ops.push({ header: 'origin', operation: 'remove' });
+    ops.push({ header: 'referer', operation: 'remove' });
+  }
   return ops;
 }
 
@@ -352,11 +356,11 @@ async function startBrowserDownload(job, url, settings, phase) {
 }
 
 // ───────────────────────────── 작업 실행 ─────────────────────────────
-const RETRYABLE_STEPS = new Set(['영상 데이터 받기', '영상 형식 분석', '영상·음성 합치기', '원본 주소 확인']);
+const RETRYABLE_STEPS = new Set(['사진 저장', '영상 데이터 받기', '영상 형식 분석', '영상·음성 합치기', '원본 주소 확인']);
 
 async function runEngine(job, d, settings) {
   await ensureOffscreen();
-  const mode = settings.saveMode === 'folder' ? 'folder' : 'downloads';
+  const mode = 'downloads';
   const result = await new Promise((resolve, reject) => {
     job.engine = { resolve, reject };
     toOffscreen({ type: 'run', jobId: job.id, desc: d, filename: job.filename, mode, prefer: settings.quality }).catch((err) =>
@@ -364,13 +368,9 @@ async function runEngine(job, d, settings) {
     );
   });
   job.engine = null;
-  if (result.kind === 'written') {
-    job.where = `${result.folder || settings.folderName || '선택한 폴더'}${result.folder ? '/' : ''}${result.name}`;
-    job.filename = result.name;
-    return;
-  }
-  // OPFS 임시 파일 → 브라우저 다운로드 폴더로 이동
-  if (result.warning) job.warning = result.warning;
+  // 사진은 실제 형식에 맞춰 확장자를 정한다(jpg/png/gif 그대로, 그 밖은 PNG 로 변환됨)
+  if (result.ext) job.filename = job.filename.replace(/\.[^.]+$/, `.${result.ext}`);
+  // OPFS 임시 파일 → 웨일 다운로드 폴더로 저장
   job.phase = 'save';
   job.percent = null;
   notify(job);
@@ -386,7 +386,7 @@ async function attempt(job, d, settings) {
   try {
     // 브라우저 다운로드 관리자 요청에는 declarativeNetRequest 헤더가 붙지 않는다(실측).
     // Referer/User-Agent 가 필요한 CDN 은 처음부터 확장 엔진으로 받아 웨일 다운로드 목록에 실패 항목이 남지 않게 한다.
-    const native = d.type === 'file' && settings.saveMode !== 'folder' && !d.rangeParam && d.credentials !== 'omit' && !headerOps(d.headers || {}).length;
+    const native = d.type === 'file' && !d.rangeParam && d.credentials !== 'omit' && !headerOps(d.headers || {}).length;
     if (native) {
       job.phase = 'download';
       notify(job);
@@ -413,7 +413,8 @@ async function runJob(job) {
   const req = job.request;
   let desc;
   try {
-    if (req.info) desc = buildFromInfo(req.site, req.info, settings.quality, req.pageUrl);
+    if (req.info?.image) desc = buildImage(req.info.image, req.pageUrl);
+    else if (req.info) desc = buildFromInfo(req.site, req.info, settings.quality, req.pageUrl);
     else if (req.bg) {
       desc = await resolveBg(req, {
         prefer: settings.quality,
@@ -474,6 +475,14 @@ function applyCredentials(desc, req) {
     fix(d.video);
     fix(d.audio);
   }
+}
+
+function buildImage(image, pageUrl) {
+  let referer = '';
+  try { referer = `${new URL(pageUrl).origin}/`; } catch {}
+  const urls = [...new Set([image.url, ...(image.fallbacks || [])].filter(Boolean))];
+  const mk = (url) => ({ type: 'image', url, ext: 'png', headers: referer && !/^(data|blob):/.test(url) ? { referer } : undefined, quality: { label: image.width ? `${image.width}×${image.height}` : '원본' } });
+  return { ...mk(urls[0]), fallbacks: urls.slice(1).map(mk) };
 }
 
 function createJob(request, sender) {
@@ -548,11 +557,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ ok: cancelJob(msg.jobId) });
       return;
     }
-    case 'smd:open-picker': {
-      chrome.windows.create({ url: chrome.runtime.getURL(`picker/picker.html?mode=${msg.mode || 'pick'}`), type: 'popup', width: 480, height: 640, focused: true });
-      sendResponse({ ok: true });
-      return;
-    }
     // ── 오프스크린 엔진 → 서비스워커 ──
     case 'smd:offscreen-ready': {
       markReady?.();
@@ -583,6 +587,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
   }
 });
+
+getSettings().then((s) => chrome.storage.local.set({ settings: s })).catch(() => {});
 
 chrome.runtime.onInstalled.addListener(async (details) => {
   const r = await chrome.storage.local.get('settings');
