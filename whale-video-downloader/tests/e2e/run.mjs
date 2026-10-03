@@ -257,6 +257,104 @@ if (!only || only === 'image' || '사진'.includes(only)) {
   }
 }
 
+// ── X 사진(투명 img 겹침) 인식 + 사진 모두 저장 ──
+if (!only || only === 'image' || '사진'.includes(only)) {
+  const page = await ctx.newPage();
+  const t0 = Date.now();
+  try {
+    await page.goto('https://x.com/tester/status/1790000000000000003', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const pic = page.locator('img[alt="이미지"]').first();
+    const box = await pic.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(400);
+    const btn = page.locator('smd-anchor .btn.show').first();
+    await btn.waitFor({ timeout: 8000 });
+    const before = new Set(listFiles(DL));
+    await btn.click();
+    const saved = await waitFile(before, 30000);
+    const out = saved ? execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', saved]).toString().trim() : '';
+    record('[사진] X 사진(투명 img 겹침) 버튼 표시 + 원본 저장', out === '2000,1500', { note: saved ? `${path.relative(DL, saved)} · ${out}` : '파일 없음', ms: Date.now() - t0 });
+
+    // 팝업 → 이 페이지 사진 모두 저장
+    const pp = await extPage();
+    const tabId = await pp.evaluate(async () => (await chrome.tabs.query({ url: 'https://x.com/tester/status/1790000000000000003' }))[0]?.id);
+    await pp.setViewportSize({ width: 392, height: 600 });
+    await pp.goto(`chrome-extension://${extId}/popup/popup.html?tabId=${tabId}`);
+    const all = pp.locator('#saveAllImages');
+    await all.waitFor({ state: 'visible', timeout: 8000 });
+    const label = await all.innerText();
+    const before2 = new Set(listFiles(DL));
+    await all.click();
+    const t1 = Date.now();
+    let added = [];
+    while (Date.now() - t1 < 30000) {
+      added = listFiles(DL).filter((f) => !before2.has(f) && !/\.crdownload$/.test(f));
+      if (added.length >= 2) break;
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    await pp.waitForTimeout(500);
+    await pp.screenshot({ path: path.join(SHOTS, 'popup-save-all.png') });
+    record('[사진] 팝업 → 이 페이지 사진 모두 저장', added.length === 2 && /2장/.test(label), { note: `${label} → ${added.map((f) => path.basename(f)).join(', ')}` });
+    await pp.close();
+  } catch (err) {
+    record('[사진] X 사진 / 모두 저장', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
+// ── 버튼 위치: 기본 오른쪽 가운데 + 직접 배치 후 저장 ──
+if (!only || only === 'place' || '배치'.includes(only)) {
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://www.tiktok.com/@creator/video/7300000000000000001', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const geom = () => page.evaluate(() => {
+      const v = document.querySelector('video');
+      const b = v.parentElement.querySelector('smd-anchor').shadowRoot.querySelector('.btn');
+      const vr = v.getBoundingClientRect();
+      const br = b.getBoundingClientRect();
+      return { fx: ((br.left + br.width / 2) - vr.left) / vr.width, fy: ((br.top + br.height / 2) - vr.top) / vr.height };
+    });
+    const g0 = await geom();
+    const midRight = g0.fx > 0.6 && Math.abs(g0.fy - 0.5) < 0.05;
+    record('[버튼] 기본 위치 = 영상 오른쪽 가운데', midRight, { note: `가로 ${(g0.fx * 100).toFixed(0)}% · 세로 ${(g0.fy * 100).toFixed(0)}%` });
+
+    const tabId = await (async () => { const pp = await extPage(); const id = await pp.evaluate(async () => (await chrome.tabs.query({ url: 'https://www.tiktok.com/*' }))[0]?.id); await pp.close(); return id; })();
+    const pp = await extPage(`popup/popup.html?tabId=${tabId}`);
+    await pp.click('.tab[data-tab="settings"]');
+    await pp.click('#placeButton');
+    await pp.close().catch(() => {});
+    await page.locator('smd-toolbar').waitFor({ timeout: 5000 });
+    const btn = page.locator('smd-anchor .btn').first();
+    const bb = await btn.boundingBox();
+    const vb = await page.locator('video').first().boundingBox();
+    await page.screenshot({ path: path.join(SHOTS, 'place-mode.png') });
+    await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(vb.x + vb.width * 0.5, vb.y + vb.height * 0.2, { steps: 8 });
+    await page.mouse.up();
+    await page.locator('smd-toolbar').evaluate((t) => t.shadowRoot.querySelector('[data-a="save"]').click());
+    await page.waitForTimeout(300);
+    const before = new Set(listFiles(DL));
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const g1 = await geom();
+    const moved = Math.abs(g1.fx - 0.5) < 0.06 && Math.abs(g1.fy - 0.2) < 0.06;
+    await page.screenshot({ path: path.join(SHOTS, 'placed.png') });
+    // 배치한 위치에서 실제 다운로드도 되는지
+    await page.locator('smd-anchor .btn.show').first().click();
+    const saved = await waitFile(before, 30000);
+    record('[버튼] 직접 배치 → 저장 → 새로고침 후에도 그 위치 + 다운로드', moved && !!saved, { note: `가로 ${(g1.fx * 100).toFixed(0)}% · 세로 ${(g1.fy * 100).toFixed(0)}% · ${saved ? path.basename(saved) : '파일 없음'}` });
+    await setSettings({ placements: {} });
+  } catch (err) {
+    record('[버튼] 직접 배치', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
 // ── 버튼이 스크롤해도 영상에 붙어 있는지 ──
 if (!only || only === 'scroll' || '스크롤'.includes(only)) {
   const page = await ctx.newPage();

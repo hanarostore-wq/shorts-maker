@@ -338,6 +338,11 @@ const handlers = {
           ${vtag('poster="https://pbs.twimg.com/ext_tw_video_thumb/1790000000000000999/pu/img/thumb.jpg"')}</article>`,
         `fetch('/i/api/graphql/abc123/TweetDetail?variables=%7B%7D').then(r=>r.json());`));
     }
+    if (u.pathname === '/tester/status/1790000000000000003') {
+      // 실제 X 처럼: 배경 이미지 div 위에 투명도 0 인 <img> 를 겹쳐 둔다
+      const pic = (id) => `<div style="position:relative;width:420px;height:315px;margin:8px 0"><div style="position:absolute;inset:0;background:url(https://pbs.twimg.com/media/${id}?format=jpg&name=small) center/cover"></div><img alt="이미지" src="https://pbs.twimg.com/media/${id}?format=jpg&name=small" style="position:absolute;inset:0;width:100%;height:100%;opacity:0"></div>`;
+      return html(res, page('X 사진 게시물', `<article data-testid="tweet"><a href="/tester/status/1790000000000000003"><time>9월 30일</time></a>${pic('MockPic')}${pic('MockPic2')}</article>`));
+    }
     if (u.pathname === '/tester/status/1790000000000000002') {
       return html(res, page('X 게시물 (신디케이션)', `<article data-testid="tweet"><a href="/tester/status/1790000000000000002"><time>9월 30일</time></a>${vtag()}</article>`));
     }
@@ -363,7 +368,7 @@ const handlers = {
   },
   'video.twimg.com': (req, res, u) => serveFile(req, res, u.pathname.endsWith('high.mp4') || u.pathname.endsWith('synd.mp4') ? 'progressive_1080x1920.mp4' : 'progressive_360p.mp4'),
   'pbs.twimg.com': (req, res, u) => {
-    if (u.pathname === '/media/MockPic') return serveFile(req, res, u.searchParams.get('name') === 'orig' ? 'images/x_orig.jpg' : 'images/x_small.jpg');
+    if (u.pathname === '/media/MockPic' || u.pathname === '/media/MockPic2') return serveFile(req, res, u.searchParams.get('name') === 'orig' ? 'images/x_orig.jpg' : 'images/x_small.jpg');
     res.writeHead(404);
     res.end();
   },

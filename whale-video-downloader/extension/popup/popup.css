@@ -332,3 +332,4 @@ footer {
   font-size: 11px;
   color: var(--sub);
 }
+#buttonPosition { grid-auto-flow: row; grid-template-columns: 1fr 1fr; gap: 3px; }

@@ -71,7 +71,27 @@ function renderPreview() {
   $('#filenamePreview').innerHTML = `예시: ${escapeHtml(where)}<b>${escapeHtml(name)}</b>`;
 }
 
-seg($('#buttonPosition'), settings.buttonPosition || 'right', (v) => save({ buttonPosition: v }));
+seg($('#buttonPosition'), settings.buttonPosition || 'mid-right', (v) => save({ buttonPosition: v }));
+const activeTab = async () => {
+  const forced = Number(new URLSearchParams(location.search).get('tabId'));
+  return forced ? chrome.tabs.get(forced) : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+};
+$('#placeButton').addEventListener('click', async () => {
+  const tab = await activeTab();
+  const r = tab && (await chrome.tabs.sendMessage(tab.id, { type: 'smd:edit-placement' }, { frameId: 0 }).catch(() => null));
+  if (r?.ok) window.close();
+  else $('#placeNote').textContent = '영상이 있는 웹페이지 탭에서 눌러 주세요. 방금 연 탭이면 새로고침(F5) 후 다시 시도하세요.';
+});
+$('#resetPlacement').addEventListener('click', async () => {
+  const tab = await activeTab();
+  let host = '';
+  try { host = new URL(tab.url).hostname; } catch {}
+  const id = SITE_HOSTS.find(([re]) => re.test(host))?.[1] || 'generic';
+  const placements = { ...(settings.placements || {}) };
+  delete placements[id];
+  await save({ placements });
+  $('#placeNote').textContent = '이 사이트의 직접 배치를 지웠어요. 위에서 고른 위치를 사용합니다.';
+});
 $('#genericButtons').checked = settings.genericButtons !== false;
 $('#genericButtons').addEventListener('change', (e) => save({ genericButtons: e.target.checked }));
 
@@ -167,6 +187,18 @@ async function renderPage() {
     if (r) connected = true;
     for (const v of r || []) videos.push({ ...v, frameId });
   }
+  const info = connected ? await chrome.tabs.sendMessage(tab.id, { type: 'smd:images-info' }, { frameId: 0 }).catch(() => null) : null;
+  if (info?.count) {
+    const b = $('#saveAllImages');
+    b.style.display = '';
+    b.textContent = `이 페이지 사진 ${info.count}장 모두 저장`;
+    b.onclick = async () => {
+      b.disabled = true;
+      b.textContent = '저장 요청 중…';
+      const r = await chrome.tabs.sendMessage(tab.id, { type: 'smd:save-all-images' }, { frameId: 0 }).catch(() => null);
+      b.textContent = r?.started ? `${r.started}장 저장 시작 — 아래 최근 다운로드에서 확인` : '사진을 저장하지 못했어요. 페이지를 새로고침한 뒤 다시 시도하세요.';
+    };
+  }
   if (!connected) {
     hint.textContent = '이 탭에는 아직 확장프로그램이 연결되지 않았어요. 페이지를 새로고침(F5)하면 영상 아래에 버튼이 나타나요.';
     return;
@@ -202,7 +234,7 @@ renderPage();
 
 // ───────────── 다운로드 기록 ─────────────
 const fmtBytes = (n) => (n >= 1073741824 ? `${(n / 1073741824).toFixed(2)}GB` : n >= 1048576 ? `${(n / 1048576).toFixed(1)}MB` : n > 0 ? `${Math.max(1, Math.round(n / 1024))}KB` : '');
-const PHASE = { resolve: '원본 주소 찾는 중', download: '받는 중', mux: '영상·음성 합치는 중', save: '파일 저장 중' };
+const PHASE = { queue: '대기 중', resolve: '원본 주소 찾는 중', download: '받는 중', mux: '영상·음성 합치는 중', save: '파일 저장 중' };
 
 async function renderJobs() {
   const [{ jobs = [] }, { history = [] }] = await Promise.all([chrome.storage.session.get('jobs'), chrome.storage.local.get('history')]);

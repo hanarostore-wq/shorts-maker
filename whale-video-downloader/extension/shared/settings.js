@@ -6,7 +6,8 @@ export const DEFAULT_SETTINGS = {
   filenameTemplate: '{title} [{site}-{id}]',
   quality: 'best', // 'best' = 원본 최고화질, 'compat' = 호환성(H.264) 우선
   showButtons: true,
-  buttonPosition: 'right', // left | center | right
+  buttonPosition: 'mid-right', // mid-right | bottom-right | bottom-center | bottom-left | top-right
+  placements: {}, // 사이트별로 직접 배치한 버튼 위치 { fx, fy } (영상 안 비율)
   genericButtons: true, // 지원 목록 밖 사이트에서도 버튼 표시
   disabledSites: [],
 };
@@ -20,6 +21,11 @@ export async function getSettings() {
     delete s.saveMode;
     delete s.folderName;
     s.v1Subfolder = false;
+  }
+  // v1.2.0: 하단 버튼이 제목 글자에 가려지는 문제로 기본 위치를 오른쪽 가운데로 변경
+  if (s.posVersion !== 2) {
+    if (!s.buttonPosition || s.buttonPosition === 'right') s.buttonPosition = 'mid-right';
+    s.posVersion = 2;
   }
   return s;
 }

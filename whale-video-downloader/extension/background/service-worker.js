@@ -429,6 +429,27 @@ async function runJob(job) {
   if (job.canceled) return;
   if (!job.title && desc.title) job.title = desc.title;
   applyCredentials(desc, req);
+  // 동시에 너무 많이 받지 않도록 최대 3개씩(사진 일괄 저장 대비)
+  if (active >= MAX_ACTIVE) {
+    job.phase = 'queue';
+    notify(job);
+    await new Promise((r) => waiting.push(r));
+  }
+  active++;
+  try {
+    await runChain(job, desc, settings, req);
+  } finally {
+    active--;
+    waiting.shift()?.();
+  }
+}
+
+const MAX_ACTIVE = 3;
+let active = 0;
+const waiting = [];
+
+async function runChain(job, desc, settings, req) {
+  if (job.canceled) return;
   const chain = [desc, ...(desc.fallbacks || [])];
   let lastErr = null;
   for (let i = 0; i < chain.length; i++) {

@@ -8,7 +8,7 @@
   const { pick, U } = SITES;
   const adapter = pick(location.hostname);
 
-  const DEFAULTS = { showButtons: true, imageButtons: true, buttonPosition: 'right', disabledSites: [], genericButtons: true };
+  const DEFAULTS = { showButtons: true, imageButtons: true, buttonPosition: 'mid-right', placements: {}, disabledSites: [], genericButtons: true };
   let settings = { ...DEFAULTS };
   const enabled = () =>
     settings.showButtons !== false &&
@@ -116,6 +116,9 @@
   .btn.done{background:linear-gradient(135deg,#0fb57d,#34d399);box-shadow:0 10px 26px -8px rgba(16,185,129,.8),inset 0 1px 0 rgba(255,255,255,.35)}
   .btn.err{background:linear-gradient(135deg,#ef4444,#f97316);box-shadow:0 10px 26px -8px rgba(239,68,68,.8),inset 0 1px 0 rgba(255,255,255,.35)}
   @keyframes smdspin{to{transform:rotate(360deg)}}
+  .btn.edit{cursor:grab;outline:2px dashed #fff;outline-offset:3px;animation:smdpulse 1.2s ease-in-out infinite}
+  .btn.edit:active{cursor:grabbing}
+  @keyframes smdpulse{50%{outline-color:rgba(255,255,255,.35)}}
   .panel{position:absolute;left:0;top:0;pointer-events:auto;width:300px;box-sizing:border-box;border-radius:16px;padding:14px 14px 12px;color:#f3f3f8;font:500 12.5px/1.55 inherit;
     background:rgba(21,21,33,.97);border:1px solid rgba(255,255,255,.09);box-shadow:0 22px 60px -14px rgba(0,0,0,.65);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);animation:smdin .18s ease}
   @keyframes smdin{from{opacity:0}}
@@ -166,6 +169,7 @@
     b.addEventListener('click', (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
+      if (editMode) return;
       if (entry.state === 'busy' || entry.state === 'resolving') return;
       if (entry.state === 'error' && entry.lastError) return showPanel(entry, 'e', entry.lastError);
       start(entry);
@@ -173,6 +177,26 @@
     for (const t of ['mousedown', 'mouseup', 'pointerdown', 'pointerup', 'dblclick', 'touchstart']) {
       b.addEventListener(t, (ev) => ev.stopPropagation());
     }
+    // 버튼 직접 배치 모드: 끌어서 영상 안 원하는 곳에 놓는다
+    b.addEventListener('pointerdown', (ev) => {
+      if (!editMode || entry.kind !== 'video') return;
+      ev.preventDefault();
+      b.setPointerCapture(ev.pointerId);
+      const move = (e) => {
+        const r = entry.el.getBoundingClientRect();
+        editTemp = {
+          fx: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+          fy: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
+        };
+        place();
+      };
+      const up = () => {
+        b.removeEventListener('pointermove', move);
+        b.removeEventListener('pointerup', up);
+      };
+      b.addEventListener('pointermove', move);
+      b.addEventListener('pointerup', up);
+    });
     entry.layer.appendChild(b);
     return b;
   }
@@ -340,6 +364,7 @@
         const q = j.quality ? `${j.quality} · ` : '';
         const label =
           j.phase === 'resolve' ? '원본 찾는 중…'
+          : j.phase === 'queue' ? '대기 중…'
           : j.phase === 'mux' ? `${q}합치는 중 ${Math.floor(j.percent || 0)}%`
           : j.phase === 'save' ? '저장 중…'
           : j.percent != null ? `${q}${Math.floor(j.percent)}%`
@@ -348,6 +373,19 @@
         setLook(entry, 'busy', label, j.phase === 'resolve' ? null : j.percent);
       }
       return;
+    }
+    if (msg?.type === 'smd:edit-placement') {
+      enterEdit();
+      sendResponse({ ok: true });
+      return;
+    }
+    if (msg?.type === 'smd:images-info') {
+      sendResponse({ count: allImages().length });
+      return;
+    }
+    if (msg?.type === 'smd:save-all-images') {
+      saveAllImages().then((n) => sendResponse({ started: n }));
+      return true;
     }
     if (msg?.type === 'smd:list') {
       sendResponse(listVideos());
@@ -364,6 +402,82 @@
       sendResponse({ ok: false });
     }
   });
+
+  // ───────────── 버튼 직접 배치 모드 ─────────────
+  let editMode = false;
+  let editTemp = null;
+  let toolbar = null;
+  function enterEdit() {
+    if (editMode) return;
+    editMode = true;
+    editTemp = settings.placements?.[adapter.id] || null;
+    toolbar = document.createElement('smd-toolbar');
+    toolbar.setAttribute('style', 'all:initial;position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:2147483647;display:block');
+    const sh = toolbar.attachShadow({ mode: 'open' });
+    sh.innerHTML = `<style>
+      .bar{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-radius:14px;background:rgba(21,21,33,.96);color:#f3f3f8;
+        font:600 13px/1.4 "Pretendard","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;box-shadow:0 18px 50px -12px rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.1)}
+      button{all:unset;cursor:pointer;padding:8px 13px;border-radius:10px;font:700 12.5px/1 inherit;background:rgba(255,255,255,.1);color:#fff}
+      button:hover{background:rgba(255,255,255,.18)} .pri{background:linear-gradient(135deg,#5b5cff,#9b4dff 55%,#ff4f8b)}
+    </style><div class="bar"><span>다운로드 버튼을 끌어서 원하는 위치에 놓고 <b>저장</b>을 누르세요</span>
+      <button data-a="reset">기본 위치</button><button data-a="cancel">취소</button><button class="pri" data-a="save">저장</button></div>`;
+    sh.addEventListener('click', async (ev) => {
+      const a = ev.target.closest('button')?.dataset.a;
+      if (!a) return;
+      if (a === 'reset') {
+        editTemp = null;
+        return place();
+      }
+      if (a === 'save') {
+        const r = await chrome.storage.local.get('settings');
+        const cur = r.settings || {};
+        const placements = { ...(cur.placements || {}) };
+        if (editTemp) placements[adapter.id] = editTemp;
+        else delete placements[adapter.id];
+        await chrome.storage.local.set({ settings: { ...cur, placements } });
+        settings.placements = placements;
+      }
+      exitEdit();
+    });
+    document.documentElement.appendChild(toolbar);
+    place();
+  }
+  function exitEdit() {
+    editMode = false;
+    editTemp = null;
+    toolbar?.remove();
+    toolbar = null;
+    place();
+  }
+
+  // ───────────── 페이지의 사진 전부 저장 ─────────────
+  function allImages() {
+    const seen = new Set();
+    const out = [];
+    for (const img of document.images) {
+      if (img.closest('smd-anchor')) continue;
+      if ((img.naturalWidth || 0) < 200 || (img.naturalHeight || 0) < 150) continue;
+      const key = SITES.originalImageUrls(img)[0];
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(img);
+    }
+    return out;
+  }
+  async function saveAllImages() {
+    const imgs = allImages().slice(0, 300);
+    const page = U.cleanTitle(U.metaTitle()).slice(0, 50);
+    let started = 0;
+    for (let i = 0; i < imgs.length; i++) {
+      try {
+        const req = await SITES.imageRequest(imgs[i]);
+        Object.assign(req, { site: adapter.id, siteName: adapter.name, pageUrl: location.href, kind: 'image', id: String(i + 1).padStart(3, '0'), title: `${page} 사진` });
+        const res = await chrome.runtime.sendMessage({ type: 'smd:download', request: req });
+        if (res?.jobId) started++;
+      } catch {}
+    }
+    return started;
+  }
 
   function listVideos() {
     const out = [];
@@ -472,8 +586,30 @@
   document.addEventListener('pointermove', (e) => (pointer = { x: e.clientX, y: e.clientY }), { capture: true, passive: true });
   const pointerIn = (r) => pointer.x >= r.left && pointer.x <= r.right && pointer.y >= r.top && pointer.y <= r.bottom;
 
+  // 버튼 위치: 직접 배치한 위치(사이트별) > 설정한 위치(기본: 오른쪽 가운데). 사진은 오른쪽 아래.
+  function buttonSpot(entry, r, bw, bh) {
+    const clamp = (x, y) => ({
+      x: Math.max(r.left + 4, Math.min(x, r.right - bw - 4)),
+      y: Math.max(r.top + 4, Math.min(y, r.bottom - bh - 4)),
+    });
+    if (entry.kind === 'image') return clamp(r.right - bw - 10, r.bottom - bh - 10);
+    const custom = editTemp || settings.placements?.[adapter.id];
+    if (custom) return clamp(r.left + custom.fx * r.width - bw / 2, r.top + custom.fy * r.height - bh / 2);
+    const bottom = r.bottom - Math.min(offsetFor(entry.el), Math.max(8, r.height * 0.25)) - bh;
+    const midY = r.top + (r.height - bh) / 2;
+    switch (settings.buttonPosition) {
+      case 'bottom-right': return clamp(r.right - bw - 12, bottom);
+      case 'bottom-center':
+      case 'center': return clamp(r.left + (r.width - bw) / 2, bottom);
+      case 'bottom-left':
+      case 'left': return clamp(r.left + 12, bottom);
+      case 'top-right': return clamp(r.right - bw - 12, r.top + 12);
+      default: return clamp(r.right - bw - 12, midY); // 'mid-right' (오른쪽 가운데)
+    }
+  }
+
   function place() {
-    const on = enabled();
+    const on = enabled() || editMode;
     const now = performance.now();
     for (const entry of tracked.values()) {
       const v = entry.el;
@@ -485,11 +621,14 @@
       if (show && now - (entry.styleCheck || 0) > 600) {
         entry.styleCheck = now;
         const cs = getComputedStyle(v);
-        entry.hiddenStyle = cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0;
+        // X 는 사진 위에 투명도 0 인 <img> 를 깔아 두므로 사진은 투명도로 숨김 판단을 하지 않는다.
+        entry.hiddenStyle = cs.visibility === 'hidden' || cs.display === 'none' || (!isImg && Number(cs.opacity) === 0);
       }
       if (entry.hiddenStyle) show = false;
       const busy = entry.state !== 'idle';
+      if (editMode && isImg) show = false;
       const visible = show && (busy || !isImg || pointerIn(r) || pointerIn(b.getBoundingClientRect()));
+      b.classList.toggle('edit', editMode && !isImg);
       if (!visible) {
         if (entry.visible) {
           b.classList.remove('show');
@@ -508,11 +647,7 @@
       const bh = entry.h;
       // 앵커(0,0)의 화면 위치 = 이 버튼들이 기준으로 삼는 좌표 원점
       const o = entry.host.getBoundingClientRect();
-      const bottom = isImg ? 10 : Math.min(offsetFor(v), Math.max(8, r.height * 0.25));
-      const pos = settings.buttonPosition;
-      let x = isImg || pos === 'right' || !pos ? r.right - bw - 10 : pos === 'left' ? r.left + 10 : r.left + (r.width - bw) / 2;
-      let y = r.bottom - bottom - bh;
-      if (y < r.top + 4) y = r.top + 4;
+      let { x, y } = buttonSpot(entry, r, bw, bh);
       x -= o.left;
       y -= o.top;
       const tf = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
