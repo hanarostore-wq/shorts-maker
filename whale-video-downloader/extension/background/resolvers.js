@@ -82,6 +82,7 @@ export async function resolveYouTube(bg, ctx) {
   const found = [];
   let title = '';
   let author = '';
+  let duration = 0;
   for (const client of YT_CLIENTS) {
     const body = {
       context: { client: { ...client.ctx, userAgent: client.ua, hl: 'ko', gl: 'KR', ...(bg.visitorData ? { visitorData: bg.visitorData } : {}) } },
@@ -126,6 +127,7 @@ export async function resolveYouTube(bg, ctx) {
     const d = buildYouTube(src, ctx.prefer, client.ua);
     if (d) {
       title ||= pr?.videoDetails?.title || '';
+      duration ||= Number(pr?.videoDetails?.lengthSeconds) || 0;
       author ||= pr?.videoDetails?.author || '';
       // 한 클라이언트의 주소가 막혀도(403) 다음 클라이언트 주소로 이어서 시도하도록 모두 모은다.
       found.push(d, ...(d.fallbacks || []));
@@ -149,7 +151,7 @@ export async function resolveYouTube(bg, ctx) {
       // googlevideo 는 확장프로그램 출처(Origin: chrome-extension://)를 싫어할 수 있어 Origin/Referer 를 지운다.
       return { ...rest, headers: { ...(rest.headers || {}), stripOrigin: true } };
     });
-    return { ...chain[0], title, author, fallbacks: chain.slice(1) };
+    return { ...chain[0], title, author, duration, fallbacks: chain.slice(1) };
   }
   const first = errors.find((e) => /로그인|연령|재생할 수 없는|찾을 수 없습니다|라이브/.test(e.reason || '')) || errors[0];
   throw first || new ResolveError('유튜브 재생 정보를 받지 못했습니다.');

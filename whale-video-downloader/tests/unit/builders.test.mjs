@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as B from '../../extension/background/builders.js';
 import { parseMpd, isoDuration } from '../../extension/background/mpd.js';
-import { buildFilename, sanitizeFolder, sanitizePart } from '../../extension/shared/filename.js';
+import { buildFilename, sanitizeFolder, sanitizePart, countryFlag } from '../../extension/shared/filename.js';
 import { xToken } from '../../extension/background/resolvers.js';
 
 const IG_MPD = `<?xml version="1.0"?><MPD xmlns="urn:mpeg:dash:schema:mpd:2011" mediaPresentationDuration="PT6S"><Period><AdaptationSet contentType="video" mimeType="video/mp4">
@@ -183,8 +183,8 @@ test('파일 이름: 금지 문자 제거, 템플릿, 길이, 하위 폴더', ()
   assert.equal(buildFilename('{title} [{site}-{id}]', { title: 'a/b:c*d?"e"<f>|g', site: 'youtube', id: 'X1' }, 'mp4'), 'a b c d e f g [youtube-X1].mp4');
   assert.equal(buildFilename('{title}', { title: '', site: 'tiktok', siteName: '틱톡' }, 'mp4'), '틱톡 영상.mp4');
   assert.ok(buildFilename('{title}', { title: '가'.repeat(400) }, 'mp4').length < 160);
-  assert.equal(buildFilename('{author} - {title}', { title: 'CON' }, 'mp4'), '_CON.mp4');
-  assert.equal(buildFilename('{site}_{author}_{title}', { title: '브이로그', site: 'x' }, 'mp4'), 'x_브이로그.mp4');
+  assert.equal(buildFilename('{author} - {title}', { title: 'CON', flag: false }, 'mp4'), '_CON.mp4');
+  assert.equal(buildFilename('{site}_{author}_{title}', { title: '브이로그', site: 'x', flag: false }, 'mp4'), 'x_브이로그.mp4');
   assert.equal(sanitizeFolder('../영상//쇼츠\\2024/..'), '영상/쇼츠/2024');
   assert.equal(sanitizePart('con'), '_con');
 });
@@ -193,4 +193,15 @@ test('X 신디케이션 토큰 형식', () => {
   const t = xToken('1790000000000000000');
   assert.match(t, /^[0-9a-z]+$/);
   assert.ok(!/0/.test(t[t.length - 1]));
+});
+
+test('국적 깃발: 제목 글자로 추정, 사이트로 보완, 파일 이름 맨 앞에', () => {
+  assert.equal(countryFlag('여름 바다 브이로그'), '🇰🇷');
+  assert.equal(countryFlag('今日のおすすめ動画です'), '🇯🇵');
+  assert.equal(countryFlag('今天的视频很好看'), '🇨🇳');
+  assert.equal(countryFlag('Funny cat video'), '🇺🇸');
+  assert.equal(countryFlag('', 'douyin'), '🇨🇳');
+  assert.equal(countryFlag('สวัสดีครับ'), '🇹🇭');
+  assert.equal(buildFilename('{title}', { title: '여름 바다 브이로그', site: 'youtube' }, 'mp4'), '🇰🇷 여름 바다 브이로그.mp4');
+  assert.equal(buildFilename('{title}', { title: '여름 바다', flag: false }, 'mp4'), '여름 바다.mp4');
 });

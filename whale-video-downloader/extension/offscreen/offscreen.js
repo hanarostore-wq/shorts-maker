@@ -117,6 +117,7 @@ async function run({ jobId, desc, filename, mode, prefer }) {
     send({ type: 'smd:engine-progress', jobId, phase: p.phase, percent: p.percent ?? null, bytes: p.bytes ?? counter.bytes, total: p.total || 0, quality });
   };
   let target;
+  let measured = 0;
   try {
     if (desc.type === 'image') {
       await saveImage(jobId, desc);
@@ -140,9 +141,9 @@ async function run({ jobId, desc, filename, mode, prefer }) {
       await copyFile(desc, { write: (buf, position) => w.write({ type: 'write', position, data: buf }) }, hooks);
       await w.close();
     } else if (desc.type === 'merge') {
-      await mergeStreams({ ...desc, title: desc.title }, target.writable, hooks);
+      measured = (await mergeStreams({ ...desc, title: desc.title }, target.writable, hooks))?.duration || 0;
     } else if (desc.type === 'hls') {
-      await remuxHls({ url: desc.url, credentials: desc.credentials, prefer: desc.prefer || prefer, title: desc.title }, target.writable, hooks);
+      measured = (await remuxHls({ url: desc.url, credentials: desc.credentials, prefer: desc.prefer || prefer, title: desc.title }, target.writable, hooks))?.duration || 0;
     } else {
       throw new StepError(STEP.PARSE, `지원하지 않는 다운로드 방식입니다 (${desc.type}).`, '확장프로그램을 최신 버전으로 업데이트하세요.');
     }
@@ -153,7 +154,7 @@ async function run({ jobId, desc, filename, mode, prefer }) {
     const ext = (filename.split('.').pop() || 'mp4').toLowerCase();
     const url = URL.createObjectURL(file.slice(0, file.size, MIME[ext] || 'video/mp4'));
     finished.set(jobId, { url, cleanup: target.cleanup });
-    send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: file.size, quality });
+    send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: file.size, quality, duration: measured });
   } catch (err) {
     running.delete(jobId);
     await target?.fail().catch(() => {});

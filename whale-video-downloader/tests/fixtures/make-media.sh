@@ -24,6 +24,7 @@ ff -f lavfi -i testsrc2=size=1920x1080:rate=30 -f lavfi -i sine=frequency=700 -t
   -c:v libx264 -preset veryfast -g 30 -c:a aac -b:a 128k -f hls -hls_time 2 -hls_playlist_type vod -hls_segment_type fmp4 \
   -hls_segment_filename "hls_fmp4/s%v_%d.m4s" -hls_fmp4_init_filename "init_%v.mp4" -master_pl_name master.m3u8 \
   -var_stream_map "v:0,agroup:aud v:1,agroup:aud a:0,agroup:aud,default:yes" hls_fmp4/p%v.m3u8
+ff -f lavfi -i testsrc2=size=320x180:rate=15 -f lavfi -i sine=frequency=400 -t 95 -c:v libvpx-vp9 -b:v 80k -deadline realtime -cpu-used 8 -c:a libopus -b:a 32k long_95s.webm
 mkdir -p images
 ff -f lavfi -i testsrc2=size=1200x800 -frames:v 1 images/photo.webp
 ff -f lavfi -i testsrc2=size=1600x1000 -frames:v 1 images/photo.jpg

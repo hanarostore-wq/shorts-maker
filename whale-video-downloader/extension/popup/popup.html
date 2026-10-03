@@ -78,6 +78,10 @@
           </div>
         </label>
         <label class="row-toggle">
+          <div><b>종류별 폴더로 자동 분류</b><small>저장 폴더 안에 <b>사진</b> · <b>영상 1분30초 이하</b> · <b>영상 1분30초 초과</b> 폴더를 만들어 나눠 저장합니다</small></div>
+          <input type="checkbox" id="sortFolders" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
           <div><b>다운로드마다 저장 위치 묻기</b><small>저장할 때마다 폴더와 파일 이름을 고르는 창을 띄웁니다</small></div>
           <input type="checkbox" id="askEveryTime" /><span class="sw"><i></i></span>
         </label>
@@ -105,6 +109,10 @@
           <option value="{author} - {title}">작성자 - 제목</option>
         </select>
         <p class="preview" id="filenamePreview"></p>
+        <label class="row-toggle">
+          <div><b>제목 앞에 국적 깃발</b><small>제목·작성자 글자로 국적을 추정해 🇰🇷 🇯🇵 🇨🇳 🇺🇸 같은 깃발을 붙입니다</small></div>
+          <input type="checkbox" id="flagPrefix" /><span class="sw"><i></i></span>
+        </label>
       </div>
 
       <div class="card">

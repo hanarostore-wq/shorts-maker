@@ -174,6 +174,9 @@ const handlers = {
     if (u.pathname === '/watch') {
       return html(res, page('일반 사이트 영상', `<div class="card"><h3>일반 사이트</h3><video src="https://cdn.example-videos.com/progressive_1080p_land.mp4" controls muted style="width:640px;height:360px;background:#000"></video></div>`));
     }
+    if (u.pathname === '/long') {
+      return html(res, page('긴 영상', `<div class="card"><video src="https://cdn.example-videos.com/long_95s.webm" muted preload="metadata" style="width:640px;height:360px;background:#000"></video></div>`));
+    }
     if (u.pathname === '/photos') {
       return html(res, page('사진 페이지', `<div class="card"><img class="photo" src="https://cdn.example-videos.com/img/photo.webp" style="width:480px"></div>
         <div class="card"><a href="/somewhere"><img class="photo" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px"></a></div>

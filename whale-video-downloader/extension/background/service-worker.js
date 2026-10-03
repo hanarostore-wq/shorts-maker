@@ -319,11 +319,22 @@ async function waitDownload(job, id, phase) {
 
 const asciiOnly = (s) => String(s || '').replace(/[^\x20-\x7e]/g, '').replace(/\s+/g, ' ').trim();
 
+// 종류별 폴더: 사진 / 영상 1분30초 이하 / 영상 1분30초 초과 (설정 → 저장 폴더 안에 자동으로 만들어진다)
+export const FOLDERS = { image: '사진', short: '영상 1분30초 이하', long: '영상 1분30초 초과' };
+function saveFolder(job, settings) {
+  const base = sanitizeFolder(settings.subfolder);
+  if (settings.sortFolders === false) return base;
+  let cat;
+  if (job.request?.kind === 'image') cat = FOLDERS.image;
+  else cat = (job.duration || 0) > 90 ? FOLDERS.long : FOLDERS.short;
+  return base ? `${base}/${cat}` : cat;
+}
+
 async function startBrowserDownload(job, url, settings, phase) {
   const opts = (name, sub) => ({ url, filename: sub ? `${sub}/${name}` : name, conflictAction: 'uniquify', saveAs: !!settings.askEveryTime });
   let id;
   try {
-    id = await chrome.downloads.download(opts(job.filename, sanitizeFolder(settings.subfolder)));
+    id = await chrome.downloads.download(opts(job.filename, saveFolder(job, settings)));
   } catch (err) {
     if (!/invalid filename/i.test(err?.message || '')) {
       throw {
@@ -337,7 +348,9 @@ async function startBrowserDownload(job, url, settings, phase) {
     const base = asciiOnly(job.filename.replace(/\.[^.]+$/, '')).replace(/^[\s\-_[\]]+|[\s\-_[\]]+$/g, '');
     const name = `${base || `${job.site}_${asciiOnly(job.request?.id) || Date.now()}`}.${ext}`;
     try {
-      id = await chrome.downloads.download(opts(name, asciiOnly(sanitizeFolder(settings.subfolder)).replace(/^\/+|\/+$/g, '')));
+      const ascii = { image: 'photos', short: 'videos-under-90s', long: 'videos-over-90s' };
+      const folder = saveFolder(job, settings).replace(FOLDERS.image, ascii.image).replace(FOLDERS.short, ascii.short).replace(FOLDERS.long, ascii.long);
+      id = await chrome.downloads.download(opts(name, asciiOnly(folder).replace(/^\/+|\/+$/g, '')));
       job.filename = name;
       job.warning = '이 시스템이 한글 파일·폴더 이름을 지원하지 않아 영문 이름으로 저장했습니다.';
     } catch (err2) {
@@ -370,6 +383,7 @@ async function runEngine(job, d, settings) {
   job.engine = null;
   // 사진은 실제 형식에 맞춰 확장자를 정한다(jpg/png/gif 그대로, 그 밖은 PNG 로 변환됨)
   if (result.ext) job.filename = job.filename.replace(/\.[^.]+$/, `.${result.ext}`);
+  if (!job.duration && result.duration) job.duration = result.duration;
   // OPFS 임시 파일 → 웨일 다운로드 폴더로 저장
   job.phase = 'save';
   job.percent = null;
@@ -428,6 +442,7 @@ async function runJob(job) {
   }
   if (job.canceled) return;
   if (!job.title && desc.title) job.title = desc.title;
+  job.duration = Number(req.duration) || Number(desc.duration) || 0;
   applyCredentials(desc, req);
   // 동시에 너무 많이 받지 않도록 최대 3개씩(사진 일괄 저장 대비)
   if (active >= MAX_ACTIVE) {
@@ -462,6 +477,7 @@ async function runChain(job, desc, settings, req) {
       id: req.id,
       author: req.author || desc.author,
       quality: job.quality,
+      flag: settings.flagPrefix !== false,
     }, d.ext || 'mp4');
     try {
       await attempt(job, d, settings);

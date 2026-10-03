@@ -3,6 +3,8 @@ export const DEFAULT_SETTINGS = {
   subfolder: '', // 웨일 다운로드 폴더 안의 하위 폴더 (비우면 바로 저장)
   askEveryTime: false, // 다운로드마다 저장 위치 묻기
   imageButtons: true, // 사진에도 저장 버튼
+  sortFolders: true, // 사진 / 영상 1분30초 이하 / 영상 1분30초 초과 폴더로 자동 분류
+  flagPrefix: true, // 파일 이름 맨 앞에 영상 국적 깃발 이모지
   filenameTemplate: '{title} [{site}-{id}]',
   quality: 'best', // 'best' = 원본 최고화질, 'compat' = 호환성(H.264) 우선
   showButtons: true,

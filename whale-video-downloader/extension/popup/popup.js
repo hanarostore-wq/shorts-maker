@@ -65,9 +65,9 @@ tplSel.value = settings.filenameTemplate;
 tplSel.addEventListener('change', () => save({ filenameTemplate: tplSel.value }));
 
 function renderPreview() {
-  const name = buildFilename(settings.filenameTemplate, { title: '여름 바다 브이로그', site: 'youtube', siteName: '유튜브', id: 'dQw4w9WgXcQ', author: '하나로', quality: '1080p' }, 'mp4');
+  const name = buildFilename(settings.filenameTemplate, { title: '여름 바다 브이로그', site: 'youtube', siteName: '유튜브', id: 'dQw4w9WgXcQ', author: '하나로', quality: '1080p', flag: settings.flagPrefix !== false }, 'mp4');
   const sub = sanitizeFolder(settings.subfolder);
-  const where = `${shownFolder}/${sub ? `${sub}/` : ''}`;
+  const where = `${shownFolder}/${sub ? `${sub}/` : ''}${settings.sortFolders !== false ? '영상 1분30초 이하/' : ''}`;
   $('#filenamePreview').innerHTML = `예시: ${escapeHtml(where)}<b>${escapeHtml(name)}</b>`;
 }
 
@@ -116,6 +116,7 @@ async function renderFolder() {
   if (mine) {
     const sep = mine.filename.includes('\\') ? '\\' : '/';
     let dir = mine.filename.slice(0, mine.filename.lastIndexOf(sep));
+    for (const cat of ['사진', '영상 1분30초 이하', '영상 1분30초 초과']) if (dir.endsWith(sep + cat)) dir = dir.slice(0, -(cat.length + 1));
     const sub = sanitizeFolder(settings.subfolder).split('/').join(sep);
     if (sub && dir.endsWith(sep + sub)) dir = dir.slice(0, -(sub.length + 1));
     shownFolder = dir;
@@ -127,6 +128,10 @@ async function renderFolder() {
   renderPreview();
 }
 renderFolder();
+$('#sortFolders').checked = settings.sortFolders !== false;
+$('#sortFolders').addEventListener('change', (e) => save({ sortFolders: e.target.checked }));
+$('#flagPrefix').checked = settings.flagPrefix !== false;
+$('#flagPrefix').addEventListener('change', (e) => save({ flagPrefix: e.target.checked }));
 $('#imageButtons').checked = settings.imageButtons !== false;
 $('#imageButtons').addEventListener('change', (e) => save({ imageButtons: e.target.checked }));
 

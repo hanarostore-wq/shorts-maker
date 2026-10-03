@@ -165,6 +165,7 @@ async function scenario(s) {
     if (e.audio && !info.acodec) problems.push('오디오 없음');
     if (e.dir && !path.dirname(saved).endsWith(e.dir)) problems.push(`저장 폴더 ${path.dirname(saved)} (기대: …/${e.dir})`);
     if (!(info.duration > 5)) problems.push(`길이 ${info.duration}s`);
+    if (e.minDuration && !(info.duration >= e.minDuration)) problems.push(`길이 ${info.duration}s < ${e.minDuration}`);
     await page.waitForTimeout(300);
     const okText = await panelText(target);
     if (e.noSuccessPanel && okText) problems.push(`완료 창이 떴음: ${okText}`);
@@ -185,7 +186,7 @@ async function scenario(s) {
   }
 }
 
-const SUB = 'downloads';
+const SUB = 'downloads/영상 1분30초 이하';
 const scenarios = [
   { name: '일반 사이트(직접 mp4)', url: 'https://www.example-videos.com/watch', expect: { width: 1920, height: 1080, audio: true, dir: SUB, noSuccessPanel: true }, cdn: 'cdn.example-videos.com', shot: 'generic' },
   { name: '유튜브 일반 영상', url: 'https://www.youtube.com/watch?v=YTwatch0001', expect: { width: 1920, height: 1080, vcodec: 'h264', audio: true }, cdn: 'rr1---sn-mock.googlevideo.com', shot: 'youtube' },
@@ -213,6 +214,7 @@ const scenarios = [
   { name: '유튜브(앱 클라이언트 실패 → 페이지 플레이어 대체)', url: 'https://www.youtube.com/watch?v=YTpage00001', expect: { width: 1920, height: 1080, audio: true } },
   { name: '일반 사이트(Range 미지원 서버 → 스트리밍 저장)', url: 'https://www.example-videos.com/norange', expect: { width: 1080, height: 1920, audio: true } },
   { name: 'X 타임라인(게시물 안 열고, React 데이터)', url: 'https://x.com/home', expect: { width: 1080, height: 1920, audio: true } },
+  { name: '[폴더 분류] 1분30초 초과 영상 → 영상 1분30초 초과 폴더', url: 'https://www.example-videos.com/long', settle: 2500, expect: { ext: 'webm', width: 320, height: 180, audio: true, minDuration: 90, dir: 'downloads/영상 1분30초 초과' } },
   // 오류 경로
   { name: '[오류] 진행 중 라이브(HLS)', url: 'https://www.example-videos.com/live', expectError: ['라이브', '해결'] },
   { name: '[오류] 틱톡 만료 주소(403)', url: 'https://www.tiktok.com/@creator/video/7300000000000000009', expectError: ['단계', '영상 데이터 받기', '403', '해결'], shot: 'tiktok-expired' },
@@ -226,7 +228,7 @@ for (const s of scenarios) await scenario(s);
 // ── 저장 위치: 하위 폴더 설정 반영 ──
 if (!only || only === 'folder') {
   await setSettings({ subfolder: '쇼츠 소스/2026' });
-  await scenario({ name: '[저장 위치] 하위 폴더 설정 반영', url: 'https://www.example-videos.com/watch', expect: { width: 1920, height: 1080, audio: true, dir: '쇼츠 소스/2026' } });
+  await scenario({ name: '[저장 위치] 하위 폴더 설정 반영', url: 'https://www.example-videos.com/watch', expect: { width: 1920, height: 1080, audio: true, dir: '쇼츠 소스/2026/영상 1분30초 이하' } });
   await setSettings({ subfolder: '' });
 }
 
@@ -248,7 +250,7 @@ if (!only || only === 'image' || '사진'.includes(only)) {
       await btn.click();
       const saved = await waitFile(before, 30000);
       const out = saved ? execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_name,width,height', '-of', 'csv=p=0', saved]).toString().trim() : '';
-      const ok = !!saved && saved.endsWith(`.${ext}`) && out.includes(`${w},${h}`);
+      const ok = !!saved && saved.endsWith(`.${ext}`) && out.includes(`${w},${h}`) && path.basename(path.dirname(saved)) === '사진';
       record(`[사진] ${label}`, ok, { note: saved ? `${path.relative(DL, saved)} · ${out}` : '파일 없음', ms: Date.now() - t0 });
     } catch (err) {
       record(`[사진] ${label}`, false, { note: err.message.split('\n')[0] });
