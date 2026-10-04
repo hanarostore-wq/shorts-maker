@@ -827,77 +827,36 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
-// ── 보고 있는 영상 정지 막기 ──
+// ── 화면 밖 영상 정지: 재생 중 스크롤로 화면에서 벗어나면 멈춤 ──
 {
   const page = await ctx.newPage();
   try {
-    await setSettings({ playLock: true, captionOnMedia: false, preventDuplicates: false });
-    await page.goto('https://www.example-videos.com/locktest', { waitUntil: 'domcontentloaded' });
+    await setSettings({ pauseOffscreen: true });
+    await page.goto('https://www.example-videos.com/scrollpause', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1500);
-    const st = (id) => page.evaluate((i) => !document.getElementById(i).paused, id);
-    const s0 = await st('l1');
-    // 1) 확장 다운로드 버튼을 누름 → 사이트가 멈추려 해도 계속 재생
-    await page.locator('smd-anchor .btn.show').first().click();
+    const st = () => page.evaluate(() => ({ v1: !document.getElementById('v1').paused, bg: !document.getElementById('bgv').paused }));
+    const s0 = await st();
+    await page.evaluate(() => scrollTo(0, 3000));
     await page.waitForTimeout(800);
-    const s1 = await st('l1');
-    // 2) 창이 포커스를 잃음 → 사이트가 멈추려 해도 계속 재생
-    await page.evaluate(() => dispatchEvent(new Event('blur')));
-    await page.waitForTimeout(300);
-    const s2 = await st('l1');
-    const tried = await page.evaluate(() => ({ site: window.__sitePause || 0, blur: window.__blurPause || 0 }));
-    // 3) 사용자가 직접 정지 → 멈춤
-    await page.locator('#pause1').click();
+    const s1 = await st();
+    await page.evaluate(() => scrollTo(0, 0));
+    await page.waitForTimeout(800);
+    const s2 = await st();
+    record('[화면 밖 정지] 스크롤로 벗어나면 멈춤, 다시 보여도 저절로 재생 안 함', s0.v1 && !s1.v1 && !s2.v1, { note: JSON.stringify({ 처음: s0.v1, 벗어난후: s1.v1, 돌아온후: s2.v1 }) });
+    record('[화면 밖 정지] (예외 경로) 처음부터 숨은 영상(음악·광고용)은 건드리지 않음', s0.bg && s1.bg, { note: JSON.stringify({ 숨은영상재생중: s1.bg }) });
+    // 설정을 끄면 화면에서 벗어나도 계속 재생
+    await setSettings({ pauseOffscreen: false });
     await page.waitForTimeout(400);
-    const s3 = await st('l1');
-    // 4) 다시 재생 후 다른 영상을 소리와 함께 재생 → 이전 영상 멈춤
-    await page.locator('#play1').click();
+    await page.evaluate(() => document.getElementById('v1').play());
     await page.waitForTimeout(500);
-    await page.locator('#play2').click();
-    await page.waitForTimeout(700);
-    const s4 = { l1: await st('l1'), l2: await st('l2') };
-    record('[정지 막기] 확장 버튼·창 전환 때 사이트가 멈춰도 계속 재생, 직접 정지·다른 영상 재생 때만 멈춤', s0 && s1 && s2 && tried.site > 0 && tried.blur > 0 && !s3 && !s4.l1 && s4.l2, { note: JSON.stringify({ 처음: s0, 다운로드후: s1, 창전환후: s2, 사이트시도: tried, 직접정지후: s3, 다른영상: s4 }) });
-    // 음소거 자동 재생 영상의 소리를 켜고 보는 중 → 영상 밖을 눌러도·다른 창 pause 로 우회해도 계속 재생, 스페이스는 멈춤, 숨기면 멈춤
-    const p2 = await ctx.newPage();
-    try {
-      await p2.goto('https://www.example-videos.com/locktest2', { waitUntil: 'domcontentloaded' });
-      await p2.waitForTimeout(1200);
-      const st2 = () => p2.evaluate(() => !document.getElementById('m1').paused);
-      await p2.locator('#unmute').click();
-      await p2.waitForTimeout(300);
-      await p2.locator('#likeOut').click();
-      await p2.waitForTimeout(500);
-      const a = await st2();
-      await p2.locator('#realm').click();
-      await p2.waitForTimeout(500);
-      const b = await st2();
-      await p2.evaluate(() => document.activeElement?.blur());
-      await p2.keyboard.press('Space');
-      await p2.evaluate(() => document.getElementById('m1').pause());
-      await p2.waitForTimeout(300);
-      const c = await st2();
-      await p2.evaluate(() => document.getElementById('m1').play());
-      await p2.waitForTimeout(1600);
-      await p2.locator('#hide').click();
-      await p2.waitForTimeout(400);
-      const d = await st2();
-      record('[정지 막기] 소리 켠 피드 영상: 영상 밖 클릭·우회 정지에도 계속 재생', a && b, { note: JSON.stringify({ 영상밖클릭후: a, 다른창pause후: b }) });
-      record('[정지 막기] (허용 경로) 스페이스 키 정지·영상 숨김 정지는 멈춤', !c && !d, { note: JSON.stringify({ 스페이스후재생중: c, 숨김후재생중: d }) });
-    } finally {
-      await p2.close();
-    }
-    // 설정 끄면 사이트가 멈출 수 있음
-    await setSettings({ playLock: false });
-    await page.waitForTimeout(400);
-    await page.evaluate(() => document.getElementById('l1').play());
-    await page.waitForTimeout(400);
-    await page.evaluate(() => dispatchEvent(new Event('blur')));
-    await page.waitForTimeout(300);
-    const offL1 = await st('l1');
-    record('[정지 막기] 설정 끄면 원래대로(사이트가 멈출 수 있음)', !offL1, { note: `창 전환 후 l1 재생 중=${offL1}` });
+    await page.evaluate(() => scrollTo(0, 3000));
+    await page.waitForTimeout(800);
+    const s3 = await st();
+    record('[화면 밖 정지] 설정 끄면 벗어나도 계속 재생', s3.v1, { note: `벗어난 뒤 재생 중=${s3.v1}` });
   } catch (err) {
-    record('[정지 막기]', false, { note: err.message.split('\n')[0] });
+    record('[화면 밖 정지]', false, { note: err.message.split('\n')[0] });
   } finally {
-    await setSettings({ playLock: true });
+    await setSettings({ pauseOffscreen: true });
     await page.close();
   }
 }
