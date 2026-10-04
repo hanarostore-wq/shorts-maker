@@ -856,6 +856,35 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.waitForTimeout(700);
     const s4 = { l1: await st('l1'), l2: await st('l2') };
     record('[정지 막기] 확장 버튼·창 전환 때 사이트가 멈춰도 계속 재생, 직접 정지·다른 영상 재생 때만 멈춤', s0 && s1 && s2 && tried.site > 0 && tried.blur > 0 && !s3 && !s4.l1 && s4.l2, { note: JSON.stringify({ 처음: s0, 다운로드후: s1, 창전환후: s2, 사이트시도: tried, 직접정지후: s3, 다른영상: s4 }) });
+    // 음소거 자동 재생 영상의 소리를 켜고 보는 중 → 영상 밖을 눌러도·다른 창 pause 로 우회해도 계속 재생, 스페이스는 멈춤, 숨기면 멈춤
+    const p2 = await ctx.newPage();
+    try {
+      await p2.goto('https://www.example-videos.com/locktest2', { waitUntil: 'domcontentloaded' });
+      await p2.waitForTimeout(1200);
+      const st2 = () => p2.evaluate(() => !document.getElementById('m1').paused);
+      await p2.locator('#unmute').click();
+      await p2.waitForTimeout(300);
+      await p2.locator('#likeOut').click();
+      await p2.waitForTimeout(500);
+      const a = await st2();
+      await p2.locator('#realm').click();
+      await p2.waitForTimeout(500);
+      const b = await st2();
+      await p2.evaluate(() => document.activeElement?.blur());
+      await p2.keyboard.press('Space');
+      await p2.evaluate(() => document.getElementById('m1').pause());
+      await p2.waitForTimeout(300);
+      const c = await st2();
+      await p2.evaluate(() => document.getElementById('m1').play());
+      await p2.waitForTimeout(1600);
+      await p2.locator('#hide').click();
+      await p2.waitForTimeout(400);
+      const d = await st2();
+      record('[정지 막기] 소리 켠 피드 영상: 영상 밖 클릭·우회 정지에도 계속 재생', a && b, { note: JSON.stringify({ 영상밖클릭후: a, 다른창pause후: b }) });
+      record('[정지 막기] (허용 경로) 스페이스 키 정지·영상 숨김 정지는 멈춤', !c && !d, { note: JSON.stringify({ 스페이스후재생중: c, 숨김후재생중: d }) });
+    } finally {
+      await p2.close();
+    }
     // 설정 끄면 사이트가 멈출 수 있음
     await setSettings({ playLock: false });
     await page.waitForTimeout(400);

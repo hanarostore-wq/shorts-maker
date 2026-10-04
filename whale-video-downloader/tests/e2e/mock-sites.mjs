@@ -251,6 +251,16 @@ const handlers = {
         `document.addEventListener('pointerdown', () => setTimeout(() => { window.__sitePause = (window.__sitePause || 0) + 1; document.getElementById('l1').pause(); }, 200), true);
          addEventListener('blur', () => { window.__blurPause = (window.__blurPause || 0) + 1; document.getElementById('l1').pause(); });`));
     }
+    if (u.pathname === '/locktest2') {
+      // X·블루스카이 피드처럼 음소거 자동 재생 → 소리 켜기. 사이트는 아무 곳(영상 밖)을 눌러도 멈추려 하고,
+      //   다른 창(iframe)의 pause 함수로 우회해 멈추기도 하고, 영상을 숨긴 뒤 멈추기도 한다.
+      return html(res, page('정지 막기 테스트 2', `
+        <div style="position:relative;width:480px;height:270px"><video id="m1" src="https://cdn.example-videos.com/preview.webm" muted loop playsinline autoplay style="width:100%;height:100%;background:#000"></video></div>
+        <button id="unmute" onclick="document.getElementById('m1').muted = false">소리 켜기</button>
+        <button id="likeOut" onclick="setTimeout(() => document.getElementById('m1').pause(), 100)">좋아요(영상 밖)</button>
+        <button id="realm" onclick="const f = document.createElement('iframe'); document.body.appendChild(f); f.contentWindow.HTMLMediaElement.prototype.pause.call(document.getElementById('m1'))">다른 창 pause</button>
+        <button id="hide" onclick="const v = document.getElementById('m1'); v.style.display = 'none'; v.pause()">숨기고 멈춤</button>`));
+    }
     if (u.pathname === '/clicktoggle') {
       // 흔한 사이트 플레이어: 영상을 덮은 투명 막을 누르면 재생/정지(클릭), 두 번째는 누르는 순간(pointerdown) 정지, 막 안에 '좋아요' 버튼
       return html(res, page('클릭 정지 테스트', `
