@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS = {
   xFollowButtons: true, // X 피드 작성자 옆 팔로우/팔로잉 버튼
   bskyFollowButtons: true, // 블루스카이 피드 게시물에 팔로우/팔로잉 버튼
   xWideLayout: true, // X 오른쪽 사이드바 숨기고 가운데 피드 크게 // X 영상 재생 시 소리 자동 켜기
+  siteFolders: true, // 가장 위에 사이트별 폴더(유튜브/블루스카이/X …)
   sortFolders: true,
   countryFolders: true, // 그 안에 나라별 하위 폴더(한국/미국/중국…/기타) // 사진 / 영상 1분30초 이하 / 영상 1분30초 초과 폴더로 자동 분류
   flagPrefix: true,

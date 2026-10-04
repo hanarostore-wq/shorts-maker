@@ -232,7 +232,7 @@ const scenarios = [
 
 console.log(`확장프로그램 ID: ${extId}\n`);
 // 일반 시나리오는 원본 그대로 저장되는지 보므로 요약 글자 넣기는 끄고, 아래 전용 테스트에서 켠다.
-await setSettings({ captionOnMedia: false, preventDuplicates: false }); // 같은 페이지를 여러 번 받는 시나리오가 많아 중복 막기는 전용 테스트에서만 켠다
+await setSettings({ captionOnMedia: false, preventDuplicates: false, siteFolders: false }); // 사이트별 폴더는 전용 테스트에서 확인. 같은 페이지를 여러 번 받는 시나리오가 많아 중복 막기는 전용 테스트에서만 켠다
 for (const s of scenarios) await scenario(s);
 
 // ── 저장 위치: 하위 폴더 설정 반영 ──
@@ -699,6 +699,30 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   } catch (err) {
     record('[나라 구분]', false, { note: err.message.split('\n')[0] });
   } finally {
+    await page.close();
+  }
+}
+
+// ── 사이트별 가장 위 폴더 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ captionOnMedia: false, siteFolders: true, sortFolders: true, countryFolders: true });
+    await clearDownloaded();
+    const got = {};
+    for (const [key, url] of [['유튜브', 'https://www.youtube.com/watch?v=YTwatch0001'], ['example-videos.com', 'https://www.example-videos.com/rerender']]) {
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      const before = new Set(listFiles(DL));
+      await page.locator('smd-anchor .btn.show').first().click();
+      const saved = await waitFile(before, 60000);
+      got[key] = saved ? path.relative(DL, saved).split(path.sep).slice(0, -1).join('/') : '저장 안 됨';
+    }
+    record('[폴더] 가장 위에 사이트별 폴더 → 그 안에 종류 → 나라', got['유튜브'] === '유튜브/영상 1분30초 이하/한국' && got['example-videos.com'] === 'example-videos.com/영상 1분30초 이하/한국', { note: JSON.stringify(got) });
+  } catch (err) {
+    record('[폴더] 사이트별', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ siteFolders: false });
     await page.close();
   }
 }

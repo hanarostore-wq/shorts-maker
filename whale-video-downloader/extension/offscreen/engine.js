@@ -148,7 +148,7 @@ function urlSource(stream, opts) {
   return new MB.UrlSource(stream.url, {
     fetchFn: makeFetchFn({ rangeParam: !!stream.rangeParam, size: Number(stream.size) || 0, credentials: stream.credentials || 'include', counter: opts.counter, signal: opts.signal }),
     getRetryDelay: retryDelay,
-    parallelism: 3,
+    parallelism: 6, // HLS 조각·범위 요청 동시 6개(예전 3개)
     maxCacheSize: 48 * 1024 * 1024,
   });
 }
@@ -182,12 +182,59 @@ async function segmentsBlob(stream, { counter, signal }) {
       if (lastErr) throw lastErr;
     }
   };
-  await Promise.all([worker(), worker(), worker(), worker()]);
+  // 조각 파일 동시 8개(예전 4개)
+  await Promise.all(Array.from({ length: 8 }, worker));
   return new Blob(parts);
+}
+
+// 영상·음성이 따로인 스트림(유튜브 등): 합치기 전에 파일을 조각으로 나눠 동시에 6개씩 미리 받는다.
+// (합치는 쪽이 필요할 때마다 한 조각씩 읽으면 연결 하나 속도로만 받게 되어 느리다)
+const PREFETCH_PARALLEL = 6;
+const PREFETCH_MAX = 2 * 1024 * 1024 * 1024; // 이보다 크면 미리 받지 않고 읽으면서 받는다
+async function prefetchBlob(stream, { counter, signal }) {
+  const url = stream.url;
+  let total = Number(stream.size) || 0;
+  const first = await fetchRange(url, 0, MB_CHUNK - 1, stream, signal);
+  const ranged = first.res.status === 206 || (stream.rangeParam && total > 0);
+  if (!ranged) {
+    // 서버가 조각 요청을 지원하지 않으면 받은 전체를 그대로 쓴다
+    counter.bytes += first.buf.byteLength;
+    return new Blob([first.buf]);
+  }
+  const m = /\/(\d+)\s*$/.exec(first.res.headers.get('content-range') || '');
+  if (m) total = Number(m[1]);
+  if (!total) total = first.buf.byteLength;
+  if (total > PREFETCH_MAX) return null;
+  counter.bytes += first.buf.byteLength;
+  const parts = [new Blob([first.buf])];
+  const starts = [];
+  for (let s = first.buf.byteLength; s < total; s += MB_CHUNK) starts.push(s);
+  const out = new Array(starts.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < starts.length) {
+      const i = next++;
+      const s = starts[i];
+      const e = Math.min(total, s + MB_CHUNK) - 1;
+      const { buf } = await fetchRange(url, s, e, stream, signal);
+      if (!buf.byteLength) throw new StepError(STEP.FETCH, '영상 서버가 빈 데이터를 보냈습니다.', '페이지를 새로고침한 뒤 다시 시도하세요.', url);
+      counter.bytes += buf.byteLength;
+      out[i] = new Blob([buf]);
+    }
+  };
+  await Promise.all(Array.from({ length: PREFETCH_PARALLEL }, worker));
+  return new Blob(parts.concat(out));
 }
 
 async function sourceFor(stream, opts) {
   if (stream.segments?.length) return new MB.BlobSource(await segmentsBlob(stream, opts));
+  try {
+    const blob = await prefetchBlob(stream, opts);
+    if (blob) return new MB.BlobSource(blob);
+  } catch (err) {
+    if (err?.name === 'AbortError') throw err;
+    // 미리 받기에 실패하면 예전 방식(읽으면서 받기)으로 한 번 더 시도
+  }
   return urlSource(stream, opts);
 }
 
@@ -271,8 +318,8 @@ export async function copyFile(stream, writer, { onProgress, signal, counter }) 
   if (!total) total = position; // 크기를 모르면 첫 조각이 전부다.
   onProgress?.({ phase: 'download', bytes: position, total, percent: (position / total) * 100 });
 
-  // 2) 나머지를 최대 4개 병렬로 받되, 파일에는 순서대로 쓴다.
-  const parallel = 4;
+  // 2) 나머지를 최대 6개 병렬로 받되, 파일에는 순서대로 쓴다(예전 4개).
+  const parallel = 6;
   const pending = new Map();
   let nextStart = position;
   const schedule = () => {

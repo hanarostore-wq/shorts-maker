@@ -383,8 +383,22 @@ const asciiOnly = (s) => String(s || '').replace(/[^\x20-\x7e]/g, '').replace(/\
 
 // 종류별 폴더: 사진 / 영상 1분30초 이하 / 영상 1분30초 초과 (설정 → 저장 폴더 안에 자동으로 만들어진다)
 export const FOLDERS = { image: '사진', short: '영상 1분30초 이하', long: '영상 1분30초 초과' };
+// 가장 위 폴더: 사이트 이름(유튜브 / 블루스카이 / X …). 지원 목록 밖 사이트는 주소 이름(example.com)
+const SITE_FOLDER = { 'X(트위터)': 'X', '네이버 TV·클립': '네이버' };
+function siteFolderOf(job) {
+  if (job.site === 'generic' || !job.siteName) {
+    try {
+      return new URL(job.pageUrl || job.request?.pageUrl || '').hostname.replace(/^www\./, '') || '기타 사이트';
+    } catch {
+      return '기타 사이트';
+    }
+  }
+  return SITE_FOLDER[job.siteName] || job.siteName;
+}
+
 function saveFolder(job, settings) {
   const parts = [sanitizeFolder(settings.subfolder)];
+  if (settings.siteFolders !== false) parts.push(sanitizeFolder(siteFolderOf(job)));
   if (settings.sortFolders !== false) parts.push(job.request?.kind === 'image' ? FOLDERS.image : (job.duration || 0) > 90 ? FOLDERS.long : FOLDERS.short);
   // 그 안에 나라별 하위 폴더 (한국 / 미국 / 중국 … / 기타). 파일 이름 앞 [국가] 표시와 같은 판단을 쓴다.
   if (settings.countryFolders !== false) parts.push(job.country || '기타');
@@ -572,7 +586,7 @@ async function runJob(job) {
     for (const d of [desc, ...(desc.fallbacks || [])]) d.caption = caption;
   }
   delete req.shotData;
-  // 동시에 너무 많이 받지 않도록 최대 3개씩(사진 일괄 저장 대비)
+  // 동시에 너무 많이 받지 않도록 최대 5개씩(사진 일괄 저장 대비)
   if (active >= MAX_ACTIVE) {
     job.phase = 'queue';
     notify(job);
@@ -587,7 +601,7 @@ async function runJob(job) {
   }
 }
 
-const MAX_ACTIVE = 3;
+const MAX_ACTIVE = 5; // 동시에 받는 개수(예전 3개)
 let active = 0;
 const waiting = [];
 

@@ -67,7 +67,7 @@ tplSel.addEventListener('change', () => save({ filenameTemplate: tplSel.value })
 function renderPreview() {
   const name = buildFilename(settings.filenameTemplate, { title: '여름 바다 브이로그', site: 'youtube', siteName: '유튜브', id: 'dQw4w9WgXcQ', author: '하나로', quality: '1080p', flag: settings.flagPrefix === false ? false : settings.flagStyle === 'emoji' ? 'emoji' : 'name' }, 'mp4');
   const sub = sanitizeFolder(settings.subfolder);
-  const where = `${shownFolder}/${sub ? `${sub}/` : ''}${settings.sortFolders !== false ? '영상 1분30초 이하/' : ''}${settings.countryFolders !== false ? '한국/' : ''}`;
+  const where = `${shownFolder}/${sub ? `${sub}/` : ''}${settings.siteFolders !== false ? '유튜브/' : ''}${settings.sortFolders !== false ? '영상 1분30초 이하/' : ''}${settings.countryFolders !== false ? '한국/' : ''}`;
   $('#filenamePreview').innerHTML = `예시: ${escapeHtml(where)}<b>${escapeHtml(name)}</b>`;
 }
 
@@ -134,6 +134,8 @@ for (const id of ['captionOnMedia', 'captionCover', 'captionIntro', 'captionKeep
 }
 $('#sortFolders').checked = settings.sortFolders !== false;
 $('#sortFolders').addEventListener('change', (e) => save({ sortFolders: e.target.checked }));
+$('#siteFolders').checked = settings.siteFolders !== false;
+$('#siteFolders').addEventListener('change', (e) => save({ siteFolders: e.target.checked }));
 $('#countryFolders').checked = settings.countryFolders !== false;
 $('#countryFolders').addEventListener('change', (e) => save({ countryFolders: e.target.checked }));
 $('#flagPrefix').checked = settings.flagPrefix !== false;
