@@ -8,6 +8,27 @@ const siteMeta = Object.fromEntries(SITE_LIST.map((s) => [s.id, s]));
 
 $('#version').textContent = `v${chrome.runtime.getManifest().version}`;
 
+// ───────────── 업데이트: 폴더에 새 버전 파일이 받아져 있으면 '업데이트' 단추 ─────────────
+// (설치·업데이트 프로그램이 매시간 GitHub 에서 새 버전을 받아 확장 폴더에 덮어쓴다. 웨일은 다시 불러와야 적용된다)
+const verNum = (v) => String(v || '0').split('.').map((n) => Number(n) || 0);
+const newer = (a, b) => {
+  const x = verNum(a);
+  const y = verNum(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+  return false;
+};
+(async () => {
+  try {
+    const disk = await (await fetch(chrome.runtime.getURL('manifest.json'), { cache: 'no-store' })).json();
+    const cur = chrome.runtime.getManifest().version;
+    if (newer(disk.version, cur)) {
+      $('#newVer').textContent = `v${disk.version}`;
+      $('#updateBar').hidden = false;
+    }
+  } catch {}
+})();
+$('#applyUpdate').addEventListener('click', () => chrome.runtime.reload());
+
 // ───────────── 탭 ─────────────
 function showTab(name) {
   $$('.tab').forEach((t, i) => {

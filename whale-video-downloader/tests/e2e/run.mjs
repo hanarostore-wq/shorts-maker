@@ -776,6 +776,27 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── 폴더에 새 버전 파일이 받아지면 팝업에 [업데이트] 단추 ──
+{
+  const mf = path.join(EXT, 'manifest.json');
+  const orig = fs.readFileSync(mf, 'utf8');
+  try {
+    const p0 = await extPage();
+    const before = await p0.evaluate(() => !document.getElementById('updateBar').hidden);
+    await p0.close();
+    fs.writeFileSync(mf, orig.replace(/"version": "[^"]+"/, '"version": "99.0.0"'));
+    const p1 = await extPage();
+    await p1.waitForTimeout(500);
+    const bar = await p1.evaluate(() => ({ shown: !document.getElementById('updateBar').hidden, ver: document.getElementById('newVer').textContent }));
+    await p1.close();
+    record('[업데이트] 폴더에 새 버전이 있으면 팝업에 [업데이트] 단추(같은 버전이면 안 보임)', !before && bar.shown && bar.ver === 'v99.0.0', { note: `평소 ${before ? '보임' : '안 보임'} · 새 버전 ${JSON.stringify(bar)}` });
+  } catch (err) {
+    record('[업데이트] 단추', false, { note: err.message.split('\n')[0] });
+  } finally {
+    fs.writeFileSync(mf, orig);
+  }
+}
+
 // ── 설정 기억: 확장 ID 고정 + 동기화 저장소 백업 ──
 {
   try {

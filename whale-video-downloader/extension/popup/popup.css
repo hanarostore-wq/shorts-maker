@@ -342,3 +342,7 @@ footer {
 .backup-msg{margin:8px 0 0;font-size:12px;line-height:1.45}
 .backup-msg.err{color:#ff6b81}
 .backup-msg.ok{color:#5be3a0}
+
+.update-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 14px 0;padding:9px 12px;border-radius:12px;background:linear-gradient(135deg,rgba(91,92,255,.22),rgba(255,79,139,.18));border:1px solid rgba(155,77,255,.45);font-size:12.5px;line-height:1.35}
+.update-bar[hidden]{display:none}
+.update-bar button{flex:none;padding:7px 12px;border-radius:9px;border:0;cursor:pointer;color:#fff;font:inherit;font-weight:800;background:linear-gradient(135deg,#5b5cff,#9b4dff 55%,#ff4f8b)}
