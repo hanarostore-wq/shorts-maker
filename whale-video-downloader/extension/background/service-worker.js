@@ -444,7 +444,7 @@ async function startBrowserDownload(job, url, settings, phase) {
 }
 
 // ───────────────────────────── 작업 실행 ─────────────────────────────
-const RETRYABLE_STEPS = new Set(['사진 저장', '영상 데이터 받기', '영상 형식 분석', '영상·음성 합치기', '원본 주소 확인']);
+const RETRYABLE_STEPS = new Set(['사진 저장', '영상 데이터 받기', '영상 형식 분석', '영상·음성 합치기', '원본 주소 확인', '임시 파일 읽기']);
 
 async function runEngine(job, d, settings) {
   await ensureOffscreen();
@@ -634,6 +634,12 @@ async function runChain(job, desc, settings, req) {
       if (job.canceled) return;
       const e = toErr(err, '다운로드');
       console.warn('[영상 다운로더] 시도 실패', i + 1, '/', chain.length, e);
+      // 임시 파일 읽기 오류는 같은 주소로 한 번 더(새 임시 파일 이름으로)
+      if (e.step === '임시 파일 읽기' && !job.staleRetried) {
+        job.staleRetried = true;
+        i--;
+        continue;
+      }
       if (!RETRYABLE_STEPS.has(e.step)) break;
     }
   }

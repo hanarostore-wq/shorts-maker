@@ -38,17 +38,24 @@ async function tmpDir() {
   return root.getDirectoryHandle('smd-tmp', { create: true });
 }
 
-// 이전 실행에서 남은 임시 파일 정리
+// 이전 실행에서 남은 임시 파일 정리 — 30분 넘게 손대지 않은 것만(쓰고 있는 임시 파일을 지우면
+// '파일을 읽은 뒤 내용이 바뀌었다' 오류가 난다)
 (async () => {
   try {
     const dir = await tmpDir();
-    for await (const [name] of dir.entries()) await dir.removeEntry(name).catch(() => {});
+    for await (const [name, h] of dir.entries()) {
+      try {
+        const f = await h.getFile();
+        if (Date.now() - f.lastModified > 30 * 60 * 1000) await dir.removeEntry(name);
+      } catch {}
+    }
   } catch {}
 })();
 
 async function opfsTarget(jobId, filename) {
   const dir = await tmpDir();
-  const tmpName = `${jobId}.part`;
+  // 같은 작업을 다시 시도해도 이전 임시 파일과 겹치지 않게 매번 다른 이름
+  const tmpName = `${jobId}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}.part`;
   const fh = await dir.getFileHandle(tmpName, { create: true });
   const writable = await fh.createWritable();
   return {
@@ -275,8 +282,11 @@ async function run({ jobId, desc, filename, mode, prefer }) {
   } catch (err) {
     running.delete(jobId);
     await target?.fail().catch(() => {});
+    const stale = err?.name === 'NotReadableError' || /state cached in an interface object|changed since it was read from disk/i.test(String(err?.message || ''));
     const e = err instanceof StepError
       ? err.toJSON()
+      : stale
+        ? { step: '임시 파일 읽기', reason: '저장 엔진의 임시 파일이 처리 도중 바뀌어 읽지 못했습니다(같은 영상을 동시에 받거나 다시 시도할 때 생길 수 있음).', action: '자동으로 한 번 다시 받습니다. 그래도 실패하면 "다시 시도"를 누르세요.', detail: String(err?.message || '') }
       : err?.name === 'AbortError'
         ? { step: '다운로드', reason: '사용자가 다운로드를 취소했습니다.', action: '필요하면 다시 다운로드하세요.' }
         : { step: STEP.WRITE, reason: `파일을 쓰는 중 오류가 발생했습니다: ${err?.message || err}`, action: '저장 위치 설정을 확인한 뒤 다시 시도하세요.', detail: String(err?.stack || '').slice(0, 300) };
