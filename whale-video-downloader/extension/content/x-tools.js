@@ -8,64 +8,16 @@
   const SITES = globalThis.__SMD_SITES;
   if (!SITES || !chrome?.runtime?.id) return;
 
-  let settings = { xFollowButtons: true, xWideLayout: true, xKeepControls: true, xHighQuality: true, xThickBar: true };
-  let wideStyle = null; // applyWide() 가 아래보다 먼저 불리므로 여기서 선언
+  let settings = { xFollowButtons: true };
   chrome.storage.local.get('settings').then((r) => {
     settings = { ...settings, ...(r.settings || {}) };
-    applyWide();
-    syncHq();
   }, () => {});
   chrome.storage.onChanged.addListener((c, area) => {
     if (area === 'local' && c.settings) {
       settings = { ...settings, ...(c.settings.newValue || {}) };
       if (settings.xFollowButtons === false) document.querySelectorAll('smd-follow').forEach((e) => e.remove());
-      applyWide();
-      syncHq();
     }
   });
-
-  // ───────────── 0) 넓은 화면: 오른쪽 사이드바 숨기고 가운데 피드를 크게 ─────────────
-  const WIDE_CSS = `
-    [data-testid="sidebarColumn"]{display:none !important}
-    main[role="main"] > div{width:100% !important;max-width:none !important}
-    main[role="main"] > div > div{max-width:none !important;width:100% !important;justify-content:flex-start !important}
-    [data-testid="primaryColumn"]{max-width:1200px !important;width:100% !important;flex:1 1 auto !important}
-    [data-testid="primaryColumn"] > div{max-width:none !important}
-    /* 왼쪽 메뉴 칸은 메뉴 너비만큼만 → 가운데 피드가 남는 공간을 모두 쓴다 */
-    header[role="banner"]{flex-grow:0 !important}
-    main[role="main"]{flex-grow:1 !important;align-items:flex-start !important}
-    [data-smd-wide]{max-width:none !important;width:100% !important}
-  `;
-  // 피드 목록·게시물 안쪽의 600px 같은 너비 제한은 클래스 이름이 수시로 바뀌므로,
-  // 게시물에서 가운데 칸까지 올라가며 너비 제한이 걸린 요소를 찾아 풀어 준다.
-  function widenFeed() {
-    if (!wideStyle) return;
-    const col = document.querySelector('[data-testid="primaryColumn"]');
-    if (!col) return;
-    for (const art of col.querySelectorAll('article[data-testid="tweet"]:not([data-smd-widened])')) {
-      art.setAttribute('data-smd-widened', '');
-      for (let el = art.parentElement; el && el !== col; el = el.parentElement) {
-        if (el.hasAttribute('data-smd-wide')) break;
-        const cs = getComputedStyle(el);
-        if (cs.maxWidth !== 'none' || (el.getBoundingClientRect().width < col.getBoundingClientRect().width - 40 && cs.position !== 'absolute')) el.setAttribute('data-smd-wide', '');
-      }
-    }
-  }
-  setInterval(widenFeed, 800);
-  function applyWide() {
-    const on = settings.xWideLayout !== false;
-    if (on && !wideStyle) {
-      wideStyle = document.createElement('style');
-      wideStyle.id = 'smd-x-wide';
-      wideStyle.textContent = WIDE_CSS;
-      (document.head || document.documentElement).appendChild(wideStyle);
-    } else if (!on && wideStyle) {
-      wideStyle.remove();
-      wideStyle = null;
-      document.querySelectorAll('[data-smd-widened]').forEach((e) => e.removeAttribute('data-smd-widened'));
-      document.querySelectorAll('[data-smd-wide]').forEach((e) => e.removeAttribute('data-smd-wide'));
-    }
-  }
 
   // ── MAIN world 질의(작성자 React 데이터, 인증 헤더) ──
   let seq = 0;
@@ -333,74 +285,7 @@
 
   // 2) 마우스 올리면 재생·소리 켜기는 모든 사이트 공용 hover-play.js 가 맡는다
 
-  // ───────────── 3) 재생바 항상 표시 + 진행 막대 두껍게 + 고화질 설정 전달 ─────────────
-  function syncHq() {
-    // hook.js(페이지 쪽)는 페이지가 열릴 때 이 값을 읽는다
-    try { localStorage.setItem('smd_xhq', settings.xHighQuality === false ? '0' : '1'); } catch {}
-  }
-  // 재생바 항상 표시: X 는 마우스가 멈추면 재생바를 흐리게(opacity·visibility) 숨긴다.
-  // 가짜 마우스 신호는 무시될 수 있어서, 재생바(슬라이더)가 든 영역을 찾아 CSS 로 계속 보이게 고정한다.
-  const KEEP_CSS = `[data-smd-keep]{opacity:1 !important;visibility:visible !important;transform:none !important}`;
-  const BAR_CSS = `[data-smd-bar="track"]{height:8px !important;border-radius:4px !important}
-    [data-smd-bar="thumb"]{width:18px !important;height:18px !important}`;
-  let keepStyle = null;
-  let barStyle = null;
-  const toggleStyle = (cur, on, css, id) => {
-    if (on && !cur) {
-      cur = document.createElement('style');
-      cur.id = id;
-      cur.textContent = css;
-      (document.head || document.documentElement).appendChild(cur);
-    } else if (!on && cur) {
-      cur.remove();
-      cur = null;
-    }
-    if (cur && !cur.isConnected) (document.head || document.documentElement).appendChild(cur);
-    return cur;
-  };
-  const players = () => [...document.querySelectorAll('[data-testid="videoPlayer"]')].filter((p) => {
-    const r = p.getBoundingClientRect();
-    return r.width > 100 && r.bottom > 0 && r.top < innerHeight;
-  });
-  function keepControls() {
-    keepStyle = toggleStyle(keepStyle, settings.xKeepControls !== false, KEEP_CSS, 'smd-x-keep');
-    if (!keepStyle) {
-      document.querySelectorAll('[data-smd-keep]').forEach((e) => e.removeAttribute('data-smd-keep'));
-      return;
-    }
-    for (const p of players()) {
-      const slider = p.querySelector('[role="slider"]');
-      if (!slider) continue;
-      // 슬라이더부터 플레이어 바로 아래까지(재생바 묶음) + 그 형제 버튼 줄
-      for (let el = slider; el && el !== p; el = el.parentElement) if (!el.hasAttribute('data-smd-keep')) el.setAttribute('data-smd-keep', '');
-    }
-  }
-  // 진행 막대 두껍게: 플레이어 아래쪽의 얇고 긴 막대(전체·재생한 부분·버퍼)를 찾아 8px 로. 슬라이더 안팎 어디에 있든 찾는다.
-  function thickBar() {
-    barStyle = toggleStyle(barStyle, settings.xThickBar !== false, BAR_CSS, 'smd-x-bar');
-    if (!barStyle) return;
-    for (const p of players()) {
-      const slider = p.querySelector('[role="slider"]');
-      if (!slider) continue;
-      const pr = p.getBoundingClientRect();
-      const zone = slider.parentElement?.parentElement || p;
-      for (const el of zone.querySelectorAll('div')) {
-        if (el.dataset.smdBar) continue;
-        const r = el.getBoundingClientRect();
-        const cs = getComputedStyle(el);
-        const h = parseFloat(cs.height);
-        if (h > 0 && h <= 5 && r.bottom > pr.bottom - 120 && !el.querySelector('div') && (r.width >= 20 || el.parentElement?.getBoundingClientRect().width > pr.width * 0.4)) {
-          el.dataset.smdBar = 'track';
-        } else if (slider.contains(el) && h >= 8 && h <= 16 && Math.abs(parseFloat(cs.width) - h) <= 2 && /50%|999/.test(cs.borderRadius)) {
-          el.dataset.smdBar = 'thumb';
-        }
-      }
-    }
-  }
-
   // ── 반복 확인 ──
-  syncHq();
-  applyWide();
   scanFollow();
   let pending = 0;
   new MutationObserver(() => {
@@ -411,11 +296,6 @@
     }, 300);
   }).observe(document.documentElement, { childList: true, subtree: true });
   setInterval(() => {
-    keepControls();
-    thickBar();
-  }, 400);
-  setInterval(() => {
-    if (wideStyle && !wideStyle.isConnected) (document.head || document.documentElement).appendChild(wideStyle);
     scanFollow();
     for (const e of buttons.values()) {
       const u = SITES.xUsers.get(e.sn.toLowerCase());

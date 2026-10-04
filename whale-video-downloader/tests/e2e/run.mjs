@@ -515,51 +515,6 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
-// ── 모든 사이트: 영상 눌러도 정지 안 되게 ──
-{
-  const page = await ctx.newPage();
-  try {
-    await page.goto('https://www.example-videos.com/clicktoggle', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1500);
-    const playing = (id) => page.evaluate((i) => !document.getElementById(i).paused, id);
-    const center = async (sel) => {
-      const b = await page.locator(sel).boundingBox();
-      return [b.x + b.width / 2, b.y + b.height / 2];
-    };
-    let [x, y] = await center('#o1');
-    await page.mouse.click(x, y);
-    await page.waitForTimeout(500);
-    const a1 = await playing('c1');
-    [x, y] = await center('#o2');
-    await page.mouse.click(x, y);
-    await page.waitForTimeout(600);
-    const a2 = await playing('c2');
-    await page.locator('#like').click();
-    const liked = await page.evaluate(() => !!window.__liked);
-    // 멈춘 영상은 눌러서 재생할 수 있어야 함
-    await page.evaluate(() => document.getElementById('c1').pause());
-    [x, y] = await center('#o1');
-    await page.mouse.click(x, y);
-    await page.waitForTimeout(500);
-    const resume = await playing('c1');
-    // 누르는 순간 멈추는 사이트(a2)는 막지 않는다(사이트 재생 상태와 어긋나지 않게)
-    record('[모든 사이트] 영상 눌러도 정지 안 됨(클릭 방식), 버튼은 동작, 멈춘 영상은 눌러서 재생', a1 && liked && resume, { note: JSON.stringify({ 클릭방식: a1, 누름방식: a2, 버튼: liked, 멈춘영상재생: resume }) });
-    await setSettings({ noClickPause: false });
-    await page.waitForTimeout(300);
-    [x, y] = await center('#o1');
-    await page.mouse.click(x, y);
-    await page.waitForTimeout(400);
-    const off = await playing('c1');
-    record('[모든 사이트] 설정 끄면 눌러서 정지 가능(원래대로)', !off, { note: `재생 중=${off}` });
-  } catch (err) {
-    record('[모든 사이트] 영상 눌러도 정지 안 됨', false, { note: err.message.split('\n')[0] });
-  } finally {
-    await setSettings({ noClickPause: true });
-    await page.close();
-  }
-}
-
-
 // ── 블루스카이 팔로우 버튼 ──
 {
   const page = await ctx.newPage();
@@ -1290,63 +1245,6 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
   await setSettings({ captionOnMedia: false, captionKeepOriginal: false });
 }
 
-
-// ── X 재생: 최고 화질 고정 · 재생바 항상 표시 · 진행 막대 두껍게 ──
-if (!only || only === 'x') {
-  const page = await ctx.newPage();
-  try {
-    await page.goto('https://x.com/hq', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1500);
-    const hq = await page.evaluate(() => ({ fetch: window.__fetchVariants, xhr: window.__xhrVariants, best: /1080x1920/.test(window.__fetchText || '') }));
-    record('[X] 재생 화질 항상 최고(재생목록에 1080p 하나만)', hq.fetch === 1 && hq.xhr === 1 && hq.best, { note: JSON.stringify(hq) });
-
-    await page.goto('https://x.com/controls', { waitUntil: 'domcontentloaded' });
-    await page.mouse.move(5, 5);
-    await page.waitForTimeout(5000);
-    const c = await page.evaluate(() => {
-      const cs = getComputedStyle(document.getElementById('ctl'));
-      const cr = document.getElementById('ctl').getBoundingClientRect();
-      const el = document.elementFromPoint(cr.left + cr.width / 2, cr.top + 30);
-      return { opacity: cs.opacity, visibility: cs.visibility, onTop: !!el && document.getElementById('ctl').contains(el), track: getComputedStyle(document.getElementById('track')).height, played: getComputedStyle(document.getElementById('played')).height, thumb: getComputedStyle(document.getElementById('thumb')).height };
-    });
-    await page.screenshot({ path: path.join(SHOTS, 'x-controls.png') });
-    record('[X] 재생바 5초 뒤에도 계속 표시(사이트가 가짜 마우스 신호를 무시해도)', c.opacity === '1' && c.visibility === 'visible' && c.onTop, { note: JSON.stringify(c) });
-    record('[X] 진행 막대 2px → 8px(슬라이더 바깥 막대 포함), 손잡이 12px → 18px', c.track === '8px' && c.played === '8px' && c.thumb === '18px', { note: JSON.stringify(c) });
-  } catch (err) {
-    record('[X] 재생 설정', false, { note: err.message.split('\n')[0] });
-  } finally {
-    await page.close();
-  }
-}
-
-// ── X 넓은 화면: 오른쪽 사이드바 숨김 + 가운데 확대 ──
-if (!only || only === 'x' || '넓은'.includes(only)) {
-  const page = await ctx.newPage();
-  try {
-    await page.setViewportSize({ width: 1600, height: 900 });
-    await page.goto('https://x.com/layout', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1200);
-    const g = await page.evaluate(() => ({
-      sidebar: getComputedStyle(document.querySelector('[data-testid="sidebarColumn"]')).display,
-      center: Math.round(document.querySelector('[data-testid="primaryColumn"]').getBoundingClientRect().width),
-      video: Math.round(document.querySelector('video').getBoundingClientRect().width),
-      left: !!document.querySelector('header[role="banner"]').offsetWidth,
-      leftArea: Math.round(document.querySelector('header[role="banner"]').getBoundingClientRect().width),
-      post: Math.round(document.querySelector('article').getBoundingClientRect().width),
-    }));
-    await page.screenshot({ path: path.join(SHOTS, 'x-wide.png') });
-    record('[X] 넓은 화면: 오른쪽 숨김 + 피드 게시물까지 확대(안쪽 600px 제한 해제), 왼쪽 메뉴는 메뉴 너비만', g.sidebar === 'none' && g.center > 1000 && g.post > 1000 && g.post <= g.center && g.video > 900 && g.left && g.leftArea < 320, { note: JSON.stringify(g) });
-    await setSettings({ xWideLayout: false });
-    await page.waitForTimeout(600);
-    const off = await page.evaluate(() => getComputedStyle(document.querySelector('[data-testid="sidebarColumn"]')).display);
-    record('[X] 넓은 화면 끄면 원래대로', off !== 'none', { note: `오른쪽 display=${off}` });
-    await setSettings({ xWideLayout: true });
-  } catch (err) {
-    record('[X] 넓은 화면', false, { note: err.message.split('\n')[0] });
-  } finally {
-    await page.close();
-  }
-}
 
 // ── 버튼 위치: 기본 오른쪽 가운데 + 직접 배치 후 저장 ──
 if (!only || only === 'place' || '배치'.includes(only)) {

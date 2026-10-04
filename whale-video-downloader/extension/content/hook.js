@@ -62,30 +62,6 @@
     if (isX && typeof v === 'string' && /^Bearer /.test(v)) window.__smdXAuth = v;
   };
 
-  // X: 재생 화질 항상 최고 — HLS 마스터 재생목록에서 가장 높은 화질만 남겨 플레이어가 그 화질만 쓰게 한다.
-  // 끄기: 확장 설정이 x.com 의 localStorage['smd_xhq'] = '0' 으로 알려 준다.
-  let xhqOn = false;
-  try { xhqOn = isX && localStorage.getItem('smd_xhq') !== '0'; } catch { xhqOn = isX; }
-  const isXMaster = (url) => xhqOn && /video\.twimg\.com\/.+\.m3u8/.test(String(url || ''));
-  function bestOnly(text) {
-    if (typeof text !== 'string' || !/#EXT-X-STREAM-INF/.test(text)) return text;
-    const lines = text.split(/\r?\n/);
-    const head = [];
-    const variants = [];
-    for (let i = 0; i < lines.length; i++) {
-      const l = lines[i];
-      if (l.startsWith('#EXT-X-STREAM-INF')) {
-        const res = /RESOLUTION=(\d+)x(\d+)/.exec(l);
-        const bw = Number(/BANDWIDTH=(\d+)/.exec(l)?.[1] || 0);
-        variants.push({ inf: l, uri: lines[i + 1] || '', area: res ? res[1] * res[2] : 0, bw });
-        i++;
-      } else if (l.trim()) head.push(l);
-    }
-    if (variants.length < 2) return text;
-    variants.sort((a, b) => b.area - a.area || b.bw - a.bw);
-    return [...head, variants[0].inf, variants[0].uri, ''].join('\n');
-  }
-
   // ── fetch ──
   const nativeFetch = window.fetch;
   if (rule && typeof nativeFetch === 'function') {
@@ -97,17 +73,6 @@
         }
       } catch {}
       const p = nativeFetch.apply(this, arguments);
-      try {
-        const u0 = typeof input === 'string' ? input : input?.url || String(input);
-        if (isXMaster(u0)) {
-          return p.then((res) =>
-            res.clone().text().then(
-              (t) => (/#EXT-X-STREAM-INF/.test(t) ? new Response(bestOnly(t), { status: res.status, statusText: res.statusText, headers: res.headers }) : res),
-              () => res,
-            ),
-          );
-        }
-      } catch {}
       try {
         const url = typeof input === 'string' ? input : input?.url || String(input);
         if (wanted(url)) {
@@ -131,26 +96,6 @@
   // ── XMLHttpRequest ──
   const XHR = window.XMLHttpRequest;
   if (isX && XHR) {
-    // XHR 로 받는 마스터 재생목록도 최고 화질만 보이게 응답 읽기를 감싼다
-    const open0 = XHR.prototype.open;
-    XHR.prototype.open = function (method, url) {
-      // 같은 요청 객체를 다시 쓰면 이전 결과를 지운다(다른 응답이 섞이지 않게)
-      try { this.__smdXhq = isXMaster(url); this.__smdXhqText = undefined; } catch {}
-      return open0.apply(this, arguments);
-    };
-    for (const prop of ['responseText', 'response']) {
-      const desc = Object.getOwnPropertyDescriptor(XHR.prototype, prop);
-      if (!desc?.get) continue;
-      Object.defineProperty(XHR.prototype, prop, {
-        configurable: true,
-        get() {
-          const v = desc.get.call(this);
-          if (!this.__smdXhq || this.readyState !== 4 || typeof v !== 'string') return v;
-          if (this.__smdXhqText === undefined) this.__smdXhqText = bestOnly(v);
-          return this.__smdXhqText;
-        },
-      });
-    }
     const setHeader = XHR.prototype.setRequestHeader;
     XHR.prototype.setRequestHeader = function (name, value) {
       try { if (/^authorization$/i.test(name)) rememberAuth(value); } catch {}

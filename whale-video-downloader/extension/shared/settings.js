@@ -13,14 +13,9 @@ export const DEFAULT_SETTINGS = {
   aiLabel: true, // AI 영상·사진 표시 + 파일 이름 [AI]
   downloadedMark: true, // 받은 적 있는 영상·사진 버튼 초록 표시
   xPhotoTapClose: true, // X 사진 확대 보기에서 사진 누르면 닫기
-  noClickPause: true, // 모든 사이트: 영상 공간을 눌러도 재생이 멈추지 않게
   ytShortsStats: true, // 유튜브 쇼츠 오른쪽 위에 조회수·구독자 수
-  xKeepControls: true, // X 재생바 항상 표시
-  xThickBar: true, // X 진행 막대 두껍게
-  xHighQuality: true, // X 재생 화질 항상 최고
   xFollowButtons: true, // X 피드 작성자 옆 팔로우/팔로잉 버튼
   bskyFollowButtons: true, // 블루스카이 피드 게시물에 팔로우/팔로잉 버튼
-  xWideLayout: true, // X 오른쪽 사이드바 숨기고 가운데 피드 크게 // X 영상 재생 시 소리 자동 켜기
   siteFolders: true, // 가장 위에 사이트별 폴더(유튜브/블루스카이/X …)
   sortFolders: true,
   countryFolders: true, // 그 안에 나라별 하위 폴더(한국/미국/중국…/기타) // 사진 / 영상 1분30초 이하 / 영상 1분30초 초과 폴더로 자동 분류
@@ -52,7 +47,7 @@ export async function getSettings() {
     s.posVersion = 2;
   }
   // 삭제한 기능의 설정은 지운다(광고 차단, 마우스 올리면 재생, 소리 자동 켜기)
-  for (const k of ['adBlock', 'hoverPlay', 'xHoverPlay', 'bskyAutoSound', 'xAutoSound', 'xAutoPlay', 'keepScroll']) delete s[k];
+  for (const k of ['adBlock', 'hoverPlay', 'xHoverPlay', 'bskyAutoSound', 'xAutoSound', 'xAutoPlay', 'keepScroll', 'noClickPause', 'xWideLayout', 'xKeepControls', 'xThickBar', 'xHighQuality']) delete s[k];
   return s;
 }
 
