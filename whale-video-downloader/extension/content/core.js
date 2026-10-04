@@ -178,16 +178,35 @@
       for (const e of tracked.values()) e.state === 'idle' && setLook(e, 'idle');
     }
   });
+  // 유튜브 영상 ID: 본 플레이어(시청·쇼츠)는 주소에서, 피드 미리보기는 감싼 링크에서 읽는다.
+  //   (유튜브는 영상 요소 하나를 다음 영상에도 다시 쓰고, 시청 주소가 모두 '/watch' 라서 경로만으로는 영상을 구분할 수 없음)
+  function ytIdOf(el) {
+    const main = el.closest('#movie_player, #shorts-player, ytd-reel-video-renderer, ytd-shorts, ytd-player#ytd-player');
+    const preview = el.closest('ytd-rich-item-renderer, ytd-video-renderer, ytd-compact-video-renderer, ytd-grid-video-renderer, ytd-reel-item-renderer, ytm-shorts-lockup-view-model, #video-preview, ytd-video-preview');
+    if (preview && !el.closest('#movie_player:not(.ytd-video-preview), #shorts-player')) {
+      const m = U.findLink(el, /(?:[?&]v=|\/shorts\/)([\w-]{11})/);
+      if (m) return m[1];
+    }
+    const loc = /[?&]v=([\w-]{11})/.exec(location.search) || /\/(?:shorts|embed|live|v)\/([\w-]{11})/.exec(location.pathname);
+    if (main || loc) return loc?.[1] || '';
+    return U.findLink(el, /(?:[?&]v=|\/shorts\/)([\w-]{11})/)?.[1] || '';
+  }
+  // 영상·사진을 구분하는 키. 구분할 수 없으면 '' (받은 적 있음 표시를 하지 않음)
   function keyFor(entry) {
     const el = entry.el;
     if (entry.kind === 'image') return `img:${(SITES.originalImageUrls(el)[0] || '').split('#')[0]}`;
+    if (adapter.id === 'youtube') {
+      const id = ytIdOf(el);
+      return id ? `youtube:${id}` : '';
+    }
     const poster = el.getAttribute('poster') || '';
     const src = /^https?:/.test(el.currentSrc || '') ? el.currentSrc.split('?')[0] : '';
     const link = U.findLink(el, /\/(?:status|video|reel|reels|p|pin|short-video|explore|shorts)\/[\w-]+/)?.[0] || '';
-    return `${adapter.id}:${link || poster.split('?')[0] || src || location.pathname}`;
+    return `${adapter.id}:${link || poster.split('?')[0] || src || location.pathname + location.search}`;
   }
   async function markDownloaded(entry) {
-    const k = keyFor(entry);
+    const k = entry.dlKey || keyFor(entry);
+    if (!k) return;
     entry.dlKey = k;
     downloaded.add(k);
     const r = await chrome.storage.local.get('downloadedKeys').catch(() => ({}));
@@ -287,7 +306,8 @@
     const txt = b.querySelector('.txt');
     b.classList.remove('downloaded');
     if (state === 'idle') {
-      const done = settings.downloadedMark !== false && downloaded.has(entry.dlKey || keyFor(entry));
+      const k = entry.dlKey || keyFor(entry);
+      const done = !!k && settings.downloadedMark !== false && downloaded.has(k);
       b.classList.toggle('downloaded', done);
       ico.innerHTML = done ? ICON_OK : ICON_DL;
       txt.textContent = done ? '받은 적 있음' : '다운로드';
@@ -381,6 +401,13 @@
   }
 
   function showError(entry, err) {
+    if (entry.staleResolve) {
+      // 이미 다음 영상으로 넘어간 버튼에는 이전 영상의 오류를 띄우지 않는다
+      entry.staleResolve = false;
+      entry.dlKey = null;
+      setLook(entry, 'idle');
+      return;
+    }
     // 중복 다운로드로 막힌 경우: 오류가 아니라 안내(받은 적 있음 표시)
     if (err?.duplicate) {
       entry.lastError = null;
@@ -687,6 +714,8 @@
     const video = entry.el;
     closePanel(entry);
     entry.lastError = null;
+    entry.dlKey = keyFor(entry) || null; // 누른 순간의 영상(다음 영상으로 넘어가도 이 영상으로 기록)
+    entry.staleResolve = false;
     setLook(entry, 'resolving', '분석 중…');
     let req;
     try {
@@ -739,6 +768,14 @@
     }
     undoShot();
     if (!res || res.error) return showError(entry, res?.error || { step: '다운로드 요청', reason: '백그라운드가 응답하지 않았습니다.', action: '페이지를 새로고침한 뒤 다시 시도하세요.' });
+    if (entry.staleResolve) {
+      // 분석하는 사이 다음 영상으로 넘어감: 작업은 계속 받고 버튼은 새 영상용으로 비워 둔다
+      entry.staleResolve = false;
+      jobs.set(res.jobId, { ghost: true, kind: entry.kind, dlKey: entry.dlKey, lastMsg: Date.now() });
+      entry.dlKey = null;
+      setLook(entry, 'idle');
+      return;
+    }
     entry.jobId = res.jobId;
     entry.lastMsg = Date.now();
     jobs.set(res.jobId, entry);
@@ -757,7 +794,7 @@
   setInterval(async () => {
     if (!alive()) return;
     for (const [jobId, entry] of jobs) {
-      if (entry.state !== 'busy' || Date.now() - (entry.lastMsg || 0) < 40000) continue;
+      if (entry.ghost || entry.state !== 'busy' || Date.now() - (entry.lastMsg || 0) < 40000) continue;
       entry.lastMsg = Date.now();
       const j = await chrome.runtime.sendMessage({ type: 'smd:job-status', jobId }).catch(() => undefined);
       if (j === null || j === undefined) {
@@ -774,6 +811,12 @@
       if (!entry) return;
       entry.lastMsg = Date.now();
       const j = msg.job;
+      if (entry.ghost) {
+        // 다음 영상으로 넘어가 버튼에서 떼어 낸 작업: 화면 버튼은 건드리지 않고 기록만(실패 내용은 팝업 '최근 다운로드'에 단계·원인·조치로 남음)
+        if (j.state === 'done') markDownloaded(entry);
+        if (j.state === 'done' || j.state === 'error' || j.state === 'canceled') jobs.delete(j.id);
+        return;
+      }
       if (j.state === 'done') {
         // 완료 창은 띄우지 않고 버튼만 잠깐 '저장 완료'로 바꾼다.
         setLook(entry, 'done', '저장 완료');
@@ -1011,9 +1054,34 @@
     const entry = { el, video: el, kind, key: `${kind[0]}${++videoSeq}`, state: 'idle', visible: false, measured: 0 };
     makeAnchor(entry);
     entry.btn = makeButton(entry);
+    if (kind === 'video') entry.ident = keyFor(entry);
     setLook(entry, 'idle'); // 이미 받은 적 있으면 초록 체크로
     tracked.set(el, entry);
   }
+
+  // 같은 영상 요소가 다음 영상으로 바뀐 경우(유튜브 쇼츠·시청 화면 등): 버튼을 새 영상 기준으로 되돌린다.
+  //   진행 중이던 다운로드는 버튼에서 떼어 계속 받고, 끝나면 이전 영상으로 '받은 적 있음'에 기록한다.
+  function refreshIdentity(entry) {
+    if (entry.kind !== 'video') return;
+    const now = keyFor(entry);
+    if (now === entry.ident) return;
+    entry.ident = now;
+    if (entry.jobId && jobs.get(entry.jobId) === entry) {
+      jobs.set(entry.jobId, { ghost: true, kind: entry.kind, dlKey: entry.dlKey, lastMsg: Date.now() });
+    }
+    entry.jobId = null;
+    entry.dlKey = null;
+    entry.lastError = null;
+    entry.force = false;
+    closePanel(entry);
+    if (entry.state !== 'resolving') setLook(entry, 'idle');
+    else entry.staleResolve = true;
+  }
+  addEventListener('yt-navigate-finish', () => setTimeout(() => tracked.forEach(refreshIdentity), 50));
+  document.addEventListener('loadstart', (ev) => {
+    const e = tracked.get(ev.target);
+    if (e) setTimeout(() => refreshIdentity(e), 50);
+  }, true);
 
   function scan() {
     const vids = [];
@@ -1022,6 +1090,7 @@
     collectImages(imgs);
     const set = new Set([...vids, ...imgs]);
     for (const v of vids) if (!tracked.has(v)) track(v, 'video');
+    for (const e of tracked.values()) refreshIdentity(e);
     for (const im of imgs) if (!tracked.has(im)) track(im, 'image');
     for (const [el, e] of tracked) {
       const keepImage = e.kind === 'image' && e.state !== 'idle';

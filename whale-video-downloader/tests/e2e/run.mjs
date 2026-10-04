@@ -875,6 +875,55 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── 유튜브: 같은 영상 요소로 다음 영상으로 넘어가도 이전 영상의 '받은 적 있음'·진행 표시가 남지 않음 ──
+{
+  const page = await ctx.newPage();
+  // 유튜브처럼 페이지를 새로 열지 않고 주소·영상만 바꾼다(영상 요소는 그대로 다시 씀)
+  const nav = (id) => page.evaluate((vid) => {
+    history.pushState({}, '', `/shorts/${vid}`);
+    const p = document.querySelector('.html5-video-player');
+    p.getVideoData = () => ({ video_id: vid, title: `쇼츠 ${vid}`, author: '테스트 채널', isLive: false });
+    p.getPlayerResponse = () => ({ videoDetails: { videoId: vid } });
+    const v = document.querySelector('video');
+    v.src = v.src.split('#')[0] + '#' + vid;
+    dispatchEvent(new Event('yt-navigate-finish'));
+  }, id);
+  const label = async () => (await page.locator('smd-anchor .btn .txt').first().textContent()).trim();
+  try {
+    await setSettings({ captionOnMedia: false, preventDuplicates: false, downloadedMark: true });
+    await clearDownloaded();
+    await page.goto('https://www.youtube.com/shorts/YTshort0001', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    let before = new Set(listFiles(DL));
+    await page.locator('smd-anchor .btn').first().click({ force: true });
+    const f1 = await waitFile(before, 60000);
+    await page.waitForTimeout(3500);
+    const a = await label();
+    await nav('YTshort0002');
+    await page.waitForTimeout(800);
+    const b = await label();
+    record('[유튜브] 다음 쇼츠로 넘기면 받은 적 있음 표시가 사라짐', !!f1 && a === '받은 적 있음' && b === '다운로드', { note: JSON.stringify({ 받은영상: a, 다음영상: b }) });
+    // 받는 중에 다음 영상으로 넘김 → 버튼은 바로 새 영상용, 이전 영상 다운로드는 계속되어 저장
+    before = new Set(listFiles(DL));
+    await page.locator('smd-anchor .btn').first().click({ force: true });
+    await page.waitForTimeout(400);
+    await nav('YTshort0003');
+    await page.waitForTimeout(800);
+    const c = await label();
+    const f2 = await waitFile(before, 60000);
+    await page.waitForTimeout(1500);
+    const c2 = await label();
+    await nav('YTshort0002');
+    await page.waitForTimeout(800);
+    const d = await label();
+    record('[유튜브] 받는 중 다음 영상으로 넘기면 버튼은 바로 새 영상용, 이전 영상은 계속 받아 저장', c === '다운로드' && c2 === '다운로드' && !!f2 && /YTshort0002/.test(f2) && d === '받은 적 있음', { note: JSON.stringify({ 넘긴직후: c, 저장후새영상: c2, 저장파일: f2 ? path.basename(f2) : '없음', 돌아가면: d }) });
+  } catch (err) {
+    record('[유튜브] 다음 영상 넘김 표시', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
 // ── 유튜브 쇼츠 오른쪽 위 조회수·구독자 ──
 {
   const page = await ctx.newPage();
