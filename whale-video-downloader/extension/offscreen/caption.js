@@ -125,35 +125,61 @@ function wrap(ctx, text, maxW, maxLines) {
   return lines;
 }
 
-// 캡처한 피드 본문 이미지를 화면 맨 위에 바짝 붙인다(화면을 덜 가리게 가로는 꽉 채우고 높이는 최대 18%).
+// 캡처한 피드 본문 이미지를 화면 좌측 상단에 작게 붙인다(사용자 요청: 화면을 가리지 않게 예전 크기의 1/5, 모든 사이트 동일).
+// 예전 크기 = 가로 꽉 채움·높이 최대 18%
+export const OVERLAY_SCALE = 1 / 5;
 export function drawShotOverlay(ctx, w, h, img) {
   const iw = img.width;
   const ih = img.height;
-  const k = Math.min(w / iw, (h * 0.18) / ih);
-  const dw = Math.round(iw * k);
-  const dh = Math.round(ih * k);
-  const x = Math.round((w - dw) / 2);
-  const y = 0;
-  const r = Math.max(3, Math.min(dw, dh) * 0.06);
+  const k = Math.min(w / iw, (h * 0.18) / ih) * OVERLAY_SCALE;
+  const dw = Math.max(1, Math.round(iw * k));
+  const dh = Math.max(1, Math.round(ih * k));
+  const r = Math.max(2, Math.min(dw, dh) * 0.12);
   ctx.save();
-  // 아래쪽 모서리만 둥글게(위는 화면 끝에 붙음)
+  // 오른쪽 아래 모서리만 둥글게(위·왼쪽은 화면 끝에 붙음)
   ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + dw, y);
-  ctx.arcTo(x + dw, y + dh, x, y + dh, r);
-  ctx.arcTo(x, y + dh, x, y, r);
+  ctx.moveTo(0, 0);
+  ctx.lineTo(dw, 0);
+  ctx.arcTo(dw, dh, 0, dh, r);
+  ctx.lineTo(0, dh);
   ctx.closePath();
   ctx.clip();
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(img, x, y, dw, dh);
+  ctx.drawImage(img, 0, 0, dw, dh);
   ctx.restore();
 }
 
-// 글자(요약) 또는 캡처 이미지 중 있는 것으로 그린다
-// 항상 화면 맨 위에 붙인다(사용자 요청: 아래·가운데를 가리지 않게)
+// 캡처가 없을 때 쓰는 요약 글자도 같은 크기·위치로 맞추려고 글자 상자만 따로 그린다
+const captionBoxes = new Map();
+function captionBox(w, h, text) {
+  const key = `${w}x${h}:${text}`;
+  if (captionBoxes.has(key)) return captionBoxes.get(key);
+  const size = Math.round(Math.max(14, Math.min(56, Math.min(w, h * 0.9) * 0.036)));
+  const meas = new OffscreenCanvas(1, 1).getContext('2d');
+  const font = `700 ${size}px "Pretendard","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR","Noto Sans CJK KR",sans-serif`;
+  meas.font = font;
+  const maxW = w * 0.86;
+  const lines = wrap(meas, text, maxW - size * 1.2, 2);
+  const lh = Math.round(size * 1.32);
+  const cw = Math.ceil(Math.min(maxW, Math.max(...lines.map((l) => meas.measureText(l).width)) + size * 1.2));
+  const ch = Math.ceil(lines.length * lh + size * 0.8);
+  const c = new OffscreenCanvas(cw, ch);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(10,10,18,0.78)';
+  ctx.fillRect(0, 0, cw, ch);
+  ctx.font = font;
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#ffffff';
+  lines.forEach((l, i) => ctx.fillText(l, size * 0.6, size * 0.4 + i * lh));
+  if (captionBoxes.size > 8) captionBoxes.clear();
+  captionBoxes.set(key, c);
+  return c;
+}
+
+// 글자(요약) 또는 캡처 이미지 중 있는 것으로 그린다 — 둘 다 좌측 상단에 같은 크기로
 export function drawOverlay(ctx, w, h, ov) {
   if (ov?.image) drawShotOverlay(ctx, w, h, ov.image);
-  else if (ov?.text) drawCaption(ctx, w, h, ov.text, 'top', true);
+  else if (ov?.text) drawShotOverlay(ctx, w, h, captionBox(w, h, ov.text));
 }
 
 export function drawCaption(ctx, w, h, text, pos, flush = false) {
