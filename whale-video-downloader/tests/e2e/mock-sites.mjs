@@ -538,6 +538,13 @@ const handlers = {
       return html(res, page('홈 / X', `<article data-testid="tweet" style="width:560px"><div style="display:flex;justify-content:space-between"><div data-testid="User-Name"><a href="/auto_user"><span>자동 팔로우 대상</span></a> <a href="/auto_user">@auto_user</a> · <a href="/auto_user/status/1790000000000000077"><time>1시간</time></a></div><button data-testid="caret">⋯</button></div>
         <div data-testid="tweetText">사진 게시물</div><img id="pic" alt="이미지" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=large" style="width:480px;height:320px;object-fit:cover"></article>`, `document.cookie = 'ct0=mockcsrf123; path=/';${XMENU}`));
     }
+    if (u.pathname === '/xtoggle') {
+      // 영상 화면을 누르는 순간(pointerdown) 멈추는 플레이어 + 영상 상태를 보고 재생/정지를 바꾸는 재생 단추
+      return html(res, page('X 토글', `<div data-testid="videoPlayer" style="position:relative;width:480px;height:270px">
+          <video id="tv" src="https://cdn.example-videos.com/preview.webm" muted loop autoplay playsinline style="width:100%;height:100%;background:#000"></video>
+          <div id="ta" style="position:absolute;left:0;top:0;width:300px;height:200px" onpointerdown="document.getElementById('tv').pause()"></div>
+          <button id="tbtn" aria-label="재생" style="position:absolute;right:10px;bottom:10px" onclick="const v = document.getElementById('tv'); window.__toggles = (window.__toggles || 0) + 1; v.paused ? v.play() : v.pause()">▶</button></div>`));
+    }
     if (u.pathname === '/xplay') {
       // X 처럼: 영상은 소리 없이 미리보기로 돌고 있고, 가운데에 role 없는 재생 단추(div)가 떠 있다. 단추를 누르면 X 가 소리와 함께 '진짜 재생'을 시작
       return html(res, page('X 재생 단추', `<div data-testid="videoPlayer" id="pl" style="position:relative;width:480px;height:270px">

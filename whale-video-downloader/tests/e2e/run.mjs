@@ -473,6 +473,29 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── 사이트가 누르는 순간 멈춘 뒤, 재생 단추 한 번에 다시 재생(상태 어긋남으로 두 번 눌러야 하던 문제) ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ noClickPause: true });
+    await page.goto('https://x.com/xtoggle', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const area = await page.locator('#ta').boundingBox();
+    await page.mouse.click(area.x + 40, area.y + 40); // 영상 화면 누름 → 사이트가 누르는 순간 멈춤
+    await page.waitForTimeout(600);
+    const mid = await page.evaluate(() => document.getElementById('tv').paused);
+    const pb = await page.locator('#tbtn').boundingBox();
+    await page.mouse.click(pb.x + pb.width / 2, pb.y + pb.height / 2); // 재생 단추 한 번
+    await page.waitForTimeout(700);
+    const end = await page.evaluate(() => ({ paused: document.getElementById('tv').paused, toggles: window.__toggles || 0 }));
+    record('[X] 영상 누른 뒤 재생 단추 한 번에 다시 재생(두 번 안 눌러도 됨)', mid === true && end.paused === false && end.toggles === 1, { note: `누른 뒤 멈춤 ${mid} · 재생 단추 후 ${JSON.stringify(end)}` });
+  } catch (err) {
+    record('[X] 재생 단추 한 번', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
 // ── X 재생 단추를 한 번 누르면 바로 재생(영상 눌러도 정지 안 되게 기능과 충돌 없음) ──
 {
   const page = await ctx.newPage();
@@ -519,7 +542,8 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.mouse.click(x, y);
     await page.waitForTimeout(500);
     const resume = await playing('c1');
-    record('[모든 사이트] 영상 눌러도 정지 안 됨(클릭·누르는 순간 방식 모두), 버튼은 동작, 멈춘 영상은 눌러서 재생', a1 && a2 && liked && resume, { note: JSON.stringify({ 클릭방식: a1, 누름방식: a2, 버튼: liked, 멈춘영상재생: resume }) });
+    // 누르는 순간 멈추는 사이트(a2)는 막지 않는다(사이트 재생 상태와 어긋나지 않게)
+    record('[모든 사이트] 영상 눌러도 정지 안 됨(클릭 방식), 버튼은 동작, 멈춘 영상은 눌러서 재생', a1 && liked && resume, { note: JSON.stringify({ 클릭방식: a1, 누름방식: a2, 버튼: liked, 멈춘영상재생: resume }) });
     await setSettings({ noClickPause: false });
     await page.waitForTimeout(300);
     [x, y] = await center('#o1');
