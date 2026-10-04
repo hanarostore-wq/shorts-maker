@@ -1,6 +1,6 @@
 // 서비스워커: 다운로드 요청 접수 → 원본 주소 확정 → 저장(브라우저 다운로드 또는 오프스크린 엔진) → 진행 상황 알림
 import { getSettings, DEFAULT_SETTINGS } from '../shared/settings.js';
-import { buildFilename, sanitizeFolder } from '../shared/filename.js';
+import { buildFilename, sanitizeFolder, countryFolder } from '../shared/filename.js';
 import { buildFromInfo } from './builders.js';
 import { resolveBg } from './resolvers.js';
 
@@ -323,12 +323,11 @@ const asciiOnly = (s) => String(s || '').replace(/[^\x20-\x7e]/g, '').replace(/\
 // 종류별 폴더: 사진 / 영상 1분30초 이하 / 영상 1분30초 초과 (설정 → 저장 폴더 안에 자동으로 만들어진다)
 export const FOLDERS = { image: '사진', short: '영상 1분30초 이하', long: '영상 1분30초 초과' };
 function saveFolder(job, settings) {
-  const base = sanitizeFolder(settings.subfolder);
-  if (settings.sortFolders === false) return base;
-  let cat;
-  if (job.request?.kind === 'image') cat = FOLDERS.image;
-  else cat = (job.duration || 0) > 90 ? FOLDERS.long : FOLDERS.short;
-  return base ? `${base}/${cat}` : cat;
+  const parts = [sanitizeFolder(settings.subfolder)];
+  if (settings.sortFolders !== false) parts.push(job.request?.kind === 'image' ? FOLDERS.image : (job.duration || 0) > 90 ? FOLDERS.long : FOLDERS.short);
+  // 그 안에 나라별 하위 폴더 (한국 / 미국 / 중국 … / 기타). 파일 이름 앞 [국가] 표시와 같은 판단을 쓴다.
+  if (settings.countryFolders !== false) parts.push(job.country || '기타');
+  return parts.filter(Boolean).join('/');
 }
 
 async function startBrowserDownload(job, url, settings, phase) {
@@ -515,6 +514,7 @@ async function runChain(job, desc, settings, req) {
   for (let i = 0; i < chain.length; i++) {
     const d = chain[i];
     job.quality = d.quality?.label || job.quality || '';
+    job.country = countryFolder(`${job.title || desc.title || ''} ${req.author || desc.author || ''}`, job.site);
     job.filename = buildFilename(settings.filenameTemplate, {
       title: job.title || desc.title,
       site: job.site,
@@ -522,7 +522,7 @@ async function runChain(job, desc, settings, req) {
       id: req.id,
       author: req.author || desc.author,
       quality: job.quality,
-      ai: !!req.ai,
+      ai: settings.aiLabel !== false && !!req.ai,
       flag: settings.flagPrefix === false ? false : settings.flagStyle === 'emoji' ? 'emoji' : 'name',
     }, d.ext || 'mp4');
     try {

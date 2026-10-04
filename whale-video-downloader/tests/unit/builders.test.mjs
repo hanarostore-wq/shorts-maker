@@ -220,3 +220,13 @@ test('요약: URL·해시태그·이모지 빼고 첫 문장, 60자 이내', asy
   assert.equal(quickSummary('오늘 바다에 다녀왔어요! 날씨 최고 🌊 #여행 https://t.co/x'), '오늘 바다에 다녀왔어요!');
   assert.ok([...quickSummary('가'.repeat(200))].length <= 60);
 });
+
+import { countryFolder } from '../../extension/shared/filename.js';
+test('나라별 하위 폴더 이름', () => {
+  assert.equal(countryFolder('오늘 공원 산책', 'generic'), '한국');
+  assert.equal(countryFolder('Sunset at the beach', 'generic'), '미국');
+  assert.equal(countryFolder('今日は海へ', 'generic'), '일본');
+  assert.equal(countryFolder('今天去海边', 'generic'), '중국');
+  assert.equal(countryFolder('', 'generic'), '기타');
+  assert.equal(countryFolder('12345', 'generic'), '기타');
+});

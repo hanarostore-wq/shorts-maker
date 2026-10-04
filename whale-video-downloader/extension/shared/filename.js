@@ -63,6 +63,8 @@ export const countryFlag = (text, site) => {
   return c ? FLAG(c) : '';
 };
 export const countryName = (text, site) => COUNTRY_KO[countryCode(text, site)] || '';
+// 나라별 하위 폴더 이름(판단이 안 되면 '기타')
+export const countryFolder = (text, site) => countryName(text, site) || '기타';
 
 export function buildFilename(template, data, ext = 'mp4') {
   const d = new Date();

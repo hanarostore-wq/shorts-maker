@@ -266,7 +266,7 @@
     const txt = b.querySelector('.txt');
     b.classList.remove('downloaded');
     if (state === 'idle') {
-      const done = downloaded.has(entry.dlKey || keyFor(entry));
+      const done = settings.downloadedMark !== false && downloaded.has(entry.dlKey || keyFor(entry));
       b.classList.toggle('downloaded', done);
       ico.innerHTML = done ? ICON_OK : ICON_DL;
       txt.textContent = done ? '받은 적 있음' : '다운로드';
@@ -462,8 +462,37 @@
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   }
 
+  // ───────────── 다운로드 누르면 작성자 자동 팔로우 ─────────────
+  // X·블루스카이는 각 도구(x-tools / bsky-tools)가 처리하고, 그 밖의 사이트는 영상 가까이에 있는 팔로우·구독 버튼을 대신 누른다.
+  // 이미 팔로우 중이면 아무것도 하지 않는다(언팔로우 버튼은 절대 누르지 않음).
+  const FOLLOW_TEXT = /^(\+\s*)?(팔로우|팔로우하기|follow|구독|subscribe|关注|關注|フォロー)$/i;
+  const NO_DOM_FOLLOW = new Set(['x', 'bluesky']);
+  function autoFollow(el) {
+    if (settings.autoFollow === false) return;
+    const detail = { el, handled: false };
+    document.dispatchEvent(new CustomEvent('smd:auto-follow', { detail }));
+    if (detail.handled || NO_DOM_FOLLOW.has(adapter.id)) return;
+    const vr = el.getBoundingClientRect();
+    for (let p = el.parentElement, i = 0; p && p !== document.documentElement && i < 10; p = p.parentElement, i++) {
+      if (p.getBoundingClientRect().height > Math.max(innerHeight * 2.5, vr.height * 4)) break;
+      const btn = [...p.querySelectorAll('button, [role="button"], a[role="button"], [data-e2e="follow-button"], [data-e2e="feed-follow"]')].find((b) => {
+        if (b.closest('smd-anchor') || b.disabled) return false;
+        const t = (b.innerText || b.textContent || '').replace(/\s+/g, ' ').trim();
+        const label = (b.getAttribute('aria-label') || '').trim();
+        return FOLLOW_TEXT.test(t) || (!t && FOLLOW_TEXT.test(label));
+      });
+      if (btn) {
+        btn.click();
+        return;
+      }
+    }
+  }
+
   async function start(entry) {
     const video = entry.el;
+    try {
+      autoFollow(video);
+    } catch {}
     closePanel(entry);
     entry.lastError = null;
     setLook(entry, 'resolving', '분석 중…');
@@ -612,7 +641,7 @@
     document.addEventListener(
       'click',
       (ev) => {
-        if (!/\/photo\/\d+/.test(location.pathname)) return;
+        if (settings.xPhotoTapClose === false || !/\/photo\/\d+/.test(location.pathname)) return;
         const t = ev.target;
         // 저장 버튼(smd-anchor)을 누른 경우에는 확대 창을 닫지 않는다
         if (ev.composedPath().some((n) => n?.tagName === 'SMD-ANCHOR')) return;
@@ -930,7 +959,7 @@
         entry.ai = aiInDom(entry);
         if (entry.ai && isImg) entry.badge.textContent = 'AI 이미지';
       }
-      const showBadge = entry.ai && (!isImg || visible);
+      const showBadge = settings.aiLabel !== false && entry.ai && (!isImg || visible);
       entry.badge.classList.toggle('show', !!showBadge);
       if (showBadge) {
         const bw2 = entry.badge.offsetWidth || 60;

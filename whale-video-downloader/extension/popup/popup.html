@@ -82,6 +82,10 @@
           <input type="checkbox" id="sortFolders" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
+          <div><b>나라별 하위 폴더</b><small>그 안에 <b>한국</b> · <b>미국</b> · <b>중국</b> · <b>일본</b> … 폴더를 만들어 나눠 저장합니다 (제목·작성자 글자로 판단, 모르면 <b>기타</b>)</small></div>
+          <input type="checkbox" id="countryFolders" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
           <div><b>다운로드마다 저장 위치 묻기</b><small>저장할 때마다 폴더와 파일 이름을 고르는 창을 띄웁니다</small></div>
           <input type="checkbox" id="askEveryTime" /><span class="sw"><i></i></span>
         </label>
@@ -155,8 +159,20 @@
           <input type="checkbox" id="imageButtons" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
-          <div><b>뒤로·앞으로 가기 때 보던 위치 유지</b><small>모든 사이트에서 뒤로·앞으로 가기를 하면 맨 위로 가지 않고 보던 곳으로 돌아갑니다</small></div>
-          <input type="checkbox" id="keepScroll" /><span class="sw"><i></i></span>
+          <div><b>다운로드하면 작성자 자동 팔로우</b><small>영상·사진 다운로드를 누르면 그 게시물 작성자를 팔로우합니다 (X·블루스카이 + 팔로우/구독 버튼이 있는 사이트, 이미 팔로우 중이면 그대로)</small></div>
+          <input type="checkbox" id="autoFollow" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>AI 영상·사진 표시</b><small>AI 로 만든 영상·사진에 'AI 영상' 표시를 띄우고 파일 이름 앞에 [AI] 를 붙입니다</small></div>
+          <input type="checkbox" id="aiLabel" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>받은 적 있는 영상 초록 표시</b><small>이미 다운로드한 영상·사진은 버튼이 초록 체크로 바뀝니다</small></div>
+          <input type="checkbox" id="downloadedMark" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>영상 눌러도 정지 안 되게</b><small>모든 사이트에서 재생 중인 영상 화면을 눌러도 멈추지 않습니다 (재생바·버튼은 그대로 동작, 멈춘 영상은 눌러서 재생 가능)</small></div>
+          <input type="checkbox" id="noClickPause" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
           <div><b>유튜브 쇼츠 조회수·구독자 표시</b><small>재생 중인 쇼츠 오른쪽 위에 조회수와 구독자 수를 띄웁니다</small></div>
@@ -191,8 +207,12 @@
           <input type="checkbox" id="xAutoSound" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
-          <div><b>X 영상 자동 재생</b><small>화면에 가장 많이 보이는 영상을 자동으로 틀고, 화면 밖으로 나가면 멈춥니다. 직접 멈춘 영상은 다시 틀지 않습니다</small></div>
-          <input type="checkbox" id="xAutoPlay" /><span class="sw"><i></i></span>
+          <div><b>X 사진 확대 보기에서 사진 누르면 닫기</b><small>사진을 크게 본 상태에서 사진을 누르면 확대 창이 닫힙니다</small></div>
+          <input type="checkbox" id="xPhotoTapClose" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>X 영상 마우스 올리면 재생</b><small>마우스를 올린 영상만 재생하고, 마우스가 떠나면 멈춥니다. 직접 눌러 재생한 영상은 그대로 둡니다</small></div>
+          <input type="checkbox" id="xHoverPlay" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
           <div><b>블루스카이 영상 소리 자동 켜기</b><small>영상이 재생되면 소리를 켭니다 (페이지를 한 번도 누르지 않았다면 첫 클릭 때 켜짐)</small></div>

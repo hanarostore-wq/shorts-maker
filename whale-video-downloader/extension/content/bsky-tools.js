@@ -118,10 +118,11 @@
     }
     if (pending.size) loadTimer = setTimeout(loadStates, 300);
   }
-  async function toggle(e) {
+  async function toggle(e, onlyFollow = false) {
     const s = session();
     if (!s) return showErr(e, '팔로우', { reason: '블루스카이 로그인 정보를 찾지 못했습니다', action: '블루스카이에 로그인한 뒤 새로고침하세요.' });
     let u = users.get(e.handle);
+    if (onlyFollow && u?.following) return; // 자동 팔로우: 이미 팔로우 중이면 그대로
     const unfollow = !!u?.following;
     if (unfollow && !window.confirm(`@${e.handle} 님 팔로우를 취소할까요?`)) return;
     e.btn.classList.add('busy');
@@ -147,6 +148,19 @@
       e.btn.classList.remove('busy');
     }
   }
+  // 다운로드 버튼을 누른 게시물의 작성자 자동 팔로우
+  document.addEventListener('smd:auto-follow', (ev) => {
+    const d = ev.detail;
+    if (!d?.el) return;
+    d.handled = true;
+    const s = session();
+    const item = d.el.closest('[data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]');
+    const handle = (item?.dataset.testid.replace(/^(feedItem|postThreadItem)-by-/, '') || /^\/profile\/([^/]+)\/post\//.exec(location.pathname)?.[1] || '').toLowerCase();
+    if (!handle || !s || handle === s.handle || handle === s.did) return;
+    const e = (item && items.get(item)) || { handle, btn: document.createElement('button') };
+    toggle(e, true);
+  });
+
   function scanFollow() {
     if (!followOn) return;
     const s = session();

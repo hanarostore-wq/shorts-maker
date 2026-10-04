@@ -169,7 +169,9 @@ async function scenario(s) {
     if (e.height && info.height !== e.height) problems.push(`세로 ${info.height} ≠ ${e.height}`);
     if (e.vcodec && info.vcodec !== e.vcodec) problems.push(`코덱 ${info.vcodec} ≠ ${e.vcodec}`);
     if (e.audio && !info.acodec) problems.push('오디오 없음');
-    if (e.dir && !path.dirname(saved).endsWith(e.dir)) problems.push(`저장 폴더 ${path.dirname(saved)} (기대: …/${e.dir})`);
+    // 종류 폴더 안에 나라별 하위 폴더(한국/미국/…/기타)가 한 단계 더 있다
+    if (e.dir && !path.dirname(path.dirname(saved)).endsWith(e.dir)) problems.push(`저장 폴더 ${path.dirname(saved)} (기대: …/${e.dir}/나라)`);
+    if (e.country && path.basename(path.dirname(saved)) !== e.country) problems.push(`나라 폴더 ${path.basename(path.dirname(saved))} (기대: ${e.country})`);
     if (!(info.duration > 5)) problems.push(`길이 ${info.duration}s`);
     if (e.minDuration && !(info.duration >= e.minDuration)) problems.push(`길이 ${info.duration}s < ${e.minDuration}`);
     await page.waitForTimeout(300);
@@ -194,7 +196,7 @@ async function scenario(s) {
 
 const SUB = 'downloads/영상 1분30초 이하';
 const scenarios = [
-  { name: '일반 사이트(직접 mp4)', url: 'https://www.example-videos.com/watch', expect: { width: 1920, height: 1080, audio: true, dir: SUB, noSuccessPanel: true }, cdn: 'cdn.example-videos.com', shot: 'generic' },
+  { name: '일반 사이트(직접 mp4)', url: 'https://www.example-videos.com/watch', expect: { width: 1920, height: 1080, audio: true, dir: SUB, country: '한국', noSuccessPanel: true }, cdn: 'cdn.example-videos.com', shot: 'generic' },
   { name: '유튜브 일반 영상', url: 'https://www.youtube.com/watch?v=YTwatch0001', expect: { width: 1920, height: 1080, vcodec: 'h264', audio: true }, cdn: 'rr1---sn-mock.googlevideo.com', shot: 'youtube' },
   { name: '유튜브 쇼츠', url: 'https://www.youtube.com/shorts/YTshort0001', expect: { width: 1080, height: 1920, vcodec: 'h264', audio: true }, shot: 'shorts' },
   { name: '틱톡 상세(SSR 데이터)', url: 'https://www.tiktok.com/@creator/video/7300000000000000001', expect: { width: 1080, height: 1920, audio: true }, cdn: 'v16-webapp-prime.tiktok.com', shot: 'tiktok' },
@@ -258,7 +260,7 @@ if (!only || only === 'image' || '사진'.includes(only)) {
       await btn.click();
       const saved = await waitFile(before, 30000);
       const out = saved ? execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_name,width,height', '-of', 'csv=p=0', saved]).toString().trim() : '';
-      const ok = !!saved && saved.endsWith(`.${ext}`) && out.includes(`${w},${h}`) && path.basename(path.dirname(saved)) === '사진';
+      const ok = !!saved && saved.endsWith(`.${ext}`) && out.includes(`${w},${h}`) && path.basename(path.dirname(path.dirname(saved))) === '사진';
       record(`[사진] ${label}`, ok, { note: saved ? `${path.relative(DL, saved)} · ${out}` : '파일 없음', ms: Date.now() - t0 });
     } catch (err) {
       record(`[사진] ${label}`, false, { note: err.message.split('\n')[0] });
@@ -451,26 +453,73 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
-// ── X 영상 자동 재생 ──
+// ── X 영상 마우스 올리면 재생, 떠나면 멈춤 ──
 {
   const page = await ctx.newPage();
   try {
     await page.goto('https://x.com/autoplay', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
-    const s1 = await page.evaluate(() => ({ a: !document.getElementById('v1').paused, b: !document.getElementById('v2').paused }));
-    await page.evaluate(() => document.getElementById('v2').scrollIntoView({ block: 'center' }));
+    await page.mouse.move(900, 20);
     await page.waitForTimeout(1800);
-    const s2 = await page.evaluate(() => ({ a: !document.getElementById('v1').paused, b: !document.getElementById('v2').paused }));
-    // 직접 멈춘 영상은 다시 틀지 않음
-    const box = await page.locator('#v2').boundingBox();
-    await page.mouse.click(box.x + 5, box.y + 5);
-    await page.evaluate(() => document.getElementById('v2').pause());
-    await page.waitForTimeout(1800);
-    const s3 = await page.evaluate(() => !document.getElementById('v2').paused);
-    record('[X] 영상 자동 재생 (보이는 영상 재생·지나간 영상 멈춤·직접 멈춘 영상 유지)', s1.a && !s1.b && s2.b && !s2.a && !s3, { note: `처음 ${JSON.stringify(s1)} · 스크롤 후 ${JSON.stringify(s2)} · 직접 멈춘 뒤 재생 ${s3}` });
+    const st = () => page.evaluate(() => ({ v1: !document.getElementById('v1').paused, v2: !document.getElementById('v2').paused }));
+    const s0 = await st();
+    const b1 = await page.locator('#v1').boundingBox();
+    const b2 = await page.locator('#v2').boundingBox();
+    await page.mouse.move(b1.x + 100, b1.y + 100, { steps: 3 });
+    await page.waitForTimeout(700);
+    const s1 = await st();
+    await page.mouse.move(b2.x + 100, b2.y + 100, { steps: 3 });
+    await page.waitForTimeout(700);
+    const s2 = await st();
+    await page.mouse.move(900, 20, { steps: 3 });
+    await page.waitForTimeout(900);
+    const s3 = await st();
+    record('[X] 마우스 올리면 재생·떠나면 멈춤 (X 자체 자동 재생도 멈춤)', !s0.v1 && !s0.v2 && s1.v1 && !s1.v2 && !s2.v1 && s2.v2 && !s3.v1 && !s3.v2, { note: `처음 ${JSON.stringify(s0)} · v1 위 ${JSON.stringify(s1)} · v2 위 ${JSON.stringify(s2)} · 밖 ${JSON.stringify(s3)}` });
   } catch (err) {
-    record('[X] 영상 자동 재생', false, { note: err.message.split('\n')[0] });
+    record('[X] 마우스 올리면 재생', false, { note: err.message.split('\n')[0] });
   } finally {
+    await page.close();
+  }
+}
+
+// ── 모든 사이트: 영상 눌러도 정지 안 되게 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://www.example-videos.com/clicktoggle', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const playing = (id) => page.evaluate((i) => !document.getElementById(i).paused, id);
+    const center = async (sel) => {
+      const b = await page.locator(sel).boundingBox();
+      return [b.x + b.width / 2, b.y + b.height / 2];
+    };
+    let [x, y] = await center('#o1');
+    await page.mouse.click(x, y);
+    await page.waitForTimeout(500);
+    const a1 = await playing('c1');
+    [x, y] = await center('#o2');
+    await page.mouse.click(x, y);
+    await page.waitForTimeout(600);
+    const a2 = await playing('c2');
+    await page.locator('#like').click();
+    const liked = await page.evaluate(() => !!window.__liked);
+    // 멈춘 영상은 눌러서 재생할 수 있어야 함
+    await page.evaluate(() => document.getElementById('c1').pause());
+    [x, y] = await center('#o1');
+    await page.mouse.click(x, y);
+    await page.waitForTimeout(500);
+    const resume = await playing('c1');
+    record('[모든 사이트] 영상 눌러도 정지 안 됨(클릭·누르는 순간 방식 모두), 버튼은 동작, 멈춘 영상은 눌러서 재생', a1 && a2 && liked && resume, { note: JSON.stringify({ 클릭방식: a1, 누름방식: a2, 버튼: liked, 멈춘영상재생: resume }) });
+    await setSettings({ noClickPause: false });
+    await page.waitForTimeout(300);
+    [x, y] = await center('#o1');
+    await page.mouse.click(x, y);
+    await page.waitForTimeout(400);
+    const off = await playing('c1');
+    record('[모든 사이트] 설정 끄면 눌러서 정지 가능(원래대로)', !off, { note: `재생 중=${off}` });
+  } catch (err) {
+    record('[모든 사이트] 영상 눌러도 정지 안 됨', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ noClickPause: true });
     await page.close();
   }
 }
@@ -535,45 +584,50 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
-// ── 뒤로·앞으로 가기 때 보던 위치 유지 ──
+// ── 다운로드 누르면 작성자 자동 팔로우 ──
 {
+  const clickSave = async (page, sel) => {
+    const b = await page.locator(sel).boundingBox();
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await page.waitForTimeout(500);
+    await page.locator('smd-anchor .btn.show').first().click();
+    await page.waitForTimeout(1500);
+  };
   const page = await ctx.newPage();
   try {
-    await page.goto('https://www.example-videos.com/spafeed', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(600);
-    // 사용자가 휠로 내려가며 피드를 더 불러온다
-    for (let i = 0; i < 14; i++) {
-      await page.mouse.wheel(0, 600);
-      await page.waitForTimeout(150);
-    }
-    await page.waitForTimeout(600);
-    const before = await page.evaluate(() => ({ y: Math.round(scrollY), first: [...document.querySelectorAll('article')].find((a) => a.getBoundingClientRect().bottom > 80)?.textContent }));
-    // 화면 가운데 게시물을 눌러 상세로 이동 → 뒤로 가기
-    const lk = await page.evaluate(() => {
-      const a = [...document.querySelectorAll('article a')].find((x) => x.getBoundingClientRect().top > 200);
-      const r = a.getBoundingClientRect();
-      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-    });
-    await page.mouse.click(lk.x, lk.y);
-    await page.waitForTimeout(500);
-    const inDetail = await page.evaluate(() => location.pathname);
-    await page.goBack();
-    await page.waitForTimeout(2500);
-    const after = await page.evaluate(() => ({ y: Math.round(scrollY), first: [...document.querySelectorAll('article')].find((a) => a.getBoundingClientRect().bottom > 80)?.textContent }));
-    record('[위치 유지] 뒤로 가기 하면 보던 게시물로 돌아옴(사이트가 맨 위로 올려도)', /post/.test(inDetail) && before.y > 3000 && Math.abs(after.y - before.y) < 60 && after.first === before.first, { note: `상세 ${inDetail} · 전 ${JSON.stringify(before)} · 후 ${JSON.stringify(after)}` });
-    await page.goForward();
-    await page.waitForTimeout(800);
-    const fwd = await page.evaluate(() => ({ path: location.pathname, y: Math.round(scrollY) }));
-    record('[위치 유지] 앞으로 가기는 그 페이지 위치(상세는 맨 위)', /post/.test(fwd.path) && fwd.y < 50, { note: JSON.stringify(fwd) });
-    await setSettings({ keepScroll: false });
-    await page.goBack();
+    await setSettings({ captionOnMedia: false, autoFollow: true });
+    let l = log.length;
+    await page.goto('https://x.com/afollow', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1200);
+    await clickSave(page, '#pic');
+    const xr = log.slice(l).find((e) => e.follow === 'create');
+    record('[자동 팔로우] X: 사진 다운로드 누르면 작성자 팔로우', xr?.screen_name === 'auto_user' && xr.ok, { note: JSON.stringify(xr || '요청 없음') });
+
+    l = log.length;
+    await page.goto('https://bsky.app/afollow', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1500);
-    const off = await page.evaluate(() => Math.round(scrollY));
-    record('[위치 유지] 설정 끄면 사이트 동작 그대로', off < 50, { note: `y=${off}` });
+    await clickSave(page, '#pic');
+    const br = log.slice(l).find((e) => e.bskyFollow === 'create');
+    record('[자동 팔로우] 블루스카이: 다운로드 누르면 작성자 팔로우', br?.subject === 'did:plc:carol' && br.repo === 'did:plc:me', { note: JSON.stringify(br || '요청 없음') });
+
+    await page.goto('https://www.example-videos.com/afollow', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1200);
+    await clickSave(page, '#pic');
+    await clickSave(page, '#pic2');
+    const g = await page.evaluate(() => ({ followed: window.__followed || 0, unfollowed: !!window.__unfollowed, label: document.getElementById('fb').textContent }));
+    record('[자동 팔로우] 일반 사이트: 가까운 팔로우 버튼만 누름(이미 팔로잉은 그대로)', g.followed === 1 && !g.unfollowed && g.label === '팔로잉', { note: JSON.stringify(g) });
+
+    await setSettings({ autoFollow: false });
+    l = log.length;
+    await page.goto('https://x.com/afollow', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1200);
+    await clickSave(page, '#pic');
+    const off = log.slice(l).find((e) => e.follow === 'create');
+    record('[자동 팔로우] 설정 끄면 팔로우 안 함', !off, { note: off ? '요청됨' : '요청 없음' });
   } catch (err) {
-    record('[위치 유지]', false, { note: err.message.split('\n')[0] });
+    record('[자동 팔로우]', false, { note: err.message.split('\n')[0] });
   } finally {
-    await setSettings({ keepScroll: true });
+    await setSettings({ autoFollow: true });
     await page.close();
   }
 }
@@ -652,6 +706,9 @@ if (!only || only === 'x' || '팔로우'.includes(only)) {
     const err = await page.locator('#t-react_user smd-follow').evaluate((h) => h.shadowRoot.querySelector('.err')?.textContent || '');
     record('[X] 로그인 쿠키 없을 때 오류 안내', /로그인/.test(err) && /새로고침/.test(err), { note: err });
 
+    // 마우스를 올린 영상만 재생되므로 영상 위에 마우스를 둔다
+    await page.hover('#xv');
+    await page.waitForTimeout(800);
     const sound = await page.evaluate(() => ({ muted: document.getElementById('xv').muted, clicked: !!window.__unmuteClicked, paused: document.getElementById('xv').paused }));
     record('[X] 영상 재생되면 소리 자동 켜기(X 음소거 버튼 사용)', !sound.muted && sound.clicked && !sound.paused, { note: JSON.stringify(sound) });
   } catch (err) {
@@ -962,10 +1019,15 @@ if (!only || only === 'x') {
     await page.goto('https://x.com/controls', { waitUntil: 'domcontentloaded' });
     await page.mouse.move(5, 5);
     await page.waitForTimeout(5000);
-    const c = await page.evaluate(() => ({ controls: getComputedStyle(document.getElementById('ctl')).display, track: getComputedStyle(document.getElementById('track')).height, thumb: getComputedStyle(document.getElementById('thumb')).height }));
+    const c = await page.evaluate(() => {
+      const cs = getComputedStyle(document.getElementById('ctl'));
+      const cr = document.getElementById('ctl').getBoundingClientRect();
+      const el = document.elementFromPoint(cr.left + cr.width / 2, cr.top + 30);
+      return { opacity: cs.opacity, visibility: cs.visibility, onTop: !!el && document.getElementById('ctl').contains(el), track: getComputedStyle(document.getElementById('track')).height, played: getComputedStyle(document.getElementById('played')).height, thumb: getComputedStyle(document.getElementById('thumb')).height };
+    });
     await page.screenshot({ path: path.join(SHOTS, 'x-controls.png') });
-    record('[X] 재생바 5초 뒤에도 계속 표시', c.controls === 'block', { note: JSON.stringify(c) });
-    record('[X] 진행 막대 4px → 8px, 손잡이 12px → 18px', c.track === '8px' && c.thumb === '18px', { note: JSON.stringify(c) });
+    record('[X] 재생바 5초 뒤에도 계속 표시(사이트가 가짜 마우스 신호를 무시해도)', c.opacity === '1' && c.visibility === 'visible' && c.onTop, { note: JSON.stringify(c) });
+    record('[X] 진행 막대 2px → 8px(슬라이더 바깥 막대 포함), 손잡이 12px → 18px', c.track === '8px' && c.played === '8px' && c.thumb === '18px', { note: JSON.stringify(c) });
   } catch (err) {
     record('[X] 재생 설정', false, { note: err.message.split('\n')[0] });
   } finally {
@@ -985,9 +1047,11 @@ if (!only || only === 'x' || '넓은'.includes(only)) {
       center: Math.round(document.querySelector('[data-testid="primaryColumn"]').getBoundingClientRect().width),
       video: Math.round(document.querySelector('video').getBoundingClientRect().width),
       left: !!document.querySelector('header[role="banner"]').offsetWidth,
+      leftArea: Math.round(document.querySelector('header[role="banner"]').getBoundingClientRect().width),
+      post: Math.round(document.querySelector('article').getBoundingClientRect().width),
     }));
     await page.screenshot({ path: path.join(SHOTS, 'x-wide.png') });
-    record('[X] 넓은 화면: 오른쪽 숨김 + 가운데 600px → 확대, 왼쪽 메뉴 유지', g.sidebar === 'none' && g.center > 1000 && g.video > 1000 && g.left, { note: JSON.stringify(g) });
+    record('[X] 넓은 화면: 오른쪽 숨김 + 피드 게시물까지 확대(안쪽 600px 제한 해제), 왼쪽 메뉴는 메뉴 너비만', g.sidebar === 'none' && g.center > 1000 && g.post > 1000 && g.post <= g.center && g.video > 900 && g.left && g.leftArea < 320, { note: JSON.stringify(g) });
     await setSettings({ xWideLayout: false });
     await page.waitForTimeout(600);
     const off = await page.evaluate(() => getComputedStyle(document.querySelector('[data-testid="sidebarColumn"]')).display);

@@ -8,7 +8,7 @@ const small = fs.readFileSync(path.join(root, 'assets/icon-small.svg'), 'utf8');
 const exe = process.env.CHROMIUM || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const browser = await chromium.launch({ executablePath: fs.existsSync(exe) ? exe : undefined });
 const page = await browser.newPage({ deviceScaleFactor: 1 });
-for (const [size, svg] of [[16, small], [32, small], [48, big], [128, big], [256, big]]) {
+for (const [size, svg] of [[16, small], [24, small], [32, small], [48, big], [64, big], [96, big], [128, big], [256, big]]) {
   await page.setViewportSize({ width: size, height: size });
   await page.setContent(`<html><body style="margin:0;background:transparent"><img style="display:block;width:${size}px;height:${size}px" src="data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}"></body></html>`);
   await page.waitForTimeout(50);

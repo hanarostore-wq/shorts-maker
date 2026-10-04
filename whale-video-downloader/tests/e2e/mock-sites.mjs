@@ -176,26 +176,20 @@ const handlers = {
     if (u.pathname === '/watch') {
       return html(res, page('일반 사이트 영상', `<div class="card"><h3>일반 사이트</h3><video src="https://cdn.example-videos.com/progressive_1080p_land.mp4" controls muted style="width:640px;height:360px;background:#000"></video></div>`));
     }
-    if (u.pathname === '/spafeed' || u.pathname.startsWith('/spafeed/post/')) {
-      // 사이트 내부 이동(pushState) 피드: 뒤로 가면 목록을 다시 그리고 맨 위로 올려 버리는 사이트를 흉내 낸다
-      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>피드</title></head><body style="margin:0;background:#111;color:#eee;font-family:sans-serif"><main id="m"></main><script>
-        const m = document.getElementById('m');
-        const list = () => {
-          m.innerHTML = '';
-          // 목록은 조금씩 늦게 불러와진다(무한 스크롤)
-          let n = 0;
-          const more = () => { for (let i = 0; i < 20 && n < 120; i++, n++) { const a = document.createElement('article'); a.style.cssText = 'height:180px;margin:8px;background:#222'; a.innerHTML = '<a href="/spafeed/post/' + n + '">게시물 ' + n + '</a>'; m.appendChild(a); } };
-          more();
-          window.onscroll = () => { if (innerHeight + scrollY > document.documentElement.scrollHeight - 200) setTimeout(more, 150); };
-          setTimeout(() => scrollTo(0, 0), 50);
-        };
-        const detail = (id) => { window.onscroll = null; m.innerHTML = '<h1>게시물 ' + id + ' 상세</h1><div style="height:3000px"></div>'; scrollTo(0, 0); };
-        const route = () => { const p = location.pathname.match(/post\\/(\\d+)/); p ? detail(p[1]) : list(); };
-        document.addEventListener('click', (e) => { const a = e.target.closest('a'); if (!a) return; e.preventDefault(); history.pushState({}, '', a.getAttribute('href')); route(); });
-        addEventListener('popstate', route);
-        history.scrollRestoration = 'manual';
-        route();
-      </script></body></html>`);
+    if (u.pathname === '/afollow') {
+      // 일반 사이트: 게시물 안 '팔로우' 버튼 + 다른 곳의 '팔로잉'(이미 팔로우) 버튼
+      return html(res, page('팔로우 테스트', `<article style="width:520px"><div><b>작성자</b> <button id="fb" onclick="window.__followed = (window.__followed || 0) + 1; this.textContent = '팔로잉'">팔로우</button></div>
+          <img id="pic" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px;height:320px;object-fit:cover"></article>
+        <article style="width:520px"><div><b>다른 사람</b> <button id="fb2" onclick="window.__unfollowed = true">팔로잉</button></div>
+          <img id="pic2" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px;height:320px;object-fit:cover"></article>`));
+    }
+    if (u.pathname === '/clicktoggle') {
+      // 흔한 사이트 플레이어: 영상을 덮은 투명 막을 누르면 재생/정지(클릭), 두 번째는 누르는 순간(pointerdown) 정지, 막 안에 '좋아요' 버튼
+      return html(res, page('클릭 정지 테스트', `
+        <div style="position:relative;width:480px;height:270px"><video id="c1" src="https://cdn.example-videos.com/preview.webm" muted loop autoplay playsinline style="width:100%;height:100%;background:#000"></video>
+          <div id="o1" style="position:absolute;inset:0" onclick="const v = document.getElementById('c1'); v.paused ? v.play() : v.pause()"><button id="like" onclick="event.stopPropagation(); window.__liked = true" style="position:absolute;right:8px;top:8px">좋아요</button></div></div>
+        <div style="position:relative;width:480px;height:270px"><video id="c2" src="https://cdn.example-videos.com/preview.webm" muted loop autoplay playsinline style="width:100%;height:100%;background:#000"></video>
+          <div id="o2" style="position:absolute;inset:0" onpointerdown="document.getElementById('c2').pause()"></div></div>`));
     }
     if (u.pathname === '/feedpost') {
       // 탭 제목은 '(1) 이름 / X' 처럼 작성자·알림 수, 본문은 게시물 글 칸에 있다
@@ -429,8 +423,9 @@ const handlers = {
     }
     if (u.pathname === '/autoplay') {
       // X 자동 재생이 꺼진 상태처럼 영상이 멈춰 있다
-      const v = (id) => `<article style="height:520px"><div data-testid="videoPlayer"><video id="${id}" src="https://cdn.example-videos.com/preview.webm" muted loop playsinline style="width:480px;height:270px;background:#000"></video></div></article>`;
-      return html(res, page('X 자동 재생', `<div style="width:100%">${v('v1')}<div style="height:300px"></div>${v('v2')}<div style="height:1200px"></div></div>`));
+      // v1 은 X 가 스스로 자동 재생하는 영상(autoplay), v2 는 멈춰 있는 영상
+      const v = (id, auto) => `<article style="height:330px"><div data-testid="videoPlayer"><video id="${id}" src="https://cdn.example-videos.com/preview.webm" muted loop playsinline ${auto ? 'autoplay' : ''} style="width:480px;height:270px;background:#000"></video></div></article>`;
+      return html(res, page('X 자동 재생', `<div style="width:100%">${v('v1', true)}${v('v2', false)}<div style="height:1200px"></div></div>`));
     }
     if (u.pathname === '/hq') {
       return html(res, page('X 화질', '<p>화질 테스트</p>', `
@@ -439,17 +434,26 @@ const handlers = {
         x.onreadystatechange = () => { if (x.readyState === 4) window.__xhrVariants = (x.responseText.match(/EXT-X-STREAM-INF/g) || []).length; };
         x.send();`));
     }
+    if (u.pathname === '/afollow') {
+      // 다운로드 누르면 자동 팔로우: @auto_user 의 사진 게시물(팔로우 상태 모름 → 팔로우 요청)
+      return html(res, page('홈 / X', `<article data-testid="tweet" style="width:560px"><div style="display:flex;justify-content:space-between"><div data-testid="User-Name"><a href="/auto_user"><span>자동 팔로우 대상</span></a> <a href="/auto_user">@auto_user</a> · <a href="/auto_user/status/1790000000000000077"><time>1시간</time></a></div><button data-testid="caret">⋯</button></div>
+        <div data-testid="tweetText">사진 게시물</div><img id="pic" alt="이미지" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=large" style="width:480px;height:320px;object-fit:cover"></article>`, `document.cookie = 'ct0=mockcsrf123; path=/';`));
+    }
     if (u.pathname === '/controls') {
-      // X 처럼: 마우스가 2초 동안 안 움직이면 재생바가 사라지는 플레이어, 진행 막대(4px)와 손잡이(12px)
+      // X 처럼(엄격하게): 진짜 마우스 움직임만 인정(가짜 이벤트 무시), 2초 동안 안 움직이면 재생바를 흐리게 숨김(opacity·visibility)
+      // 진행 막대(2px)는 슬라이더 바깥(옆)에 있고, 슬라이더 안에는 손잡이(12px)만 있다
       return html(res, page('X 재생바', `<div data-testid="videoPlayer" id="pl" style="position:relative;width:360px;height:640px">
           <video src="https://cdn.example-videos.com/preview.webm" muted loop autoplay playsinline style="width:100%;height:100%;background:#000"></video>
-          <div id="ctl" style="position:absolute;left:0;right:0;bottom:0;height:60px;background:rgba(0,0,0,.5)">
-            <div role="slider" aria-label="Seek slider" style="position:relative;margin:10px;height:16px">
-              <div id="track" style="position:absolute;top:6px;left:0;width:320px;height:4px;background:#888"></div>
-              <div id="thumb" style="position:absolute;top:2px;left:100px;width:12px;height:12px;border-radius:50%;background:#fff"></div>
+          <div id="ctl" class="on" style="position:absolute;left:0;right:0;bottom:0;height:60px;background:rgba(0,0,0,.5);transition:opacity .2s">
+            <div style="position:relative;margin:10px;height:16px">
+              <div id="track" style="position:absolute;top:7px;left:0;width:320px;height:2px;background:#888"></div>
+              <div id="played" style="position:absolute;top:7px;left:0;width:100px;height:2px;background:#1d9bf0"></div>
+              <div role="slider" aria-label="Seek slider" style="position:absolute;inset:0">
+                <div id="thumb" style="position:absolute;top:2px;left:94px;width:12px;height:12px;border-radius:9999px;background:#fff"></div>
+              </div>
             </div></div></div>`,
-        `let last = Date.now(); document.getElementById('pl').addEventListener('mousemove', () => (last = Date.now()));
-         setInterval(() => { document.getElementById('ctl').style.display = Date.now() - last > 2000 ? 'none' : 'block'; }, 200);`));
+        `let last = Date.now(); document.getElementById('pl').addEventListener('mousemove', (e) => { if (e.isTrusted) last = Date.now(); });
+         setInterval(() => { const c = document.getElementById('ctl'); const hide = Date.now() - last > 2000; c.style.opacity = hide ? '0' : '1'; c.style.visibility = hide ? 'hidden' : 'visible'; }, 200);`));
     }
     if (u.pathname === '/ads') {
       // X 피드: 보통 게시물 / '프로모션' 라벨 / placementTracking 광고 + 광고 서버 요청
@@ -458,11 +462,15 @@ const handlers = {
         `window.__adNet = 'pending'; setTimeout(() => fetch('https://googleads.g.doubleclick.net/pagead/ads?x=1').then((r) => (window.__adNet = 'loaded ' + r.status), () => (window.__adNet = 'blocked')), 300);`));
     }
     if (u.pathname === '/layout') {
-      // X 의 실제 3단 구조: 왼쪽 메뉴(header) / 가운데(primaryColumn 600px) / 오른쪽(sidebarColumn 350px)
-      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>홈 / X</title><style>body{margin:0;background:#000;color:#eee;font-family:sans-serif}</style></head>
-        <body><div style="display:flex;justify-content:center"><header role="banner" style="width:275px;flex:none">왼쪽 메뉴</header>
-        <main role="main" style="flex:1 1 auto;display:flex"><div style="width:990px"><div style="display:flex;justify-content:space-between;width:990px">
-          <div data-testid="primaryColumn" style="max-width:600px;width:100%;border:1px solid #333"><div style="max-width:600px"><article data-testid="tweet"><div data-testid="videoPlayer"><video src="https://cdn.example-videos.com/preview.webm" muted style="width:100%;aspect-ratio:16/9;display:block;background:#111"></video></div></article></div></div>
+      // 실제 X 구조: 왼쪽 메뉴(header, 남는 공간을 차지하고 메뉴는 오른쪽 정렬) / 가운데(primaryColumn 600px) / 오른쪽(sidebarColumn)
+      // 피드 목록 안쪽에도 600px 너비 제한(클래스로 걸림)이 한 겹 더 있다
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>홈 / X</title><style>body{margin:0;background:#000;color:#eee;font-family:sans-serif}.r-600{max-width:600px}</style></head>
+        <body><div style="display:flex;flex-direction:row;min-height:100vh">
+        <header role="banner" style="flex-grow:1;display:flex;justify-content:flex-end"><div style="width:275px">왼쪽 메뉴</div></header>
+        <main role="main" style="flex-grow:1;display:flex;align-items:flex-start"><div style="width:990px"><div style="display:flex;justify-content:space-between;width:990px">
+          <div data-testid="primaryColumn" style="max-width:600px;width:100%;border:1px solid #333"><div><div><section role="region"><div class="r-600" style="margin:0 auto"><div>
+            <div data-testid="cellInnerDiv" style="position:relative"><article data-testid="tweet" style="display:flex;padding:12px 16px"><div style="width:40px;height:40px;border-radius:50%;background:#555;flex:none"></div><div style="flex:1;margin-left:12px"><div>게시물 본문</div><div data-testid="videoPlayer"><video src="https://cdn.example-videos.com/preview.webm" muted style="width:100%;aspect-ratio:16/9;display:block;background:#111"></video></div></div></article></div>
+          </div></div></section></div></div></div>
           <div data-testid="sidebarColumn" style="width:350px">Premium 구독하기 · 트렌드 · 팔로우 추천</div>
         </div></div></main></div></body></html>`);
     }
@@ -566,6 +574,10 @@ const handlers = {
 
   // ── Bluesky ──
   'bsky.app': (req, res, u) => {
+    if (u.pathname === '/afollow') {
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Bluesky</title><script>localStorage.setItem('BSKY_STORAGE', JSON.stringify({ session: { currentAccount: { did: 'did:plc:me', handle: 'me.test', service: 'https://bsky.social/', pdsUrl: 'https://bsky.social', accessJwt: 'TEST-ACCESS-JWT' }, accounts: [] } }));</script></head><body style="background:#111;color:#eee">
+        <div data-testid="feedItem-by-carol.test" style="width:560px;padding:12px;margin:8px"><a href="/profile/carol.test">캐롤</a><p>사진</p><img id="pic" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px;height:320px;object-fit:cover"></div></body></html>`);
+    }
     if (u.pathname === '/feedfollow') {
       // 블루스카이 피드: 로그인 정보는 localStorage BSKY_STORAGE 에 있다
       const item = (h, name) => `<div data-testid="feedItem-by-${h}" id="b-${h.split('.')[0]}" style="width:560px;padding:12px;margin:8px;background:#1b1b24;border-radius:10px"><a href="/profile/${h}">${name}</a> <span>@${h}</span> · <a href="/profile/${h}/post/3kpost">3시간</a><p>게시물 본문</p><button data-testid="postDropdownBtn">⋯</button></div>`;
