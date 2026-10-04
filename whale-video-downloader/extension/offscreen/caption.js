@@ -4,8 +4,16 @@
 //  - 사진은 원본에 바로 그리고, 영상은 모든 프레임에 그려 다시 인코딩한다(화질은 최대한 높게).
 import * as MB from '../vendor/mediabunny.min.mjs';
 
-// 영상·사진에 쓰는 글자 크기(모든 사이트 공통 고정값)
+// 영상·사진에 쓰는 글자 크기(모든 사이트 공통)
+//   기준: 1086x1448 사진에서 28px(사용자가 맞다고 한 크기). 해상도가 달라도 화면에서 보이는 크기가 같도록
+//   짧은 변 길이에 비례해 키우거나 줄인다(예: 1080x1920 → 28px, 720x1280 → 19px, 3840x2160 → 56px).
 export const TEXT_PX = 28;
+export const TEXT_BASE = 1086;
+export function textPx(w, h) {
+  const short = Math.min(Number(w) || 0, Number(h) || 0);
+  if (!(short > 0)) return TEXT_PX;
+  return Math.max(12, Math.round((TEXT_PX * short) / TEXT_BASE));
+}
 
 // ── 요약 ──
 export function quickSummary(text) {
@@ -161,8 +169,8 @@ export function drawOverlay(ctx, w, h, ov) {
 
 export function drawCaption(ctx, w, h, text, pos, flush = false) {
   if (!text) return;
-  // 모든 사이트·모든 크기에서 피드 글자와 같은 28px 로 고정(사용자 요청)
-  const size = TEXT_PX;
+  // 모든 사이트 공통: 1086px 기준 28px, 해상도에 비례(사용자 요청)
+  const size = textPx(w, h);
   ctx.save();
   ctx.font = `700 ${size}px "Pretendard","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR","Noto Sans CJK KR",sans-serif`;
   ctx.textBaseline = 'top';
@@ -599,12 +607,12 @@ export function postCard(author, text) {
 // 피드 본문 글자만 왼쪽 위에 쓴다(상자 없이 흰 글자 + 검은 테두리, 최대 3줄)
 export function drawTopLeftText(ctx, w, h, text) {
   if (!text) return;
-  // 글자 크기: 사이트·영상·사진 크기와 상관없이 항상 28px 로 고정(사용자 요청)
-  const size = TEXT_PX;
+  // 글자 크기: 1086x1448 에서 28px 를 기준으로 해상도에 비례(어느 해상도든 보이는 크기가 같게)
+  const size = textPx(w, h);
   ctx.save();
   ctx.font = `800 ${size}px "Pretendard","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR","Noto Sans CJK KR",sans-serif`;
   ctx.textBaseline = 'top';
-  const margin = 14; // 왼쪽 위 여백도 고정
+  const margin = Math.round(size / 2); // 왼쪽 위 여백도 글자 크기에 맞춰(28px 일 때 14px)
   const lines = wrap(ctx, text, w - margin * 2, 3);
   const lh = Math.round(size * 1.25);
   ctx.lineJoin = 'round';
