@@ -595,8 +595,9 @@ export function postCard(author, text) {
 // 피드 본문 글자만 왼쪽 위에 쓴다(상자 없이 흰 글자 + 검은 테두리, 최대 3줄)
 export function drawTopLeftText(ctx, w, h, text) {
   if (!text) return;
-  // 글자 크기: 화면 짧은 변의 4.5%, 20~48px (v1.14~1.18 의 2배)
-  const size = Math.round(Math.max(20, Math.min(48, Math.min(w, h) * 0.045)));
+  // 글자 크기 고정: 항상 영상(사진) 가로 폭의 3.2% — 어떤 크기의 영상이든 화면에서 같은 크기로 보인다
+  // (예전: 짧은 변 기준 + 최소 20px·최대 48px 제한 → 작은 영상은 글자가 매우 커지고 큰 영상은 작아졌다)
+  const size = Math.max(8, Math.round(w * 0.032));
   ctx.save();
   ctx.font = `800 ${size}px "Pretendard","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR","Noto Sans CJK KR",sans-serif`;
   ctx.textBaseline = 'top';
