@@ -183,6 +183,15 @@ const handlers = {
         <article style="width:520px"><div><b>다른 사람</b> <button id="fb2" onclick="window.__unfollowed = true">팔로잉</button></div>
           <img id="pic2" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px;height:320px;object-fit:cover"></article>`));
     }
+    if (u.pathname === '/afollow-nav') {
+      // 팔로우 버튼이 로그인 창을 띄우는 사이트(누르면 alert): 그래도 첫 클릭에 다운로드가 시작돼야 함
+      return html(res, page('팔로우 테스트2', `<article style="width:520px"><div><b>작성자</b> <button id="fb" onclick="window.__followClicked = true; alert('로그인이 필요합니다')">팔로우</button></div>
+          <img id="pic" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px;height:320px;object-fit:cover"></article>`));
+    }
+    if (u.pathname === '/hover2') {
+      return html(res, page('마우스 재생', `<video id="h1" src="https://cdn.example-videos.com/preview.webm" loop playsinline style="width:420px;height:236px;background:#000"></video>
+        <video id="h2" src="https://cdn.example-videos.com/preview.webm" loop playsinline style="width:420px;height:236px;background:#000"></video>`));
+    }
     if (u.pathname === '/clicktoggle') {
       // 흔한 사이트 플레이어: 영상을 덮은 투명 막을 누르면 재생/정지(클릭), 두 번째는 누르는 순간(pointerdown) 정지, 막 안에 '좋아요' 버튼
       return html(res, page('클릭 정지 테스트', `
@@ -190,6 +199,24 @@ const handlers = {
           <div id="o1" style="position:absolute;inset:0" onclick="const v = document.getElementById('c1'); v.paused ? v.play() : v.pause()"><button id="like" onclick="event.stopPropagation(); window.__liked = true" style="position:absolute;right:8px;top:8px">좋아요</button></div></div>
         <div style="position:relative;width:480px;height:270px"><video id="c2" src="https://cdn.example-videos.com/preview.webm" muted loop autoplay playsinline style="width:100%;height:100%;background:#000"></video>
           <div id="o2" style="position:absolute;inset:0" onpointerdown="document.getElementById('c2').pause()"></div></div>`));
+    }
+    if (u.pathname === '/feedshot2') {
+      // 인스타·유튜브처럼 작성자는 영상 위, 본문은 영상 아래에 있는 게시물
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>피드</title></head><body style="margin:0;background:#fff;color:#111">
+        <article style="width:660px;margin:20px">
+          <header style="display:flex;gap:8px;align-items:center;padding:6px 0"><span style="width:36px;height:36px;border-radius:50%;background:#e8a;display:inline-block"></span><b>민지</b> <span style="color:#888">@minji</span></header>
+          <video src="https://cdn.example-videos.com/person_top.webm" muted style="width:640px;height:360px;background:#000;display:block"></video>
+          <div class="desc" style="padding:6px 0">주말에 바다 보러 다녀왔어요. 날씨가 너무 좋았어요!</div>
+        </article></body></html>`);
+    }
+    if (u.pathname === '/feedpost-en' || u.pathname === '/feedpost-fail') {
+      const body = u.pathname.endsWith('fail') ? 'FAILTEST sunset walk on the beach today' : 'Took a sunset walk on the beach today. It was so beautiful!';
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Home / X</title></head><body style="margin:0;background:#000;color:#eee">
+        <article style="width:660px;margin:20px">
+          <div style="display:flex;gap:8px;align-items:center"><div data-testid="Tweet-User-Avatar" style="width:40px;height:40px;border-radius:50%;background:#4a8"></div><div data-testid="User-Name"><b>Emma</b> <span style="color:#888">@emma_test · Jun 2</span></div></div>
+          <div data-testid="tweetText" lang="en">${body}</div>
+          <img src="https://cdn.example-videos.com/img/photo.jpg" style="width:640px;height:400px;object-fit:cover;display:block">
+        </article></body></html>`);
     }
     if (u.pathname === '/feedpost') {
       // 탭 제목은 '(1) 이름 / X' 처럼 작성자·알림 수, 본문은 게시물 글 칸에 있다
@@ -458,8 +485,13 @@ const handlers = {
     if (u.pathname === '/ads') {
       // X 피드: 보통 게시물 / '프로모션' 라벨 / placementTracking 광고 + 광고 서버 요청
       const cell = (id, inner) => `<div data-testid="cellInnerDiv" id="${id}"><article data-testid="tweet"><p>${id} 게시물 본문입니다</p>${inner}</article></div>`;
-      return html(res, page('홈 / X', cell('normal', '') + cell('promoted', '<div><span>프로모션</span></div>') + cell('tracked', '<div data-testid="placementTracking"><span>영상</span></div>'),
-        `window.__adNet = 'pending'; setTimeout(() => fetch('https://googleads.g.doubleclick.net/pagead/ads?x=1').then((r) => (window.__adNet = 'loaded ' + r.status), () => (window.__adNet = 'blocked')), 300);`));
+      // bodyword: 본문에 '광고'라고만 쓴 일반 게시물(숨기면 안 됨)
+      // recycle: X 처럼 광고였던 칸이 3초 뒤 일반 게시물로 다시 쓰임(다시 보여야 함)
+      return html(res, page('홈 / X', cell('normal', '') + cell('promoted', '<div><span>프로모션</span></div>') + cell('tracked', '<div data-testid="placementTracking"><span>영상</span></div>')
+        + `<div data-testid="cellInnerDiv" id="bodyword"><article data-testid="tweet"><div data-testid="tweetText"><span>광고</span></div></article></div>`
+        + `<div data-testid="cellInnerDiv" id="recycle"><article data-testid="tweet"><p>재사용 칸</p><div><span>프로모션</span></div></article></div>`,
+        `setTimeout(() => { document.querySelector('#recycle article').innerHTML = '<a href="/someone/status/1790000000000000088"><time>1분</time></a><p>재사용된 칸에 들어온 일반 게시물입니다</p>'; }, 3000);
+        window.__adNet = 'pending'; setTimeout(() => fetch('https://googleads.g.doubleclick.net/pagead/ads?x=1').then((r) => (window.__adNet = 'loaded ' + r.status), () => (window.__adNet = 'blocked')), 300);`));
     }
     if (u.pathname === '/layout') {
       // 실제 X 구조: 왼쪽 메뉴(header, 남는 공간을 차지하고 메뉴는 오른쪽 정렬) / 가운데(primaryColumn 600px) / 오른쪽(sidebarColumn)
@@ -477,9 +509,9 @@ const handlers = {
     if (u.pathname === '/explore') {
       // 탐색 피드: @followed_user(팔로우 중), @new_user(팔로우 안 함) 은 타임라인 GraphQL 로, @react_user 는 화면 React 데이터에만 있다
       // 실제 X 처럼 이름 칸은 한 줄로 잘리고(overflow:hidden), 오른쪽 끝에 ⋯(caret) 버튼이 있다
-      const art = (sn, name, id) => `<article data-testid="tweet" id="t-${sn}" style="width:560px"><div style="display:flex;align-items:center;justify-content:space-between"><div style="display:flex;min-width:0;flex-shrink:1;overflow:hidden"><div data-testid="User-Name" style="display:flex;flex-direction:row;overflow:hidden;min-width:0;white-space:nowrap"><div style="display:flex;align-items:center;gap:4px;overflow:hidden;max-width:200px"><a href="/${sn}"><span>${name}</span></a></div><div style="overflow:hidden;text-overflow:ellipsis;max-width:220px"><a href="/${sn}">@${sn}</a> · <a href="/${sn}/status/${id}"><time>1시간</time></a></div></div></div><div style="display:flex;align-items:center"><button data-testid="caret" aria-label="더 보기">⋯</button></div></div><p>게시물 본문</p></article>`;
+      const art = (sn, name, id, img = '') => `<article data-testid="tweet" id="t-${sn}" style="width:560px"><div style="display:flex;align-items:center;justify-content:space-between"><div style="display:flex;min-width:0;flex-shrink:1;overflow:hidden"><div data-testid="User-Name" style="display:flex;flex-direction:row;overflow:hidden;min-width:0;white-space:nowrap"><div style="display:flex;align-items:center;gap:4px;overflow:hidden;max-width:200px"><a href="/${sn}"><span>${name}</span></a></div><div style="overflow:hidden;text-overflow:ellipsis;max-width:220px"><a href="/${sn}">@${sn}</a> · <a href="/${sn}/status/${id}"><time>1시간</time></a></div></div></div><div style="display:flex;align-items:center"><button data-testid="caret" aria-label="더 보기">⋯</button></div></div><p>게시물 본문</p>${img ? `<img alt="" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=small" style="width:40px;height:40px;border-radius:50%">${img}` : ''}</article>`;
       return html(res, page('탐색하기 / X', `<a data-testid="AppTabBar_Profile_Link" href="/me_account">프로필</a>
-          <div style="display:flex;flex-direction:column;gap:12px;width:560px">${art('followed_user', '팔로우한 사람', '1801')}${art('new_user', '처음 보는 사람', '1802')}${art('react_user', '리액트 사람 이름이 아주 길어서 한 줄에 다 안 들어가는 계정입니다', '1803')}${art('me_account', '나', '1804')}</div>
+          <div style="display:flex;flex-direction:column;gap:12px;width:560px">${art('followed_user', '팔로우한 사람', '1801', '<img id="fpic" alt="이미지" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=large" style="width:480px;height:300px;object-fit:cover">')}${art('new_user', '처음 보는 사람', '1802')}${art('react_user', '리액트 사람 이름이 아주 길어서 한 줄에 다 안 들어가는 계정입니다', '1803')}${art('me_account', '나', '1804')}</div>
           <div data-testid="videoPlayer" style="position:relative;width:360px;height:200px"><video id="xv" src="https://cdn.example-videos.com/preview.webm" muted loop playsinline style="width:100%;height:100%"></video>
             <button data-testid="unmuteButton" aria-label="Unmute" onclick="document.getElementById('xv').muted=false; window.__unmuteClicked=true" style="position:absolute;right:4px;bottom:4px">🔇</button></div>`,
         `document.cookie = 'ct0=mockcsrf123; path=/';
@@ -576,6 +608,7 @@ const handlers = {
   'bsky.app': (req, res, u) => {
     if (u.pathname === '/afollow') {
       return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Bluesky</title><script>localStorage.setItem('BSKY_STORAGE', JSON.stringify({ session: { currentAccount: { did: 'did:plc:me', handle: 'me.test', service: 'https://bsky.social/', pdsUrl: 'https://bsky.social', accessJwt: 'TEST-ACCESS-JWT' }, accounts: [] } }));</script></head><body style="background:#111;color:#eee">
+        <div data-testid="feedItem-by-alice.test" style="width:560px;padding:12px;margin:8px"><a href="/profile/alice.test">앨리스(이미 팔로우)</a><p>사진</p><img id="apic" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px;height:320px;object-fit:cover"></div>
         <div data-testid="feedItem-by-carol.test" style="width:560px;padding:12px;margin:8px"><a href="/profile/carol.test">캐롤</a><p>사진</p><img id="pic" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px;height:320px;object-fit:cover"></div></body></html>`);
     }
     if (u.pathname === '/feedfollow') {
@@ -588,6 +621,16 @@ const handlers = {
       // 블루스카이 피드처럼 음소거 자동 재생 + 영상 옆 음소거 해제 버튼
       return html(res, page('Bluesky', `<div class="card"><div><div><video id="bv" src="https://cdn.example-videos.com/preview.webm" muted autoplay loop playsinline style="width:480px;height:270px;background:#000"></video></div>
         <button id="bm" aria-label="Unmute" onclick="window.__bskyUnmute = true; const v = document.getElementById('bv'); v.muted = !v.muted; this.setAttribute('aria-label', v.muted ? 'Unmute' : 'Mute')">🔇</button></div></div>`));
+    }
+    if (u.pathname === '/feedvideo') {
+      // 블루스카이 피드(SPA): 탭 제목은 처음 연 페이지 것('ㅎㅊㅁㅃ')으로 남아 있고, 게시물에는 작성자 이름·본문이 있다
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>ㅎㅊㅁㅃ</title><meta property="og:title" content="ㅎㅊㅁㅃ"></head><body style="background:#111;color:#eee">
+        <div data-testid="feedItem-by-dana.test" style="width:560px;padding:12px">
+          <div><a href="/profile/dana.test" aria-label="다나"><img data-testid="userAvatarImage" src="https://cdn.example-videos.com/img/photo.jpg" style="width:40px;height:40px;border-radius:50%"></a>
+          <a href="/profile/dana.test">다나</a> <a href="/profile/dana.test">@dana.test</a> · <a href="/profile/dana.test/post/3kdanapost">3시간</a></div>
+          <div data-testid="postText">고양이랑 놀았어요</div>
+          <video src="https://cdn.example-videos.com/preview.webm" poster="https://video.bsky.app/watch/did%3Aplc%3Amockalice/bafkreimockoriginal000000000000000000000000000000000001/thumbnail.jpg" muted style="width:480px;height:360px;background:#000"></video>
+        </div></body></html>`);
     }
     const m = /^\/profile\/([^/]+)\/post\/([a-z0-9]+)/.exec(u.pathname);
     if (m) {
@@ -602,6 +645,13 @@ const handlers = {
       return json(req, res, { id: 'did:plc:mockalice', service: [{ id: '#atproto_pds', type: 'AtprotoPersonalDataServer', serviceEndpoint: 'https://bsky.social' }] });
     }
     json(req, res, { message: 'not found' }, 404);
+  },
+  // 구글 번역 공개 주소(gtx) 흉내: 'FAILTEST' 가 들어 있으면 서버 오류
+  'translate.googleapis.com': (req, res, u) => {
+    const q = u.searchParams.get('q') || '';
+    log.push({ host: 'translate.googleapis.com', tl: u.searchParams.get('tl'), q });
+    if (/FAILTEST/.test(q)) return json(req, res, { error: 'boom' }, 500);
+    return json(req, res, [[['오늘 해변에서 노을을 보며 산책했어요. 정말 아름다웠어요!', q, null, null, 1]], null, 'en']);
   },
   'bsky.social': (req, res, u) => {
     // 팔로우 버튼용 (PDS → 앱뷰 프록시)

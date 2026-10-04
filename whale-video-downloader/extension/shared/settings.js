@@ -4,7 +4,8 @@ export const DEFAULT_SETTINGS = {
   askEveryTime: false, // 다운로드마다 저장 위치 묻기
   imageButtons: true, // 사진에도 저장 버튼
   captionOnMedia: true, // 사진·영상 빈 공간에 피드 내용 요약 넣기(영상은 재인코딩)
-  captionKeepOriginal: false, // 요약 넣을 때 원본도 함께 저장
+  captionKeepOriginal: false,
+  translateCaption: true, // 피드 글이 한국어가 아니면 한국어 번역을 캡처 아래에 붙임 // 요약 넣을 때 원본도 함께 저장
   captionCover: false, // [재인코딩 없음] 영상 표지(썸네일)에 피드 스크린샷 + 설명 정보에 피드 내용 + 같은 이름 PNG
   captionIntro: false, // 영상 맨 앞에 피드 스크린샷 3초(재인코딩)
   autoFollow: true, // 다운로드 누르면 그 게시물 작성자 자동 팔로우(팔로우 기능이 있는 사이트)
@@ -18,8 +19,7 @@ export const DEFAULT_SETTINGS = {
   xThickBar: true, // X 진행 막대 두껍게
   xHighQuality: true, // X 재생 화질 항상 최고
   xFollowButtons: true, // X 피드 작성자 옆 팔로우/팔로잉 버튼
-  xAutoSound: true, // X 영상 재생 시 소리 자동 켜기
-  xHoverPlay: true, // X 영상: 마우스를 올리면 재생, 떠나면 멈춤
+  hoverPlay: true, // 모든 사이트: 마우스를 올린 영상을 소리와 함께 재생, 다른 영상에 올리면 이전 영상 멈춤
   bskyAutoSound: true, // 블루스카이 영상 재생 시 소리 자동 켜기
   bskyFollowButtons: true, // 블루스카이 피드 게시물에 팔로우/팔로잉 버튼
   xWideLayout: true, // X 오른쪽 사이드바 숨기고 가운데 피드 크게 // X 영상 재생 시 소리 자동 켜기
@@ -52,6 +52,9 @@ export async function getSettings() {
     if (!s.buttonPosition || s.buttonPosition === 'right') s.buttonPosition = 'mid-right';
     s.posVersion = 2;
   }
+  // v1.12.0: X 전용 '마우스 올리면 재생'을 모든 사이트 공용으로
+  if (s.xHoverPlay === false && s.hoverPlay !== false) s.hoverPlay = false;
+  delete s.xHoverPlay;
   return s;
 }
 

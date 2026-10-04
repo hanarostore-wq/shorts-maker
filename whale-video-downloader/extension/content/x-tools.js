@@ -1,6 +1,6 @@
 // X(트위터) 전용 도구 (ISOLATED world)
 //  1) 홈·탐색 피드의 게시물 작성자 옆에 팔로우 / 팔로잉 상태 버튼 (눌러서 팔로우·언팔로우)
-//  2) 영상이 재생되면 소리 자동 켜기
+//  2) (마우스 올리면 재생은 hover-play.js)
 (() => {
   'use strict';
   if (globalThis.__SMD_XTOOLS || !/(^|\.)(x|twitter)\.com$/.test(location.hostname) || window.top !== window) return;
@@ -8,7 +8,7 @@
   const SITES = globalThis.__SMD_SITES;
   if (!SITES || !chrome?.runtime?.id) return;
 
-  let settings = { xFollowButtons: true, xAutoSound: true, xHoverPlay: true, xWideLayout: true, xKeepControls: true, xHighQuality: true, xThickBar: true };
+  let settings = { xFollowButtons: true, xWideLayout: true, xKeepControls: true, xHighQuality: true, xThickBar: true };
   let wideStyle = null; // applyWide() 가 아래보다 먼저 불리므로 여기서 선언
   chrome.storage.local.get('settings').then((r) => {
     settings = { ...settings, ...(r.settings || {}) };
@@ -256,115 +256,20 @@
     let sn = handleOf(article) || /^\/([A-Za-z0-9_]{1,15})\/status\//.exec(location.pathname)?.[1] || '';
     if (!sn || sn.toLowerCase() === myHandle()) return;
     const entry = (article && buttons.get(article)) || { sn, btn: document.createElement('button') };
-    toggle(entry, true);
+    (async () => {
+      // 팔로우 상태를 모르면 먼저 화면 데이터로 확인하고, 이미 팔로우 중이면 아무것도 하지 않는다
+      const known = SITES.xUsers.get(sn.toLowerCase());
+      if ((known?.following === undefined || known?.following === null) && article) {
+        if (!article.dataset.smdQ) article.dataset.smdQ = `xf${++markSeq}`;
+        const r = await ask({ kind: 'reactuser', token: article.dataset.smdQ, screenName: sn }, 1200);
+        if (r.auth) pageAuth = r.auth;
+        if (r.user && r.user.following !== null && r.user.following !== undefined) SITES.xUsers.set(sn.toLowerCase(), { id: r.user.id, screenName: r.user.screenName || sn, following: r.user.following, t: Date.now() });
+      }
+      toggle(entry, true);
+    })();
   });
 
-  // ───────────── 2) 영상 소리 자동 켜기 ─────────────
-  let pendingUnmute = null;
-  function unmute(v) {
-    if (settings.xAutoSound === false || !v.muted) return;
-    // X 플레이어의 음소거 버튼이 있으면 그것을 눌러 X 화면 상태도 맞춘다
-    const player = v.closest('[data-testid="videoPlayer"]') || v.parentElement;
-    const btn = player?.querySelector('[aria-label*="Unmute" i], [aria-label*="음소거 해제"], [data-testid="unmuteButton"]');
-    if (btn) btn.click();
-    else v.muted = false;
-    if (v.volume === 0) v.volume = 1;
-    // 사용자가 페이지를 한 번도 누르지 않았으면 브라우저가 소리 재생을 막고 영상을 멈춘다 → 음소거로 계속 재생, 첫 클릭 때 소리 켜기
-    setTimeout(() => {
-      if (v.paused && !v.ended) {
-        v.muted = true;
-        v.play().catch(() => {});
-        pendingUnmute = v;
-      }
-    }, 150);
-  }
-  document.addEventListener('playing', (ev) => ev.target instanceof HTMLVideoElement && unmute(ev.target), true);
-  const onGesture = () => {
-    if (pendingUnmute && pendingUnmute.isConnected && !pendingUnmute.paused) {
-      const v = pendingUnmute;
-      pendingUnmute = null;
-      unmute(v);
-    }
-  };
-  document.addEventListener('pointerdown', onGesture, true);
-  document.addEventListener('keydown', onGesture, true);
-
-  // ───────────── 2-1) 마우스를 올리면 재생, 떠나면 멈춤 ─────────────
-  // X 가 스스로 자동 재생한 영상도 마우스가 위에 없으면 멈춘다. 직접 눌러 재생한 영상은 그대로 둔다.
-  const userPlayed = new WeakSet();
-  const ourPlay = new WeakSet();
-  let lastPointer = 0;
-  let hovered = null;
-  document.addEventListener('pointerdown', () => (lastPointer = Date.now()), true);
-  document.addEventListener('keydown', () => (lastPointer = Date.now()), true);
-  document.addEventListener(
-    'play',
-    (ev) => {
-      const v = ev.target;
-      if (!(v instanceof HTMLVideoElement)) return;
-      if (ourPlay.has(v)) ourPlay.delete(v);
-      else if (Date.now() - lastPointer < 800) userPlayed.add(v);
-    },
-    true,
-  );
-  document.addEventListener('pause', (ev) => ev.target instanceof HTMLVideoElement && Date.now() - lastPointer < 800 && userPlayed.delete(ev.target), true);
-  const hoverOn = () => settings.xHoverPlay !== false;
-  function videoUnder(x, y) {
-    for (const v of document.querySelectorAll('video')) {
-      const r = v.getBoundingClientRect();
-      if (r.width < 60 || r.height < 60) continue;
-      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return v;
-    }
-    return null;
-  }
-  async function startPlay(v) {
-    ourPlay.add(v);
-    if (settings.xAutoSound !== false) v.muted = false;
-    try {
-      await v.play();
-    } catch {
-      // 클릭 전에는 소리 있는 재생이 막힌다 → 음소거로 재생하고 첫 클릭 때 소리 켜기
-      v.muted = true;
-      ourPlay.add(v);
-      try {
-        await v.play();
-        if (settings.xAutoSound !== false) pendingUnmute = v;
-      } catch {}
-    }
-  }
-  document.addEventListener(
-    'pointermove',
-    (ev) => {
-      if (!hoverOn()) return;
-      const v = videoUnder(ev.clientX, ev.clientY);
-      if (v === hovered) return;
-      const prev = hovered;
-      hovered = v;
-      if (prev && !prev.paused && !userPlayed.has(prev)) prev.pause();
-      if (v && v.paused && !v.ended) {
-        // X 가 아직 영상을 불러오지 않았으면(자동 재생 꺼짐) X 의 재생 버튼을 누른다
-        if (!v.currentSrc && v.readyState === 0) {
-          const btn = (v.closest('[data-testid="videoPlayer"]') || v.parentElement)?.querySelector('[data-testid="playButton"], [aria-label="재생"], [aria-label="Play"]');
-          if (btn) {
-            ourPlay.add(v);
-            btn.click();
-          }
-        } else startPlay(v);
-      }
-    },
-    { capture: true, passive: true },
-  );
-  document.addEventListener('pointerleave', () => {
-    if (hovered && !hovered.paused && !userPlayed.has(hovered) && hoverOn()) hovered.pause();
-    hovered = null;
-  });
-  // 마우스가 위에 없는데 재생 중인 영상(X 자동 재생)은 멈춘다
-  setInterval(() => {
-    if (!hoverOn() || document.hidden) return;
-    for (const v of document.querySelectorAll('video')) {
-      if (!v.paused && v !== hovered && !userPlayed.has(v) && v.getBoundingClientRect().width >= 60) v.pause();
-    }
-  }, 600);
+  // 2) 마우스 올리면 재생·소리 켜기는 모든 사이트 공용 hover-play.js 가 맡는다
 
   // ───────────── 3) 재생바 항상 표시 + 진행 막대 두껍게 + 고화질 설정 전달 ─────────────
   function syncHq() {

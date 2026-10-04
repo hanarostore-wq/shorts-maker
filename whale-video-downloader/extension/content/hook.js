@@ -134,7 +134,8 @@
     // XHR 로 받는 마스터 재생목록도 최고 화질만 보이게 응답 읽기를 감싼다
     const open0 = XHR.prototype.open;
     XHR.prototype.open = function (method, url) {
-      try { this.__smdXhq = isXMaster(url); } catch {}
+      // 같은 요청 객체를 다시 쓰면 이전 결과를 지운다(다른 응답이 섞이지 않게)
+      try { this.__smdXhq = isXMaster(url); this.__smdXhqText = undefined; } catch {}
       return open0.apply(this, arguments);
     };
     for (const prop of ['responseText', 'response']) {

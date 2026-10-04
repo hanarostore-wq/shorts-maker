@@ -132,6 +132,12 @@
         const p = j.profiles?.[0];
         if (!p?.did) throw { reason: `@${e.handle} 계정 정보를 찾지 못했습니다`, action: '페이지를 새로고침한 뒤 다시 누르세요.' };
         u = { did: p.did, following: p.viewer?.following || null };
+        users.set(e.handle, u);
+        // 자동 팔로우: 확인해 보니 이미 팔로우 중이면 아무것도 하지 않는다
+        if (onlyFollow && u.following) {
+          renderAll(e.handle);
+          return;
+        }
       }
       if (unfollow) {
         const rkey = String(u.following).split('/').pop();

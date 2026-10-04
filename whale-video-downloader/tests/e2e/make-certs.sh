@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p certs && cd certs
-DOMAINS="youtube.com tiktok.com bsky.app bsky.social plc.directory instagram.com cdninstagram.com facebook.com xx.fbcdn.net fbcdn.net x.com twimg.com xiaohongshu.com xhscdn.com snapchat.com sc-cdn.net douyin.com douyinvod.com kuaishou.com kwaicdn.com bilibili.com bilivideo.com weibo.com video.weibocdn.com weibocdn.com pinterest.com pinimg.com naver.com pstatic.net vimeo.com vimeocdn.com akamaized.vimeocdn.com dailymotion.com dmcdn.net googlevideo.com example-videos.com doubleclick.net"
+DOMAINS="youtube.com tiktok.com bsky.app bsky.social plc.directory instagram.com cdninstagram.com facebook.com xx.fbcdn.net fbcdn.net x.com twimg.com xiaohongshu.com xhscdn.com snapchat.com sc-cdn.net douyin.com douyinvod.com kuaishou.com kwaicdn.com bilibili.com bilivideo.com weibo.com video.weibocdn.com weibocdn.com pinterest.com pinimg.com naver.com pstatic.net vimeo.com vimeocdn.com akamaized.vimeocdn.com dailymotion.com dmcdn.net googlevideo.com example-videos.com doubleclick.net googleapis.com"
 SAN=""; for d in $DOMAINS; do SAN="$SAN,DNS:$d,DNS:*.$d"; done; SAN=${SAN#,}
 openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.crt -days 3650 -subj "/CN=SMD Test CA" 2>/dev/null
 openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr -subj "/CN=smd-mock" 2>/dev/null

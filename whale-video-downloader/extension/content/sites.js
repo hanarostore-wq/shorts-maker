@@ -534,17 +534,37 @@
     match: (h) => /(^|\.)bsky\.app$/.test(h),
     offset: 48,
     async resolve(video) {
+      // 제목·작성자는 누른 게시물에서 읽는다(블루스카이는 페이지를 옮겨도 탭 제목·메타 정보가 처음 것으로 남아 있음)
+      const meta = (() => {
+        const item = video.closest('[data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]')
+          || [...document.querySelectorAll('[data-testid^="postThreadItem-by-"]')].find((x) => x.contains(video))
+          || null;
+        const handle = item?.dataset.testid.replace(/^(feedItem|postThreadItem)-by-/, '') || /^\/profile\/([^/]+)\//.exec(location.pathname)?.[1] || '';
+        let name = '';
+        if (item && handle) {
+          for (const a of item.querySelectorAll(`a[href="/profile/${handle}"], a[href^="/profile/${handle}"]`)) {
+            const t = (a.innerText || '').replace(/\s+/g, ' ').trim();
+            if (t && !t.startsWith('@') && !/^\d+[smhd분시간일]/.test(t)) {
+              name = t.split('\n')[0].slice(0, 60);
+              break;
+            }
+          }
+        }
+        const text = (item?.querySelector('[data-testid="postText"]')?.innerText || '').replace(/\s+/g, ' ').trim();
+        const who = name || (handle ? `@${handle}` : '');
+        return { title: [who, text].filter(Boolean).join(' - ') || U.metaTitle(), author: name || handle };
+      })();
       const re = /\/watch\/(did(?:%3A|:)[^/]+)\/([a-z0-9]{20,})\//i;
       const srcs = [video.getAttribute('poster'), video.currentSrc, video.querySelector('source')?.src, ...[...U.container(video).querySelectorAll('img')].map((i) => i.src)];
       for (const s of srcs) {
         const m = s && re.exec(s);
         if (m) {
           const did = decodeURIComponent(m[1]);
-          return { id: m[2], title: U.metaTitle(), bg: { kind: 'bluesky', did, cid: m[2] } };
+          return { id: m[2], title: meta.title, author: meta.author, bg: { kind: 'bluesky', did, cid: m[2] } };
         }
       }
       const post = U.findLink(video, /\/profile\/([^/]+)\/post\/([a-z0-9]+)/) || /\/profile\/([^/]+)\/post\/([a-z0-9]+)/.exec(location.pathname);
-      if (post) return { id: post[2], title: U.metaTitle(), bg: { kind: 'bluesky', actor: post[1], rkey: post[2] } };
+      if (post) return { id: post[2], title: meta.title, author: meta.author, bg: { kind: 'bluesky', actor: post[1], rkey: post[2] } };
       throw new SiteError('블루스카이 영상의 게시물 정보를 찾지 못했습니다.', '게시물을 클릭해 연 뒤 다시 시도하세요.');
     },
   });

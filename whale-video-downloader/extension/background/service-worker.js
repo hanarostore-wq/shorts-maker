@@ -479,6 +479,7 @@ async function runJob(job) {
       text: capText,
       ...cap,
       keepOriginal: !!settings.captionKeepOriginal,
+      translate: settings.translateCaption !== false,
       shot: req.shotData || null,
       shotError: req.shotError || '',
       site: req.siteName || req.site || '',
@@ -718,9 +719,27 @@ chrome.storage.onChanged.addListener((c, area) => {
   if (area === 'local' && c.settings && c.settings.oldValue?.adBlock !== c.settings.newValue?.adBlock) syncAdRules();
 });
 
-chrome.runtime.onInstalled.addListener(async (details) => {
+// ───────────── 설정 기억(새 버전 설치·폴더 바꿔 다시 불러오기에도 유지) ─────────────
+// 1) manifest 의 key 로 확장 ID 를 고정 → 같은 ID 의 저장소를 그대로 씀
+// 2) 설정이 바뀔 때마다 웨일 동기화 저장소(storage.sync)에도 복사 → 지웠다가 다시 설치해도 되살림
+async function restoreSettings() {
   const r = await chrome.storage.local.get('settings');
-  if (!r.settings) await chrome.storage.local.set({ settings: DEFAULT_SETTINGS });
+  if (r.settings) return false;
+  const b = await chrome.storage.sync.get('settingsBackup').catch(() => ({}));
+  if (b.settingsBackup && typeof b.settingsBackup === 'object') {
+    await chrome.storage.local.set({ settings: { ...DEFAULT_SETTINGS, ...b.settingsBackup } });
+    return true;
+  }
+  await chrome.storage.local.set({ settings: DEFAULT_SETTINGS });
+  return false;
+}
+chrome.storage.onChanged.addListener((c, area) => {
+  if (area === 'local' && c.settings?.newValue) chrome.storage.sync.set({ settingsBackup: c.settings.newValue }).catch((err) => console.warn('[영상 다운로더] 설정 백업 실패(동기화 저장소)', err?.message || err));
+});
+restoreSettings().catch(() => {});
+
+chrome.runtime.onInstalled.addListener(async (details) => {
+  await restoreSettings().catch(() => {});
   if (details.reason === 'install') chrome.action.setBadgeText({ text: '' }).catch(() => {});
   // 설치·업데이트 전에 열려 있던 탭에도 바로 버튼이 뜨도록 스크립트를 넣는다(새로고침 불필요).
   const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] }).catch(() => []);

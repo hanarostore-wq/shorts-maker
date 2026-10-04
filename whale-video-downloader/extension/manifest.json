@@ -1,8 +1,9 @@
 {
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3qFF5k2bMHadxG5SLZxsWFaydK2WPQoVe9rccwPbqFMF/Jz7eiap1uGEvJ+vuE4JQIjaV3sTTRWIKkNbD0o988GueNC8C9u32mwsJrCStwBPAcEt5EHGYeZ/HbxavyOU5ghDOSg5sd0EdQ5uWWUaMR5MHYcPO6nXZl9TtsUVhLDejCWnjoUs+GKNGb5sln84xghyisooNlgirxgVLFJjQIBY46WyYB/pwgrrxMjocaJ8nDFTalUcvWuaYWLRGPf6/EztK2u9Y8xeUjN8lVxFl4O/zUqfwwtDl+saF/w8rhrqc0IonJChr5nN/FPFqony0BiXmy5jpd+BGvQwjIUWJwIDAQAB",
   "manifest_version": 3,
   "name": "웨일 영상 다운로더",
   "short_name": "영상 다운로더",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "유튜브·쇼츠·틱톡·인스타·X·블루스카이·빌리빌리 등 17개 사이트 영상을 원본화질로 바로 저장합니다. 별도 프로그램 없이 확장프로그램만으로 동작합니다.",
   "minimum_chrome_version": "116",
   "icons": {
@@ -89,6 +90,16 @@
         "content/click-guard.js"
       ],
       "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/hover-play.js"
+      ],
+      "run_at": "document_idle",
       "all_frames": true
     },
     {

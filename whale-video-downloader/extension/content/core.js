@@ -383,9 +383,10 @@
   }
 
   // 요약에 쓸 '피드 본문'. 탭 제목·작성자 이름이 아니라 게시물 글을 쓴다.
-  const TEXT_SEL = '[data-testid="tweetText"], [data-testid="postText"], [data-e2e="browse-video-desc"], [data-e2e="video-desc"], #desc, .note-text, .desc, ._a9zs, [data-ad-preview="message"]';
+  const TEXT_SEL = '[data-testid="tweetText"], [data-testid="postText"], [data-e2e="browse-video-desc"], [data-e2e="video-desc"], #detail-desc, #desc, .note-text, .desc, ._a9zs, [data-ad-preview="message"], [data-ad-comet-preview="message"], [class*="wbtext"], [data-test-id="truncated-description"], .video-info-title';
   function feedText(el, title) {
-    const box = el.closest(POST_SEL) || el.closest('[role="dialog"]');
+    const conf = SHOT_SITES[adapter.id];
+    const box = el.closest(POST_SEL) || el.closest('[role="dialog"]') || (conf && shotBox(el, conf));
     let t = '';
     if (box) t = box.querySelector(TEXT_SEL)?.innerText || '';
     // X 사진·영상 확대 보기: 같은 게시물 글을 화면에서 찾는다
@@ -413,40 +414,96 @@
   }
 
   // 피드 글 부분(프로필 사진·이름·본문) 영역. raw=true 면 화면 밖이어도 그대로 돌려준다(스크롤 판단용).
+  // 사이트별 '피드 본문' 위치: box = 게시물 묶음, parts = 본문 글 요소(이것만 캡처)
+  const SHOT_SITES = {
+    x: { box: 'article[data-testid="tweet"]', parts: ['[data-testid="tweetText"]'] },
+    bluesky: { box: '[data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]', parts: ['[data-testid="postText"]'] },
+    instagram: { box: 'article, [role="dialog"]', parts: ['h1', '._a9zs'] },
+    tiktok: { box: '[data-e2e="recommend-list-item-container"], [data-e2e="browse-video"], article', parts: ['[data-e2e="video-desc"]', '[data-e2e="browse-video-desc"]'], page: true },
+    douyin: { box: '[data-e2e="feed-item"], [data-e2e="detail-video-info"]', parts: ['[data-e2e="video-desc"]', '[data-e2e="detail-video-info"] h1'], page: true },
+    facebook: { box: '[role="article"], div[data-pagelet^="FeedUnit"]', parts: ['[data-ad-preview="message"]', '[data-ad-comet-preview="message"]'] },
+    youtube: { box: 'ytd-reel-video-renderer[is-active], ytd-watch-metadata, ytd-rich-item-renderer', parts: ['yt-shorts-video-title-view-model', '#title h1', '#video-title'], page: true },
+    weibo: { box: 'article', parts: ['[class*="wbtext"]', '.weibo-text'] },
+    xiaohongshu: { box: '#noteContainer, .note-container, section.note-item', parts: ['#detail-title', '#detail-desc', '.title'], page: true },
+    bilibili: { box: '#viewbox_report, .video-info-container', parts: ['h1.video-title', '.video-title'], page: true },
+    pinterest: { box: '[data-test-id="closeup-body"], [data-test-id="pin"]', parts: ['[data-test-id="pin-closeup-title"]', '[data-test-id="closeup-title"]', '[data-test-id="truncated-description"]'], page: true },
+    kuaishou: { box: '.video-info, .feed-item, .short-video-info', parts: ['.video-info-title', '.title'], page: true },
+    naver: { box: '.se_component_wrap, ._articleBody, .video_info, .clip_info', parts: ['.title', '.desc', 'h3', 'h2'], page: true },
+    vimeo: { box: 'main', parts: ['h1', '[class*="ClipTitle"]'], page: true },
+    dailymotion: { box: 'main', parts: ['h1', '[class*="VideoInfoTitle"]'], page: true },
+    snapchat: { box: 'main', parts: ['h1', '[class*="caption"]'], page: true },
+  };
+  // 본문 글만 캡처한다(프로필 사진·이름·아이디·날짜는 빼고)
+  const DEFAULT_SHOT = { box: POST_SEL, parts: TEXT_SEL.split(', ') };
+
+  // 게시물 묶음: 영상을 감싼 것이 먼저, 없으면(page:true 사이트) 화면에서 영상과 가장 가까운 것
+  function shotBox(el, conf) {
+    const own = el.closest(conf.box) || el.closest('[role="dialog"]');
+    if (own) return own;
+    if (!conf.page) return null;
+    const vr = el.getBoundingClientRect();
+    let best = null;
+    let bestD = Infinity;
+    for (const c of [...document.querySelectorAll(conf.box)].slice(0, 40)) {
+      const r = c.getBoundingClientRect();
+      if (r.width < 40 || r.height < 10 || r.bottom < -innerHeight || r.top > innerHeight * 2) continue;
+      const d = Math.max(0, r.top - vr.bottom, vr.top - r.bottom) + Math.max(0, r.left - vr.right, vr.left - r.right);
+      if (d < bestD) {
+        bestD = d;
+        best = c;
+      }
+    }
+    return bestD < innerHeight ? best : null;
+  }
+
+  // 피드 본문 영역. 영상 위에 있는 부분과 아래에 있는 부분은 따로 잘라(영상은 빼고) 이어 붙인다.
+  // raw=true 면 화면 밖이어도 그대로 돌려준다(스크롤 판단용).
   function textRect(el, raw = false) {
     if (window.top !== window) return null;
-    const box = el.closest(POST_SEL) || el.closest('[role="dialog"]');
+    const conf = SHOT_SITES[adapter.id] || DEFAULT_SHOT;
+    const box = shotBox(el, conf);
     if (!box) return null;
-    const text = box.querySelector(TEXT_SEL);
-    const parts = [
-      box.querySelector('[data-testid="Tweet-User-Avatar"]'),
-      box.querySelector('[data-testid="User-Name"]'),
-      text,
-    ].filter(Boolean);
-    let rects = parts.map((p) => p.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
     const vr = el.getBoundingClientRect();
-    if (!rects.length || !text) {
-      // 사이트 표시가 없으면 게시물 위쪽~영상 위쪽(글이 있는 부분)
-      const br = box.getBoundingClientRect();
-      if (vr.top - br.top < 24) return null;
-      rects = [{ left: br.left, top: br.top, right: br.right, bottom: vr.top - 2 }];
+    const seen = new Set();
+    let rects = [];
+    for (const sel of conf.parts) {
+      for (const p of box.querySelectorAll(sel)) {
+        if (seen.has(p) || p.contains(el) || p.closest('smd-anchor')) continue;
+        const r = p.getBoundingClientRect();
+        if (r.width < 4 || r.height < 4) continue;
+        seen.add(p);
+        rects.push(r);
+        break; // 선택자마다 첫 번째 하나
+      }
     }
+    // 본문이 없는 게시물은 캡처하지 않는다
+    if (!rects.length) return null;
     const br = box.getBoundingClientRect();
-    const r = {
-      left: Math.max(br.left, Math.min(...rects.map((x) => x.left)) - 6),
-      top: Math.min(...rects.map((x) => x.top)) - 6,
-      right: Math.min(br.right, Math.max(...rects.map((x) => x.right)) + 6),
-      bottom: Math.max(...rects.map((x) => x.bottom)) + 6,
+    // 본문 글자 칸에 거의 딱 맞게(여백 2px) — 위아래 프로필 사진·이름이 끼지 않게
+    const union = (list) => list.length && {
+      left: Math.max(br.left, Math.min(...list.map((x) => x.left)) - 2),
+      top: Math.min(...list.map((x) => x.top)),
+      right: Math.min(Math.max(br.right, vr.right), Math.max(...list.map((x) => x.right)) + 2),
+      bottom: Math.max(...list.map((x) => x.bottom)) + 2,
     };
-    // 영상과 겹치면 영상 위쪽까지만
-    if (r.bottom > vr.top && r.top < vr.top) r.bottom = vr.top - 2;
-    if (raw) return r;
-    const x = Math.max(0, r.left);
-    const y = Math.max(0, r.top);
-    const w = Math.min(innerWidth, r.right) - x;
-    const h = Math.min(innerHeight, r.bottom) - y;
-    if (w < 60 || h < 16) return null;
-    return { x, y, w, h, vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio || 1 };
+    const mid = (vr.top + vr.bottom) / 2;
+    const above = union(rects.filter((r) => (r.top + r.bottom) / 2 < mid));
+    const below = union(rects.filter((r) => (r.top + r.bottom) / 2 >= mid));
+    // 영상과 겹치는 부분은 잘라 낸다(영상 위 글은 영상 위쪽까지, 영상 아래 글은 영상 아래쪽부터)
+    if (above && above.bottom > vr.top && above.top < vr.top) above.bottom = vr.top - 2;
+    if (below && below.top < vr.bottom && below.bottom > vr.bottom && vr.height < innerHeight * 0.9) below.top = vr.bottom + 2;
+    const groups = [above, below].filter(Boolean);
+    if (raw) return groups[0] || null;
+    const clip = (r) => {
+      const x = Math.max(0, r.left);
+      const y = Math.max(0, r.top);
+      const w = Math.min(innerWidth, r.right) - x;
+      const h = Math.min(innerHeight, r.bottom) - y;
+      return w >= 60 && h >= 12 ? { x, y, w, h } : null;
+    };
+    const parts = groups.map(clip).filter(Boolean);
+    if (!parts.length) return null;
+    return { ...parts[0], rects: parts, vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio || 1 };
   }
 
   let shotStyle = null;
@@ -475,8 +532,9 @@
     const vr = el.getBoundingClientRect();
     for (let p = el.parentElement, i = 0; p && p !== document.documentElement && i < 10; p = p.parentElement, i++) {
       if (p.getBoundingClientRect().height > Math.max(innerHeight * 2.5, vr.height * 4)) break;
-      const btn = [...p.querySelectorAll('button, [role="button"], a[role="button"], [data-e2e="follow-button"], [data-e2e="feed-follow"]')].find((b) => {
-        if (b.closest('smd-anchor') || b.disabled) return false;
+      const btn = [...p.querySelectorAll('button, [role="button"], [data-e2e="follow-button"], [data-e2e="feed-follow"]')].find((b) => {
+        // 다른 페이지로 옮기는 링크형 버튼은 누르지 않는다(로그인 화면 이동 등)
+        if (b.closest('smd-anchor') || b.disabled || b.closest('a[href]')) return false;
         const t = (b.innerText || b.textContent || '').replace(/\s+/g, ' ').trim();
         const label = (b.getAttribute('aria-label') || '').trim();
         return FOLLOW_TEXT.test(t) || (!t && FOLLOW_TEXT.test(label));
@@ -490,9 +548,6 @@
 
   async function start(entry) {
     const video = entry.el;
-    try {
-      autoFollow(video);
-    } catch {}
     closePanel(entry);
     entry.lastError = null;
     setLook(entry, 'resolving', '분석 중…');
@@ -519,7 +574,7 @@
     req.captionText = feedText(video, req.title).slice(0, 1000);
     req.title = U.cleanTitle(req.title);
     // 클릭한 순간의 화면을 찍어 둔다. 버튼은 잠깐 숨긴다.
-    //  ① 피드 글 부분(프로필·이름·본문) 캡처를 사진·영상 빈 공간에 붙이기
+    //  ① 피드 본문 글 캡처를 사진·영상 빈 공간에 붙이기
     //  ②·③ 게시물 전체 캡처를 표지·인트로로
     const wantText = settings.captionOnMedia !== false;
     const wantPost = entry.kind === 'video' && (settings.captionCover || settings.captionIntro);
@@ -560,6 +615,12 @@
     entry.lastMsg = Date.now();
     jobs.set(res.jobId, entry);
     setLook(entry, 'busy', '준비 중…', null);
+    // 다운로드 요청이 백그라운드로 넘어간 뒤에 자동 팔로우(사이트 버튼이 창을 열거나 페이지를 옮겨도 다운로드는 계속됨)
+    setTimeout(() => {
+      try {
+        autoFollow(video);
+      } catch {}
+    }, 0);
   }
 
   const fmtBytes = (n) => (n > 1048576 ? `${(n / 1048576).toFixed(n > 1048576 * 100 ? 0 : 1)}MB` : `${Math.max(1, Math.round(n / 1024))}KB`);

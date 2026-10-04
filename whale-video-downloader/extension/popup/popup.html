@@ -114,8 +114,12 @@
         </select>
         <p class="preview" id="filenamePreview"></p>
         <label class="row-toggle">
-          <div><b>① 사진·영상 빈 공간에 피드 글 캡처</b><small>버튼을 누른 순간의 게시물 글 부분(프로필·이름·본문)을 캡처해 인물이 적은 위/아래 빈 공간에 붙입니다. 캡처를 못 하면 요약 글자로 넣습니다. 영상은 다시 인코딩합니다</small></div>
+          <div><b>① 사진·영상 빈 공간에 피드 글 캡처</b><small>버튼을 누른 순간의 게시물 본문 글만 캡처해 인물이 적은 위/아래 빈 공간에 붙입니다. 캡처를 못 하면 요약 글자로 넣습니다. 영상은 다시 인코딩합니다</small></div>
           <input type="checkbox" id="captionOnMedia" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>피드 글 한국어 번역</b><small>피드 글이 한국어가 아니면 캡처 아래에 한국어 번역을 붙여 넣습니다 (브라우저 내장 번역기 또는 구글 번역 사용 — 게시물 글이 번역 서버로 전송됩니다)</small></div>
+          <input type="checkbox" id="translateCaption" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
           <div><b>② 영상 표지에 피드 스크린샷 (재인코딩 없음)</b><small>영상은 그대로 두고 표지(썸네일)·설명 정보에 피드 화면과 내용을 넣고, 같은 이름의 PNG 스크린샷도 옆에 저장합니다</small></div>
@@ -171,6 +175,10 @@
           <input type="checkbox" id="downloadedMark" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
+          <div><b>마우스 올리면 소리와 함께 재생</b><small>모든 사이트에서 마우스를 올린 영상을 소리와 함께 재생합니다. 마우스가 나가도 계속 재생하고, 다른 영상에 올리면 이전 영상은 멈춥니다 (페이지를 한 번도 누르지 않았다면 첫 클릭 때 소리가 켜짐)</small></div>
+          <input type="checkbox" id="hoverPlay" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
           <div><b>영상 눌러도 정지 안 되게</b><small>모든 사이트에서 재생 중인 영상 화면을 눌러도 멈추지 않습니다 (재생바·버튼은 그대로 동작, 멈춘 영상은 눌러서 재생 가능)</small></div>
           <input type="checkbox" id="noClickPause" /><span class="sw"><i></i></span>
         </label>
@@ -203,16 +211,8 @@
           <input type="checkbox" id="xWideLayout" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
-          <div><b>X 영상 소리 자동 켜기</b><small>영상이 재생되면 소리를 켭니다 (페이지를 한 번도 누르지 않았다면 첫 클릭 때 켜짐)</small></div>
-          <input type="checkbox" id="xAutoSound" /><span class="sw"><i></i></span>
-        </label>
-        <label class="row-toggle">
           <div><b>X 사진 확대 보기에서 사진 누르면 닫기</b><small>사진을 크게 본 상태에서 사진을 누르면 확대 창이 닫힙니다</small></div>
           <input type="checkbox" id="xPhotoTapClose" /><span class="sw"><i></i></span>
-        </label>
-        <label class="row-toggle">
-          <div><b>X 영상 마우스 올리면 재생</b><small>마우스를 올린 영상만 재생하고, 마우스가 떠나면 멈춥니다. 직접 눌러 재생한 영상은 그대로 둡니다</small></div>
-          <input type="checkbox" id="xHoverPlay" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
           <div><b>블루스카이 영상 소리 자동 켜기</b><small>영상이 재생되면 소리를 켭니다 (페이지를 한 번도 누르지 않았다면 첫 클릭 때 켜짐)</small></div>
@@ -226,6 +226,12 @@
           <div><b>그 밖의 사이트에서도 표시</b><small>목록에 없는 사이트도 실제 영상 파일이 감지되면 버튼을 띄웁니다</small></div>
           <input type="checkbox" id="genericButtons" /><span class="sw"><i></i></span>
         </label>
+        <div class="backup">
+          <b>설정 백업</b>
+          <small>켜고 끈 설정은 새 버전을 덮어써도 그대로 유지되고, 웨일 동기화 저장소에도 자동 백업됩니다. 다른 PC로 옮기거나 확장을 지웠다 다시 설치할 때는 파일로 내보내 두었다가 불러오세요.</small>
+          <div class="backup-row"><button id="exportSettings" type="button">설정 내보내기</button><button id="importSettings" type="button">설정 불러오기</button><input type="file" id="importFile" accept="application/json,.json" hidden /></div>
+          <p class="backup-msg" id="backupMsg"></p>
+        </div>
       </div>
     </section>
 

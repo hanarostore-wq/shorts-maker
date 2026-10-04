@@ -128,7 +128,7 @@ async function renderFolder() {
   renderPreview();
 }
 renderFolder();
-for (const id of ['captionOnMedia', 'captionCover', 'captionIntro', 'captionKeepOriginal', 'ytShortsStats', 'adBlock', 'xHighQuality', 'xKeepControls', 'xThickBar', 'xFollowButtons', 'xAutoSound', 'xHoverPlay', 'noClickPause', 'autoFollow', 'aiLabel', 'downloadedMark', 'xPhotoTapClose', 'bskyAutoSound', 'bskyFollowButtons', 'xWideLayout']) {
+for (const id of ['captionOnMedia', 'captionCover', 'captionIntro', 'captionKeepOriginal', 'translateCaption', 'ytShortsStats', 'adBlock', 'xHighQuality', 'xKeepControls', 'xThickBar', 'xFollowButtons', 'hoverPlay', 'noClickPause', 'autoFollow', 'aiLabel', 'downloadedMark', 'xPhotoTapClose', 'bskyAutoSound', 'bskyFollowButtons', 'xWideLayout']) {
   $(`#${id}`).checked = settings[id] !== false;
   $(`#${id}`).addEventListener('change', (e) => save({ [id]: e.target.checked }));
 }
@@ -326,4 +326,46 @@ renderPreview();
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+// ── 설정 내보내기 / 불러오기 ──
+{
+  const msg = (text, ok) => {
+    const el = $('#backupMsg');
+    el.textContent = text;
+    el.className = `backup-msg ${ok ? 'ok' : 'err'}`;
+  };
+  $('#exportSettings').addEventListener('click', async () => {
+    try {
+      const r = await chrome.storage.local.get('settings');
+      const blob = new Blob([JSON.stringify({ app: 'whale-video-downloader', version: chrome.runtime.getManifest().version, settings: r.settings || {} }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      await chrome.downloads.download({ url, filename: '영상다운로더-설정.json', saveAs: true, conflictAction: 'uniquify' });
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      msg('설정 파일을 저장했습니다. 새로 설치한 뒤 "설정 불러오기"로 되살릴 수 있습니다.', true);
+    } catch (err) {
+      msg(`설정 내보내기 실패(파일 저장 단계): ${err?.message || err} → 다운로드 폴더 권한을 확인한 뒤 다시 누르세요.`, false);
+    }
+  });
+  $('#importSettings').addEventListener('click', () => $('#importFile').click());
+  $('#importFile').addEventListener('change', async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    let data;
+    try {
+      data = JSON.parse(await f.text());
+    } catch (err) {
+      return msg(`설정 불러오기 실패(파일 읽기 단계): JSON 형식이 아닙니다 (${err?.message || err}) → "설정 내보내기"로 만든 파일을 고르세요.`, false);
+    }
+    const st = data?.settings && typeof data.settings === 'object' ? data.settings : null;
+    if (!st || data.app !== 'whale-video-downloader') return msg('설정 불러오기 실패(내용 확인 단계): 이 확장프로그램의 설정 파일이 아닙니다 → "설정 내보내기"로 만든 파일을 고르세요.', false);
+    try {
+      await chrome.storage.local.set({ settings: { ...settings, ...st } });
+      msg('설정을 불러왔습니다. 팝업을 다시 열면 바뀐 스위치가 보입니다.', true);
+      setTimeout(() => location.reload(), 900);
+    } catch (err) {
+      msg(`설정 불러오기 실패(저장 단계): ${err?.message || err} → 확장프로그램을 새로고침한 뒤 다시 시도하세요.`, false);
+    }
+  });
 }

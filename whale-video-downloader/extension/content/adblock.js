@@ -47,26 +47,40 @@
       style.remove();
       style = null;
       for (const el of document.querySelectorAll('[data-smd-ad]')) el.removeAttribute('data-smd-ad');
+      for (const el of document.querySelectorAll('[data-smd-sig]')) delete el.dataset.smdSig;
     }
   }
 
+  // 본문·작성자 이름 안의 글자는 광고 표시로 보지 않는다(본문에 '광고'라고만 쓴 일반 게시물이 숨지 않게)
+  const BODY_SEL = '[data-testid="tweetText"], [data-testid="User-Name"], [data-testid="postText"], ._a9zs, [data-e2e="video-desc"]';
   function hasAdLabel(item) {
     for (const el of item.querySelectorAll('span, div, a, p')) {
-      if (el.childElementCount > 1) continue;
+      if (el.childElementCount > 1 || el.closest(BODY_SEL)) continue;
       const t = (el.textContent || '').trim();
       if (t.length <= 20 && AD_LABELS.has(t)) return true;
     }
     return false;
   }
 
+  // X·위보 등은 화면 밖으로 나간 게시물 칸을 버리지 않고 다른 게시물로 다시 쓴다.
+  // → 한 번 판단하고 끝내면, 광고로 숨긴 칸에 일반 게시물이 들어와도 계속 숨겨진다(게시물이 보였다 안 보였다 하는 문제).
+  //   칸의 내용이 바뀌었는지(게시물 주소·글자) 확인해 바뀌면 다시 판단한다.
+  const sigOf = (item) => {
+    const a = item.querySelector('a[href*="/status/"], a[href*="/p/"], a[href*="/reel/"], a[href*="/video/"], a[href*="/post/"], a[href*="/explore/"], a[href*="/pin/"]');
+    const t = (item.textContent || '').trim();
+    return `${a?.getAttribute('href') || ''}|${t.length}|${t.slice(0, 40)}`;
+  };
   function hideFeedAds() {
     if (!on || !site.items.length) return;
     for (const sel of site.items) {
-      for (const item of document.querySelectorAll(`${sel}:not([data-smd-checked])`)) {
-        // 게시물이 다 그려진 뒤 판단하도록, 내용이 있는 것만 표시
+      for (const item of document.querySelectorAll(sel)) {
+        // 게시물이 다 그려진 뒤 판단하도록, 내용이 있는 것만
         if (!item.textContent || item.textContent.length < 2) continue;
-        item.dataset.smdChecked = '1';
+        const sig = sigOf(item);
+        if (item.dataset.smdSig === sig) continue;
+        item.dataset.smdSig = sig;
         if ((site.extra && site.extra(item)) || hasAdLabel(item)) item.setAttribute('data-smd-ad', '1');
+        else item.removeAttribute('data-smd-ad');
       }
     }
   }
@@ -102,7 +116,7 @@
     on = c.settings.newValue?.adBlock !== false;
     applyCss();
     if (on) {
-      for (const el of document.querySelectorAll('[data-smd-checked]')) el.removeAttribute('data-smd-checked');
+      for (const el of document.querySelectorAll('[data-smd-sig]')) delete el.dataset.smdSig;
       hideFeedAds();
     }
   });
