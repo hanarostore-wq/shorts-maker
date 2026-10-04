@@ -8,7 +8,7 @@
   const SITES = globalThis.__SMD_SITES;
   if (!SITES || !chrome?.runtime?.id) return;
 
-  let settings = { xFollowButtons: true, xAutoSound: true, xWideLayout: true, xKeepControls: true, xHighQuality: true, xThickBar: true };
+  let settings = { xFollowButtons: true, xAutoSound: true, xAutoPlay: true, xWideLayout: true, xKeepControls: true, xHighQuality: true, xThickBar: true };
   let wideStyle = null; // applyWide() 가 아래보다 먼저 불리므로 여기서 선언
   chrome.storage.local.get('settings').then((r) => {
     settings = { ...settings, ...(r.settings || {}) };
@@ -73,7 +73,7 @@
 
   // ───────────── 1) 팔로우 버튼 ─────────────
   const CSS = `
-    :host{all:initial;display:inline-flex;align-items:center;margin-left:8px;vertical-align:middle;color:inherit}
+    :host{all:initial;display:inline-flex;align-items:center;flex-shrink:0;margin:0 6px;vertical-align:middle;color:inherit}
     button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 10px;border-radius:999px;
       font:700 12px/1 "Pretendard","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;white-space:nowrap;transition:background .15s,color .15s,border-color .15s}
     button.follow{color:#fff;background:linear-gradient(135deg,#5b5cff,#9b4dff 55%,#ff4f8b)}
@@ -202,7 +202,10 @@
       entry.btn.addEventListener('mouseenter', () => entry.btn.classList.contains('following') && (entry.btn.textContent = '언팔로우'));
       entry.btn.addEventListener('mouseleave', () => entry.btn.classList.contains('following') && (entry.btn.textContent = '팔로잉'));
       host.addEventListener('click', (ev) => ev.stopPropagation());
-      (nameBox.firstElementChild || nameBox).appendChild(host);
+      // 이름 칸은 길면 잘려서(overflow:hidden) 버튼이 가려진다 → 오른쪽 끝 ⋯ 버튼 바로 왼쪽에 넣는다
+      const caret = article.querySelector('[data-testid="caret"]');
+      if (caret?.parentElement) caret.parentElement.insertBefore(host, caret);
+      else nameBox.after(host);
       buttons.set(article, entry);
       render(entry);
       const u = SITES.xUsers.get(sn.toLowerCase());
@@ -240,6 +243,74 @@
   };
   document.addEventListener('pointerdown', onGesture, true);
   document.addEventListener('keydown', onGesture, true);
+
+  // ───────────── 2-1) 영상 자동 재생: 화면에 가장 많이 보이는 영상 하나를 재생 ─────────────
+  // X 설정에서 자동 재생이 꺼져 있거나 데이터 절약 모드여도 재생한다. 사용자가 직접 멈춘 영상은 다시 틀지 않는다.
+  const userPaused = new WeakSet();
+  const autoStarted = new WeakSet();
+  let lastPointer = 0;
+  document.addEventListener('pointerdown', () => (lastPointer = Date.now()), true);
+  document.addEventListener('keydown', () => (lastPointer = Date.now()), true);
+  document.addEventListener(
+    'pause',
+    (ev) => {
+      const v = ev.target;
+      if (v instanceof HTMLVideoElement && Date.now() - lastPointer < 600 && !v.ended) userPaused.add(v);
+    },
+    true,
+  );
+  document.addEventListener('play', (ev) => ev.target instanceof HTMLVideoElement && userPaused.delete(ev.target), true);
+  const visibleRatio = (el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width < 60 || r.height < 60) return 0;
+    const w = Math.max(0, Math.min(innerWidth, r.right) - Math.max(0, r.left));
+    const h = Math.max(0, Math.min(innerHeight, r.bottom) - Math.max(0, r.top));
+    return (w * h) / (r.width * r.height);
+  };
+  async function startPlay(v) {
+    autoStarted.add(v);
+    if (settings.xAutoSound !== false) v.muted = false;
+    try {
+      await v.play();
+    } catch {
+      // 클릭 전에는 소리 있는 자동 재생이 막힌다 → 음소거로 재생하고 첫 클릭 때 소리 켜기
+      v.muted = true;
+      try {
+        await v.play();
+        if (settings.xAutoSound !== false) pendingUnmute = v;
+      } catch {}
+    }
+  }
+  function autoPlay() {
+    if (settings.xAutoPlay === false || document.hidden) return;
+    let best = null;
+    let bestR = 0;
+    for (const v of document.querySelectorAll('video')) {
+      const r = visibleRatio(v);
+      if (r > bestR) {
+        bestR = r;
+        best = v;
+      }
+      // 화면 밖으로 거의 나간, 우리가 틀어 준 영상은 멈춘다
+      if (r < 0.2 && autoStarted.has(v) && !v.paused) {
+        v.pause();
+        autoStarted.delete(v);
+      }
+    }
+    if (!best || bestR < 0.5 || !best.paused || best.ended || userPaused.has(best)) return;
+    // X 가 아직 영상을 불러오지 않았으면(자동 재생 꺼짐) X 의 재생 버튼을 누른다
+    if (!best.currentSrc && best.readyState === 0) {
+      const btn = (best.closest('[data-testid="videoPlayer"]') || best.parentElement)?.querySelector('[data-testid="playButton"], [aria-label="재생"], [aria-label="Play"]');
+      if (btn) {
+        autoStarted.add(best);
+        btn.click();
+      }
+      return;
+    }
+    startPlay(best);
+  }
+  setInterval(autoPlay, 700);
+  addEventListener('scroll', () => setTimeout(autoPlay, 250), { passive: true, capture: true });
 
   // ───────────── 3) 재생바 항상 표시 + 진행 막대 두껍게 + 고화질 설정 전달 ─────────────
   function syncHq() {

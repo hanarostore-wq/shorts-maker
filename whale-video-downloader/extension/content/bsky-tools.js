@@ -1,0 +1,248 @@
+// 블루스카이 전용 도구 (ISOLATED world)
+//  - 영상이 재생되면 소리 자동 켜기 (블루스카이 음소거 버튼을 눌러 화면 상태도 맞춘다)
+//  - 홈·탐색 피드 게시물 오른쪽 위에 팔로우 / 팔로잉 버튼 (눌러서 팔로우·언팔로우)
+(() => {
+  'use strict';
+  if (globalThis.__SMD_BSKYTOOLS || !/(^|\.)bsky\.app$/.test(location.hostname) || window.top !== window) return;
+  globalThis.__SMD_BSKYTOOLS = true;
+
+  let on = true;
+  let followOn = true;
+  chrome.storage.local.get('settings').then((r) => {
+    on = r.settings?.bskyAutoSound !== false;
+    followOn = r.settings?.bskyFollowButtons !== false;
+    scanFollow();
+  }, () => {});
+  chrome.storage.onChanged.addListener((c, area) => {
+    if (area === 'local' && c.settings) {
+      on = c.settings.newValue?.bskyAutoSound !== false;
+      followOn = c.settings.newValue?.bskyFollowButtons !== false;
+      if (!followOn) {
+        document.querySelectorAll('smd-bfollow').forEach((e) => e.remove());
+        items.clear();
+      } else scanFollow();
+    }
+  });
+
+  // ───────────── 팔로우 버튼 ─────────────
+  // 로그인 정보: 블루스카이가 localStorage(BSKY_STORAGE)에 두는 현재 계정. 토큰은 요청 헤더에만 쓰고 어디에도 남기지 않는다.
+  function session() {
+    try {
+      const st = JSON.parse(localStorage.getItem('BSKY_STORAGE') || '{}');
+      const a = st.session?.currentAccount;
+      const full = (st.session?.accounts || []).find((x) => x.did === a?.did) || a;
+      if (!full?.did || !full.accessJwt) return null;
+      return { did: full.did, handle: String(full.handle || '').toLowerCase(), jwt: full.accessJwt, pds: String(full.pdsUrl || full.service || 'https://bsky.social').replace(/\/+$/, '') };
+    } catch {
+      return null;
+    }
+  }
+  const APPVIEW = 'did:web:api.bsky.app#bsky_appview';
+  async function xrpc(s, method, nsid, { params, body, proxy } = {}) {
+    const q = params ? `?${params}` : '';
+    const headers = { authorization: `Bearer ${s.jwt}` };
+    if (proxy) headers['atproto-proxy'] = APPVIEW;
+    if (body) headers['content-type'] = 'application/json';
+    let res;
+    try {
+      res = await fetch(`${s.pds}/xrpc/${nsid}${q}`, { method, headers, body: body ? JSON.stringify(body) : undefined, credentials: 'omit' });
+    } catch (err) {
+      throw { reason: `블루스카이 서버에 연결하지 못했습니다 (${err?.message || err})`, action: '인터넷 연결을 확인한 뒤 다시 누르세요.' };
+    }
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const expired = res.status === 401 || /Expired|InvalidToken|AuthMissing/i.test(j.error || '');
+      throw {
+        reason: expired ? `로그인 정보가 만료됐습니다 (HTTP ${res.status} ${j.error || ''})` : `블루스카이가 HTTP ${res.status} ${j.error || ''} 로 응답했습니다`,
+        action: expired ? '페이지를 새로고침(F5)한 뒤 다시 누르세요.' : res.status === 429 ? '너무 자주 눌렀습니다. 잠시 후 다시 시도하세요.' : '잠시 후 다시 시도하세요.',
+      };
+    }
+    return j;
+  }
+
+  const users = new Map(); // handle -> { did, following(uri|null) }
+  const items = new Map(); // element -> { host, btn, handle }
+  const pending = new Set();
+  let loadTimer = 0;
+  const FCSS = `
+    :host{all:initial;position:absolute;top:10px;right:12px;z-index:5;display:inline-flex;align-items:center;gap:6px}
+    button{all:unset;cursor:pointer;display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:999px;
+      font:700 12px/1 "Pretendard","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;white-space:nowrap}
+    button.follow{color:#fff;background:linear-gradient(135deg,#0a7aff,#5b5cff)}
+    button.follow.unknown{opacity:.8}
+    button.following{color:#9aa4b2;border:1px solid rgba(128,128,140,.55);height:20px}
+    button.following:hover{color:#f4212e;border-color:rgba(244,33,46,.6);background:rgba(244,33,46,.08)}
+    button.busy{opacity:.6;pointer-events:none}
+    .err{max-width:260px;padding:4px 8px;border-radius:8px;background:rgba(150,20,40,.92);color:#fff;font:600 11px/1.35 "Malgun Gothic",system-ui,sans-serif}
+  `;
+  function render(e) {
+    const u = users.get(e.handle);
+    const b = e.btn;
+    b.classList.remove('follow', 'following', 'unknown');
+    if (u?.following) {
+      b.classList.add('following');
+      b.textContent = '팔로잉';
+      b.title = `@${e.handle} 님을 팔로우 중입니다 · 누르면 팔로우 취소`;
+    } else {
+      b.classList.add('follow');
+      if (!u) b.classList.add('unknown');
+      b.textContent = '팔로우';
+      b.title = u ? `@${e.handle} 님을 팔로우하지 않았습니다 · 누르면 팔로우` : '팔로우 상태를 확인하는 중입니다';
+    }
+  }
+  const renderAll = (h) => {
+    for (const e of items.values()) if (!h || e.handle === h) render(e);
+  };
+  function showErr(e, step, err) {
+    e.err?.remove();
+    const s = document.createElement('span');
+    s.className = 'err';
+    s.textContent = `${step} 실패: ${err.reason || err.message || err} → ${err.action || '페이지를 새로고침한 뒤 다시 시도하세요.'}`;
+    e.btn.before(s);
+    e.err = s;
+    setTimeout(() => s.remove(), 9000);
+  }
+  async function loadStates() {
+    loadTimer = 0;
+    const s = session();
+    if (!s || !pending.size) return;
+    const list = [...pending].slice(0, 25);
+    list.forEach((h) => pending.delete(h));
+    try {
+      const j = await xrpc(s, 'GET', 'app.bsky.actor.getProfiles', { params: list.map((h) => `actors=${encodeURIComponent(h)}`).join('&'), proxy: true });
+      for (const p of j.profiles || []) users.set(String(p.handle).toLowerCase(), { did: p.did, following: p.viewer?.following || null });
+      for (const h of list) if (!users.has(h)) users.set(h, { did: '', following: null });
+      list.forEach(renderAll);
+    } catch (err) {
+      for (const e of items.values()) if (list.includes(e.handle)) showErr(e, '팔로우 상태 확인', err);
+    }
+    if (pending.size) loadTimer = setTimeout(loadStates, 300);
+  }
+  async function toggle(e) {
+    const s = session();
+    if (!s) return showErr(e, '팔로우', { reason: '블루스카이 로그인 정보를 찾지 못했습니다', action: '블루스카이에 로그인한 뒤 새로고침하세요.' });
+    let u = users.get(e.handle);
+    const unfollow = !!u?.following;
+    if (unfollow && !window.confirm(`@${e.handle} 님 팔로우를 취소할까요?`)) return;
+    e.btn.classList.add('busy');
+    try {
+      if (!u?.did) {
+        const j = await xrpc(s, 'GET', 'app.bsky.actor.getProfiles', { params: `actors=${encodeURIComponent(e.handle)}`, proxy: true });
+        const p = j.profiles?.[0];
+        if (!p?.did) throw { reason: `@${e.handle} 계정 정보를 찾지 못했습니다`, action: '페이지를 새로고침한 뒤 다시 누르세요.' };
+        u = { did: p.did, following: p.viewer?.following || null };
+      }
+      if (unfollow) {
+        const rkey = String(u.following).split('/').pop();
+        await xrpc(s, 'POST', 'com.atproto.repo.deleteRecord', { body: { repo: s.did, collection: 'app.bsky.graph.follow', rkey } });
+        users.set(e.handle, { did: u.did, following: null });
+      } else {
+        const j = await xrpc(s, 'POST', 'com.atproto.repo.createRecord', { body: { repo: s.did, collection: 'app.bsky.graph.follow', record: { $type: 'app.bsky.graph.follow', subject: u.did, createdAt: new Date().toISOString() } } });
+        users.set(e.handle, { did: u.did, following: j.uri || 'yes' });
+      }
+      renderAll(e.handle);
+    } catch (err) {
+      showErr(e, unfollow ? '언팔로우' : '팔로우', err);
+    } finally {
+      e.btn.classList.remove('busy');
+    }
+  }
+  function scanFollow() {
+    if (!followOn) return;
+    const s = session();
+    if (!s) return; // 로그인 전에는 버튼을 띄우지 않는다
+    for (const el of document.querySelectorAll('[data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]')) {
+      const handle = el.dataset.testid.replace(/^(feedItem|postThreadItem)-by-/, '').toLowerCase();
+      if (!handle || handle === s.handle || handle === s.did) continue;
+      const cur = items.get(el);
+      if (cur && cur.handle === handle && cur.host.isConnected) continue;
+      cur?.host.remove();
+      if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+      const host = document.createElement('smd-bfollow');
+      const sh = host.attachShadow({ mode: 'open' });
+      sh.innerHTML = `<style>${FCSS}</style><button type="button"></button>`;
+      const e = { host, btn: sh.querySelector('button'), handle };
+      // 버튼 클릭이 게시물 열기로 전달되지 않게
+      for (const t of ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'touchstart', 'touchend']) {
+        host.addEventListener(t, (ev) => {
+          ev.stopPropagation();
+          if (t === 'click') {
+            ev.preventDefault();
+            if (ev.composedPath()[0] === e.btn) toggle(e);
+          }
+        });
+      }
+      e.btn.addEventListener('mouseenter', () => e.btn.classList.contains('following') && (e.btn.textContent = '언팔로우'));
+      e.btn.addEventListener('mouseleave', () => e.btn.classList.contains('following') && (e.btn.textContent = '팔로잉'));
+      el.appendChild(host);
+      items.set(el, e);
+      render(e);
+      if (!users.has(handle)) {
+        pending.add(handle);
+        if (!loadTimer) loadTimer = setTimeout(loadStates, 200);
+      }
+    }
+    for (const [el] of items) if (!el.isConnected) items.delete(el);
+  }
+  new MutationObserver(() => {
+    clearTimeout(scanFollow.t);
+    scanFollow.t = setTimeout(scanFollow, 250);
+  }).observe(document.documentElement, { childList: true, subtree: true });
+
+  const UNMUTE_SEL = 'button[aria-label*="Unmute" i], button[aria-label*="음소거 해제"], [role="button"][aria-label*="Unmute" i], [role="button"][aria-label*="음소거 해제"]';
+  // 영상 주변(몇 단계 위 부모까지)에서 블루스카이 음소거 해제 버튼을 찾는다
+  function unmuteButton(v) {
+    let p = v.parentElement;
+    for (let i = 0; p && i < 6; i++, p = p.parentElement) {
+      const b = p.querySelector(UNMUTE_SEL);
+      if (b) return b;
+    }
+    return null;
+  }
+
+  let pendingSound = null;
+  function unmute(v) {
+    if (!on || !v.muted) return;
+    const btn = unmuteButton(v);
+    if (btn) btn.click();
+    else v.muted = false;
+    if (v.volume === 0) v.volume = 1;
+    // 페이지를 한 번도 누르지 않았으면 브라우저가 소리 재생을 막고 영상을 멈춘다 → 음소거로 계속 재생, 첫 클릭 때 소리 켜기
+    setTimeout(() => {
+      if (v.paused && !v.ended) {
+        v.muted = true;
+        v.play().catch(() => {});
+        pendingSound = v;
+      }
+    }, 150);
+  }
+  // 영상마다 한 번만 자동으로 켠다(사용자가 다시 음소거하면 그대로 둔다)
+  const handled = new WeakSet();
+  const onPlay = (v) => {
+    if (handled.has(v)) return;
+    handled.add(v);
+    unmute(v);
+  };
+  document.addEventListener('playing', (ev) => ev.target instanceof HTMLVideoElement && onPlay(ev.target), true);
+  // 스크립트가 늦게 들어와 이미 재생 중인 영상도 처리
+  const scan = () => {
+    if (!on) return;
+    for (const v of document.querySelectorAll('video')) if (!v.paused && !v.ended && v.muted) onPlay(v);
+  };
+  scan();
+  setInterval(scan, 1000);
+  const onGesture = (ev) => {
+    // 음소거 버튼을 직접 누른 경우는 사용자의 선택이므로 건드리지 않는다
+    if (ev.target?.closest?.(UNMUTE_SEL) || ev.target?.closest?.('button[aria-label*="Mute" i], button[aria-label*="음소거"]')) {
+      pendingSound = null;
+      return;
+    }
+    if (pendingSound && pendingSound.isConnected && !pendingSound.paused) {
+      const v = pendingSound;
+      pendingSound = null;
+      setTimeout(() => unmute(v), 0);
+    }
+  };
+  document.addEventListener('pointerdown', onGesture, true);
+  document.addEventListener('keydown', onGesture, true);
+})();

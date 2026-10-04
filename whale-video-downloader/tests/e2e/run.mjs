@@ -407,6 +407,27 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── X 가 사진 탭으로 스스로 닫을 때 뒤로가기가 두 번 되지 않음 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded' }).catch(() => {});
+    await page.goto('https://x.com/tester/status/1790000000000000005', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(800);
+    await page.click('#open');
+    await page.waitForTimeout(500);
+    const ib = await page.locator('#lb img').boundingBox();
+    await page.mouse.click(ib.x + ib.width * 0.3, ib.y + ib.height * 0.3);
+    await page.waitForTimeout(900);
+    const st = await page.evaluate(() => ({ path: location.pathname, open: !!document.getElementById('lb'), self: window.__xSelfClose || 0 }));
+    record('[X] 사진 확대 창 탭 → 한 번만 닫히고 게시물에 머묾(이전 페이지로 안 감)', st.path === '/tester/status/1790000000000000005' && !st.open, { note: JSON.stringify(st) });
+  } catch (err) {
+    record('[X] 확대 창 탭 닫기(이중 뒤로가기)', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
 // ── X 사진 확대 보기에서 저장 버튼 → 창이 닫히지 않고 저장됨 ──
 {
   const page = await ctx.newPage();
@@ -430,6 +451,133 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── X 영상 자동 재생 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://x.com/autoplay', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2000);
+    const s1 = await page.evaluate(() => ({ a: !document.getElementById('v1').paused, b: !document.getElementById('v2').paused }));
+    await page.evaluate(() => document.getElementById('v2').scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(1800);
+    const s2 = await page.evaluate(() => ({ a: !document.getElementById('v1').paused, b: !document.getElementById('v2').paused }));
+    // 직접 멈춘 영상은 다시 틀지 않음
+    const box = await page.locator('#v2').boundingBox();
+    await page.mouse.click(box.x + 5, box.y + 5);
+    await page.evaluate(() => document.getElementById('v2').pause());
+    await page.waitForTimeout(1800);
+    const s3 = await page.evaluate(() => !document.getElementById('v2').paused);
+    record('[X] 영상 자동 재생 (보이는 영상 재생·지나간 영상 멈춤·직접 멈춘 영상 유지)', s1.a && !s1.b && s2.b && !s2.a && !s3, { note: `처음 ${JSON.stringify(s1)} · 스크롤 후 ${JSON.stringify(s2)} · 직접 멈춘 뒤 재생 ${s3}` });
+  } catch (err) {
+    record('[X] 영상 자동 재생', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
+// ── 블루스카이 영상 소리 자동 켜기 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://bsky.app/sound', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    // 아직 페이지를 누르지 않은 상태: 브라우저 정책상 음소거로 계속 재생돼야 함(멈추면 안 됨)
+    const s0 = await page.evaluate(() => ({ muted: document.getElementById('bv').muted, paused: document.getElementById('bv').paused }));
+    await page.mouse.click(700, 500);
+    await page.waitForTimeout(800);
+    const s1 = await page.evaluate(() => ({ muted: document.getElementById('bv').muted, paused: document.getElementById('bv').paused, clicked: !!window.__bskyUnmute }));
+    record('[블루스카이] 영상 재생되면 소리 자동 켜기(블루스카이 음소거 버튼 사용)', !s0.paused && !s1.muted && !s1.paused && s1.clicked, { note: `클릭 전 ${JSON.stringify(s0)} · 클릭 후 ${JSON.stringify(s1)}` });
+  } catch (err) {
+    record('[블루스카이] 소리 자동 켜기', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
+// ── 블루스카이 팔로우 버튼 ──
+{
+  const page = await ctx.newPage();
+  page.on('dialog', (d) => d.accept());
+  try {
+    await page.goto('https://bsky.app/feedfollow', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2000);
+    const state = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-testid^="feedItem-by-"]')].map((el) => {
+      const h = el.querySelector('smd-bfollow');
+      const b = h?.shadowRoot.querySelector('button');
+      const r = b?.getBoundingClientRect();
+      const visible = !!r && r.width > 10 && document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === h;
+      return [el.id.slice(2), b ? `${b.textContent}${visible ? '' : '(가려짐)'}` : '(없음)'];
+    })));
+    const s0 = await state();
+    record('[블루스카이] 피드 팔로우 상태 표시 (팔로잉/팔로우/내 계정 제외)', s0.alice === '팔로잉' && s0.bob === '팔로우' && s0.me === '(없음)', { note: JSON.stringify(s0) });
+    const l1 = log.length;
+    await page.locator('#b-bob smd-bfollow button').click();
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(800);
+    const s1 = await state();
+    const r1 = log.slice(l1).find((l) => l.bskyFollow === 'create');
+    record('[블루스카이] 팔로우 누르기 → 팔로잉', s1.bob === '팔로잉' && r1?.subject === 'did:plc:bob' && r1.repo === 'did:plc:me' && r1.collection === 'app.bsky.graph.follow' && r1.auth, { note: `${s1.bob} · ${JSON.stringify(r1)}` });
+    const l2 = log.length;
+    await page.locator('#b-alice smd-bfollow button').click();
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(800);
+    const s2 = await state();
+    const r2 = log.slice(l2).find((l) => l.bskyFollow === 'delete');
+    record('[블루스카이] 팔로잉 누르기(확인) → 언팔로우', s2.alice === '팔로우' && r2?.rkey === '3kalice', { note: `${s2.alice} · ${JSON.stringify(r2)}` });
+    await page.locator('#b-expired smd-bfollow button').click();
+    await page.waitForTimeout(800);
+    const err = await page.locator('#b-expired smd-bfollow').evaluate((h) => h.shadowRoot.querySelector('.err')?.textContent || '');
+    record('[블루스카이] 로그인 만료 시 단계·원인·조치 안내', /팔로우 실패/.test(err) && /만료/.test(err) && /새로고침/.test(err), { note: err });
+  } catch (err) {
+    record('[블루스카이] 팔로우 버튼', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
+// ── 뒤로·앞으로 가기 때 보던 위치 유지 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://www.example-videos.com/spafeed', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(600);
+    // 사용자가 휠로 내려가며 피드를 더 불러온다
+    for (let i = 0; i < 14; i++) {
+      await page.mouse.wheel(0, 600);
+      await page.waitForTimeout(150);
+    }
+    await page.waitForTimeout(600);
+    const before = await page.evaluate(() => ({ y: Math.round(scrollY), first: [...document.querySelectorAll('article')].find((a) => a.getBoundingClientRect().bottom > 80)?.textContent }));
+    // 화면 가운데 게시물을 눌러 상세로 이동 → 뒤로 가기
+    const lk = await page.evaluate(() => {
+      const a = [...document.querySelectorAll('article a')].find((x) => x.getBoundingClientRect().top > 200);
+      const r = a.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    });
+    await page.mouse.click(lk.x, lk.y);
+    await page.waitForTimeout(500);
+    const inDetail = await page.evaluate(() => location.pathname);
+    await page.goBack();
+    await page.waitForTimeout(2500);
+    const after = await page.evaluate(() => ({ y: Math.round(scrollY), first: [...document.querySelectorAll('article')].find((a) => a.getBoundingClientRect().bottom > 80)?.textContent }));
+    record('[위치 유지] 뒤로 가기 하면 보던 게시물로 돌아옴(사이트가 맨 위로 올려도)', /post/.test(inDetail) && before.y > 3000 && Math.abs(after.y - before.y) < 60 && after.first === before.first, { note: `상세 ${inDetail} · 전 ${JSON.stringify(before)} · 후 ${JSON.stringify(after)}` });
+    await page.goForward();
+    await page.waitForTimeout(800);
+    const fwd = await page.evaluate(() => ({ path: location.pathname, y: Math.round(scrollY) }));
+    record('[위치 유지] 앞으로 가기는 그 페이지 위치(상세는 맨 위)', /post/.test(fwd.path) && fwd.y < 50, { note: JSON.stringify(fwd) });
+    await setSettings({ keepScroll: false });
+    await page.goBack();
+    await page.waitForTimeout(1500);
+    const off = await page.evaluate(() => Math.round(scrollY));
+    record('[위치 유지] 설정 끄면 사이트 동작 그대로', off < 50, { note: `y=${off}` });
+  } catch (err) {
+    record('[위치 유지]', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ keepScroll: true });
+    await page.close();
+  }
+}
+
 // ── 유튜브 쇼츠 오른쪽 위 조회수·구독자 ──
 {
   const page = await ctx.newPage();
@@ -438,12 +586,13 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.waitForFunction(() => /구독자/.test(document.querySelector('smd-ytstats')?.shadowRoot?.textContent || ''), null, { timeout: 15000 });
     const r = await page.evaluate(() => {
       const h = document.querySelector('smd-ytstats');
+      const txt = (h.shadowRoot.querySelector('.b')?.textContent || '').trim();
       const b = h.shadowRoot.querySelector('.b').getBoundingClientRect();
       const p = document.querySelector('#shorts-player').getBoundingClientRect();
-      return { text: h.shadowRoot.textContent.replace(/\s+/g, ' ').trim(), right: p.right - b.right, top: b.top - p.top };
+      return { text: txt, right: p.right - b.right, top: b.top - p.top };
     });
     await page.screenshot({ path: path.join(SHOTS, 'shorts-stats.png') });
-    record('[유튜브] 쇼츠 오른쪽 위에 조회수·구독자 표시', /조회수 1,234,567회/.test(r.text) && /구독자 3\.4만명/.test(r.text) && r.right >= 0 && r.right < 40 && r.top >= 0 && r.top < 40, { note: `${r.text} · 오른쪽 여백 ${r.right.toFixed(0)}px · 위 여백 ${r.top.toFixed(0)}px` });
+    record('[유튜브] 쇼츠 오른쪽 위에 조회수·구독자 표시', /조회수 1,234,567회/.test(r.text) && /구독자 3\.4만명/.test(r.text) && r.right >= 0 && r.right < 40 && r.top >= 56 && r.top < 90, { note: `${r.text} · 오른쪽 여백 ${r.right.toFixed(0)}px · 위 여백 ${r.top.toFixed(0)}px` });
     await page.goto('https://www.youtube.com/shorts/YTshortErr1', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => /실패/.test(document.querySelector('smd-ytstats')?.shadowRoot?.textContent || ''), null, { timeout: 15000 });
     const e = await page.evaluate(() => document.querySelector('smd-ytstats').shadowRoot.textContent.replace(/\s+/g, ' ').trim());
@@ -467,6 +616,14 @@ if (!only || only === 'x' || '팔로우'.includes(only)) {
   try {
     await page.goto('https://x.com/explore', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2500);
+    // 버튼이 실제로 화면에 보이는지(잘리거나 가려지지 않았는지)
+    const vis = await page.evaluate(() => [...document.querySelectorAll('article')].filter((a) => a.id !== 't-me_account').map((a) => {
+      const h = a.querySelector('smd-follow');
+      const b = h?.shadowRoot.querySelector('button')?.getBoundingClientRect();
+      if (!b || b.width < 10) return false;
+      return document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2) === h;
+    }));
+    record('[X] 팔로우 버튼이 잘리지 않고 화면에 보임', vis.length > 0 && vis.every(Boolean), { note: JSON.stringify(vis) });
     const state = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('article')].map((a) => [a.id.slice(2), a.querySelector('smd-follow')?.shadowRoot.querySelector('button')?.textContent || '(없음)'])));
     const s0 = await state();
     record('[X] 팔로우 상태 표시 (팔로잉/팔로우/React 데이터/내 계정 제외)', s0.followed_user === '팔로잉' && s0.new_user === '팔로우' && s0.react_user === '팔로잉' && s0.me_account === '(없음)', { note: JSON.stringify(s0) });
@@ -555,10 +712,10 @@ if (!only || only === 'ai') {
 if (!only || only === 'caption' || '요약'.includes(only)) {
   await setSettings({ captionOnMedia: true, captionKeepOriginal: false });
   await clearDownloaded();
-  const bandDiff = (a, b, w, h, y0, y1) => {
+  const bandDiff = (a, b, w, h, y0, y1, ss = 0) => {
     // 두 영상/사진의 같은 띠 영역 평균 차이(0~255)
     const crop = `crop=${w}:${Math.round(h * (y1 - y0))}:0:${Math.round(h * y0)}`;
-    const out = execFileSync('ffmpeg', ['-v', 'error', '-i', a, '-i', b, '-filter_complex', `[0:v]${crop},format=gray[x];[1:v]${crop},format=gray[y];[x][y]blend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-`, '-frames:v', '1', '-f', 'null', '-']).toString();
+    const out = execFileSync('ffmpeg', ['-v', 'error', ...(ss ? ['-ss', String(ss)] : []), '-i', a, ...(ss ? ['-ss', String(ss)] : []), '-i', b, '-filter_complex', `[0:v]${crop},format=gray[x];[1:v]${crop},format=gray[y];[x][y]blend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-`, '-frames:v', '1', '-f', 'null', '-']).toString();
     return Number(/YAVG=([\d.]+)/.exec(out)?.[1] || 0);
   };
   // 사진
@@ -714,6 +871,47 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       record('[피드③] 인트로 실패 시 원본 저장 + 단계·원인 안내', info?.vcodec === 'h264' && /피드 화면 3초를 넣지 못해 원본으로 저장/.test(warn), { note: `${info?.vcodec} · 안내: ${warn.slice(0, 100)}` });
     } catch (err) {
       record('[피드③] 실패 경로', false, { note: err.message.split('\n')[0] });
+    }
+  }
+  // 피드 본문(탭 제목 아님) + 첫 프레임이 검은 영상에서도 인물 없는 아래쪽에 글자
+  {
+    await setSettings({ captionOnMedia: true, captionCover: false, captionIntro: false, captionKeepOriginal: true });
+    await clearDownloaded();
+    try {
+      const page = await ctx.newPage();
+      let added = [];
+      try {
+        await page.goto('https://www.example-videos.com/feedpost', { waitUntil: 'domcontentloaded' });
+        await page.waitForTimeout(1500);
+        const before = new Set(listFiles(DL));
+        await page.locator('smd-anchor .btn.show').first().click();
+        const t1 = Date.now();
+        while (Date.now() - t1 < 120000) {
+          added = listFiles(DL).filter((f) => !before.has(f) && !/\.crdownload$/.test(f));
+          if (added.length >= 2) break;
+          await new Promise((r) => setTimeout(r, 500));
+        }
+        await new Promise((r) => setTimeout(r, 800));
+      } finally {
+        await page.close();
+      }
+      const pp = await extPage();
+      const h = await pp.evaluate(async () => (await chrome.storage.local.get('history')).history?.[0] || {});
+      await pp.close();
+      const capped = added.find((f) => !/\(원본\)/.test(f));
+      const original = added.find((f) => /\(원본\)/.test(f));
+      let top = 0, bottom = 0;
+      if (capped && original) {
+        top = bandDiff(original, capped, 640, 360, 0.03, 0.22, 3);
+        bottom = bandDiff(original, capped, 640, 360, 0.76, 0.95, 3);
+        execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '3', '-i', capped, '-frames:v', '1', path.join(SHOTS, 'caption-person.png')]);
+      }
+      const textOk = /한강에서 자전거/.test(h.captionUsed || '') && !/하리니|\/ X/.test(h.captionUsed || '');
+      record('[요약①] 피드 글 부분(프로필·이름·본문)을 캡처해 영상에 붙임', /^\[피드 글 캡처\]/.test(h.captionUsed || '') && !h.warning, { note: `${h.captionUsed} · 안내: ${h.warning || '없음'}` });
+      record('[요약] 탭 제목·아이디가 아니라 게시물 본문을 요약', textOk, { note: `넣은 글자: ${h.captionUsed || '(없음)'}` });
+      record('[요약] 첫 프레임이 검어도 인물(위) 피해 아래 빈 공간에 글자', bottom > 3 && top < bottom / 3, { note: `차이 위 ${top.toFixed(1)} / 아래 ${bottom.toFixed(1)}` });
+    } catch (err) {
+      record('[요약] 본문·위치', false, { note: err.message.split('\n')[0] });
     }
   }
   await setSettings({ captionCover: false, captionIntro: false });

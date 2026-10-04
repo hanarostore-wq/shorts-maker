@@ -122,8 +122,9 @@
       return;
     }
     host.style.display = 'block';
+    // 쇼츠 오른쪽 위의 유튜브 버튼(음량·더보기)과 겹치지 않게 그 아래에 놓는다
     host.style.left = `${Math.round(r.right - 12)}px`;
-    host.style.top = `${Math.round(r.top + 12)}px`;
+    host.style.top = `${Math.round(r.top + Math.min(72, r.height * 0.1))}px`;
     host.style.transform = 'translateX(-100%)';
     const id = m[1];
     if (shownId === id) return;

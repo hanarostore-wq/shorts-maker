@@ -23,6 +23,7 @@ function summary(job) {
     quality: job.quality || '',
     where: job.where || '',
     warning: job.warning || '',
+    captionUsed: job.captionUsed || '',
     error: job.error || null,
     downloadId: job.downloadId ?? null,
     pageUrl: job.pageUrl || '',
@@ -385,6 +386,7 @@ async function runEngine(job, d, settings) {
   if (result.ext) job.filename = job.filename.replace(/\.[^.]+$/, `.${result.ext}`);
   if (!job.duration && result.duration) job.duration = result.duration;
   if (result.warning) job.warning = result.warning;
+  if (result.captionUsed) job.captionUsed = result.captionUsed;
   // OPFS 임시 파일 → 웨일 다운로드 폴더로 저장
   job.phase = 'save';
   job.percent = null;
@@ -464,7 +466,8 @@ async function runJob(job) {
   if (!job.title && desc.title) job.title = desc.title;
   job.duration = Number(req.duration) || Number(desc.duration) || 0;
   applyCredentials(desc, req);
-  const capText = String(req.captionText || req.title || desc.title || '').trim();
+  // 화면에서 본문을 못 찾았으면 사이트 데이터의 본문(desc.title)을 쓴다. 탭 제목은 쓰지 않는다.
+  const capText = String(req.captionText ?? '').trim() || (desc.title && desc.title !== req.title ? String(desc.title).trim() : '') || (req.captionText === undefined ? String(req.title || '').trim() : '');
   const isImage = desc.type === 'image';
   const cap = {
     overlay: settings.captionOnMedia !== false && !!capText,
@@ -568,15 +571,13 @@ function buildImage(image, pageUrl) {
 // ②·③ 방식에 쓸 피드 화면 스크린샷 (보이는 탭 화면 → 게시물 영역은 저장 엔진에서 잘라 냄)
 let lastShot = 0;
 async function captureShot(req, sender) {
-  if (!req.shot || req.kind === 'image' || sender.tab?.windowId == null) return null;
-  const s = await getSettings();
-  if (!s.captionCover && !s.captionIntro) return null;
+  if ((!req.shot && !req.textShot) || sender.tab?.windowId == null) return null;
   // captureVisibleTab 은 초당 2회 제한이 있다
   const wait = 550 - (Date.now() - lastShot);
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   lastShot = Date.now();
   const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: 'png' });
-  return { dataUrl, rect: req.shot };
+  return { dataUrl, rect: req.shot || null, textRect: req.textShot || null };
 }
 
 function createJob(request, sender) {
@@ -626,6 +627,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         })
         .finally(() => {
           delete req.shot;
+          delete req.textShot;
           const job = createJob(req, sender);
           sendResponse({ jobId: job.id });
         });

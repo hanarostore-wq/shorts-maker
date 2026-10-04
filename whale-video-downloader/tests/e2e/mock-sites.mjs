@@ -176,6 +176,36 @@ const handlers = {
     if (u.pathname === '/watch') {
       return html(res, page('일반 사이트 영상', `<div class="card"><h3>일반 사이트</h3><video src="https://cdn.example-videos.com/progressive_1080p_land.mp4" controls muted style="width:640px;height:360px;background:#000"></video></div>`));
     }
+    if (u.pathname === '/spafeed' || u.pathname.startsWith('/spafeed/post/')) {
+      // 사이트 내부 이동(pushState) 피드: 뒤로 가면 목록을 다시 그리고 맨 위로 올려 버리는 사이트를 흉내 낸다
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>피드</title></head><body style="margin:0;background:#111;color:#eee;font-family:sans-serif"><main id="m"></main><script>
+        const m = document.getElementById('m');
+        const list = () => {
+          m.innerHTML = '';
+          // 목록은 조금씩 늦게 불러와진다(무한 스크롤)
+          let n = 0;
+          const more = () => { for (let i = 0; i < 20 && n < 120; i++, n++) { const a = document.createElement('article'); a.style.cssText = 'height:180px;margin:8px;background:#222'; a.innerHTML = '<a href="/spafeed/post/' + n + '">게시물 ' + n + '</a>'; m.appendChild(a); } };
+          more();
+          window.onscroll = () => { if (innerHeight + scrollY > document.documentElement.scrollHeight - 200) setTimeout(more, 150); };
+          setTimeout(() => scrollTo(0, 0), 50);
+        };
+        const detail = (id) => { window.onscroll = null; m.innerHTML = '<h1>게시물 ' + id + ' 상세</h1><div style="height:3000px"></div>'; scrollTo(0, 0); };
+        const route = () => { const p = location.pathname.match(/post\\/(\\d+)/); p ? detail(p[1]) : list(); };
+        document.addEventListener('click', (e) => { const a = e.target.closest('a'); if (!a) return; e.preventDefault(); history.pushState({}, '', a.getAttribute('href')); route(); });
+        addEventListener('popstate', route);
+        history.scrollRestoration = 'manual';
+        route();
+      </script></body></html>`);
+    }
+    if (u.pathname === '/feedpost') {
+      // 탭 제목은 '(1) 이름 / X' 처럼 작성자·알림 수, 본문은 게시물 글 칸에 있다
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>(1) 하리니( ) / X</title></head><body style="margin:0;background:#111;color:#eee">
+        <article style="width:660px;margin:20px">
+          <div style="display:flex;gap:8px;align-items:center"><div data-testid="Tweet-User-Avatar" style="width:40px;height:40px;border-radius:50%;background:#e8a"></div><div data-testid="User-Name"><b>하리니</b> <span style="color:#888">@harin_test · 6월</span></div></div>
+          <div data-testid="tweetText" lang="ko">오늘 한강에서 자전거 탔어요. 노을이 정말 예뻤어요!</div>
+          <video src="https://cdn.example-videos.com/person_top.webm" muted style="width:640px;height:360px;background:#000"></video>
+        </article></body></html>`);
+    }
     if (u.pathname === '/watch-vp9') {
       return html(res, page('VP9 영상 게시물 오늘 공원에서 강아지와 산책했어요', `<div class="card"><video src="https://cdn.example-videos.com/preview.webm" muted style="width:640px;height:360px;background:#000"></video></div>`));
     }
@@ -374,12 +404,33 @@ const handlers = {
           ${vtag('poster="https://pbs.twimg.com/ext_tw_video_thumb/1790000000000000999/pu/img/thumb.jpg"')}</article>`,
         `fetch('/i/api/graphql/abc123/TweetDetail?variables=%7B%7D').then(r=>r.json());`));
     }
+    if (u.pathname === '/tester/status/1790000000000000005') {
+      // 실제 X 처럼: 게시물 → 사진 누르면 pushState 로 /photo/1 확대 창, 사진을 탭하면 X 가 스스로 history.back() 으로 닫는다
+      return html(res, page('X 게시물', `<article data-testid="tweet"><div data-testid="tweetText">사진 게시물</div><a id="open" href="/tester/status/1790000000000000005/photo/1"><img alt="이미지" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=small" style="width:200px"></a></article>`, `
+        const show = () => {
+          document.getElementById('lb')?.remove();
+          if (!/\\/photo\\//.test(location.pathname)) return;
+          const d = document.createElement('div');
+          d.id = 'lb'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true');
+          d.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.9);display:grid;place-items:center';
+          d.innerHTML = '<div data-testid="swipe-to-dismiss"><img alt="이미지" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=large" style="max-width:60vw"></div>';
+          d.querySelector('img').addEventListener('pointerup', () => { window.__xSelfClose = (window.__xSelfClose || 0) + 1; history.back(); });
+          document.body.appendChild(d);
+        };
+        document.getElementById('open').addEventListener('click', (e) => { e.preventDefault(); history.pushState({}, '', e.currentTarget.getAttribute('href')); show(); });
+        addEventListener('popstate', show);`));
+    }
     if (u.pathname === '/tester/status/1790000000000000003/photo/1') {
       // X 사진 확대 보기(모달). 닫기 버튼을 누르면 window.__closed = true
       return html(res, page('X 사진 보기', `<div role="dialog" aria-modal="true" onclick="if (event.target === this || event.target.tagName === 'SMD-ANCHOR') { window.__bgClosed = true; this.remove(); }" style="position:fixed;inset:0;background:rgba(0,0,0,.9);display:grid;place-items:center">
           <button data-testid="app-bar-close" aria-label="Close" onclick="window.__closed = true" style="position:absolute;left:12px;top:12px">×</button>
           <img alt="이미지" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=large" style="max-width:80vw;max-height:80vh">
         </div>`));
+    }
+    if (u.pathname === '/autoplay') {
+      // X 자동 재생이 꺼진 상태처럼 영상이 멈춰 있다
+      const v = (id) => `<article style="height:520px"><div data-testid="videoPlayer"><video id="${id}" src="https://cdn.example-videos.com/preview.webm" muted loop playsinline style="width:480px;height:270px;background:#000"></video></div></article>`;
+      return html(res, page('X 자동 재생', `<div style="width:100%">${v('v1')}<div style="height:300px"></div>${v('v2')}<div style="height:1200px"></div></div>`));
     }
     if (u.pathname === '/hq') {
       return html(res, page('X 화질', '<p>화질 테스트</p>', `
@@ -417,9 +468,10 @@ const handlers = {
     }
     if (u.pathname === '/explore') {
       // 탐색 피드: @followed_user(팔로우 중), @new_user(팔로우 안 함) 은 타임라인 GraphQL 로, @react_user 는 화면 React 데이터에만 있다
-      const art = (sn, name, id) => `<article data-testid="tweet" id="t-${sn}"><div data-testid="User-Name" style="display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:4px"><a href="/${sn}"><span>${name}</span></a></div><div><a href="/${sn}">@${sn}</a> · <a href="/${sn}/status/${id}"><time>1시간</time></a></div></div><p>게시물 본문</p></article>`;
+      // 실제 X 처럼 이름 칸은 한 줄로 잘리고(overflow:hidden), 오른쪽 끝에 ⋯(caret) 버튼이 있다
+      const art = (sn, name, id) => `<article data-testid="tweet" id="t-${sn}" style="width:560px"><div style="display:flex;align-items:center;justify-content:space-between"><div style="display:flex;min-width:0;flex-shrink:1;overflow:hidden"><div data-testid="User-Name" style="display:flex;flex-direction:row;overflow:hidden;min-width:0;white-space:nowrap"><div style="display:flex;align-items:center;gap:4px;overflow:hidden;max-width:200px"><a href="/${sn}"><span>${name}</span></a></div><div style="overflow:hidden;text-overflow:ellipsis;max-width:220px"><a href="/${sn}">@${sn}</a> · <a href="/${sn}/status/${id}"><time>1시간</time></a></div></div></div><div style="display:flex;align-items:center"><button data-testid="caret" aria-label="더 보기">⋯</button></div></div><p>게시물 본문</p></article>`;
       return html(res, page('탐색하기 / X', `<a data-testid="AppTabBar_Profile_Link" href="/me_account">프로필</a>
-          <div style="display:flex;flex-direction:column;gap:12px;width:560px">${art('followed_user', '팔로우한 사람', '1801')}${art('new_user', '처음 보는 사람', '1802')}${art('react_user', '리액트 사람', '1803')}${art('me_account', '나', '1804')}</div>
+          <div style="display:flex;flex-direction:column;gap:12px;width:560px">${art('followed_user', '팔로우한 사람', '1801')}${art('new_user', '처음 보는 사람', '1802')}${art('react_user', '리액트 사람 이름이 아주 길어서 한 줄에 다 안 들어가는 계정입니다', '1803')}${art('me_account', '나', '1804')}</div>
           <div data-testid="videoPlayer" style="position:relative;width:360px;height:200px"><video id="xv" src="https://cdn.example-videos.com/preview.webm" muted loop playsinline style="width:100%;height:100%"></video>
             <button data-testid="unmuteButton" aria-label="Unmute" onclick="document.getElementById('xv').muted=false; window.__unmuteClicked=true" style="position:absolute;right:4px;bottom:4px">🔇</button></div>`,
         `document.cookie = 'ct0=mockcsrf123; path=/';
@@ -514,6 +566,17 @@ const handlers = {
 
   // ── Bluesky ──
   'bsky.app': (req, res, u) => {
+    if (u.pathname === '/feedfollow') {
+      // 블루스카이 피드: 로그인 정보는 localStorage BSKY_STORAGE 에 있다
+      const item = (h, name) => `<div data-testid="feedItem-by-${h}" id="b-${h.split('.')[0]}" style="width:560px;padding:12px;margin:8px;background:#1b1b24;border-radius:10px"><a href="/profile/${h}">${name}</a> <span>@${h}</span> · <a href="/profile/${h}/post/3kpost">3시간</a><p>게시물 본문</p><button data-testid="postDropdownBtn">⋯</button></div>`;
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Bluesky</title><script>localStorage.setItem('BSKY_STORAGE', JSON.stringify({ session: { currentAccount: { did: 'did:plc:me', handle: 'me.test', service: 'https://bsky.social/', pdsUrl: 'https://bsky.social', accessJwt: 'TEST-ACCESS-JWT' }, accounts: [] } }));</script></head><body style="background:#111;color:#eee">
+        ${item('alice.test', '앨리스')}${item('bob.test', '밥')}${item('expired.test', '만료 테스트')}${item('me.test', '나')}</body></html>`);
+    }
+    if (u.pathname === '/sound') {
+      // 블루스카이 피드처럼 음소거 자동 재생 + 영상 옆 음소거 해제 버튼
+      return html(res, page('Bluesky', `<div class="card"><div><div><video id="bv" src="https://cdn.example-videos.com/preview.webm" muted autoplay loop playsinline style="width:480px;height:270px;background:#000"></video></div>
+        <button id="bm" aria-label="Unmute" onclick="window.__bskyUnmute = true; const v = document.getElementById('bv'); v.muted = !v.muted; this.setAttribute('aria-label', v.muted ? 'Unmute' : 'Mute')">🔇</button></div></div>`));
+    }
     const m = /^\/profile\/([^/]+)\/post\/([a-z0-9]+)/.exec(u.pathname);
     if (m) {
       const cid = m[2] === '3kmockpost2' ? 'bafkreimocknoblob0000000000000000000000000000000000002' : 'bafkreimockoriginal000000000000000000000000000000000001';
@@ -529,6 +592,27 @@ const handlers = {
     json(req, res, { message: 'not found' }, 404);
   },
   'bsky.social': (req, res, u) => {
+    // 팔로우 버튼용 (PDS → 앱뷰 프록시)
+    const bskyAuth = () => req.headers.authorization === 'Bearer TEST-ACCESS-JWT' && req.headers['atproto-proxy'] === 'did:web:api.bsky.app#bsky_appview';
+    if (u.pathname === '/xrpc/app.bsky.actor.getProfiles') {
+      if (!bskyAuth()) return json(req, res, { error: 'AuthMissing' }, 401);
+      const fol = { 'alice.test': 'at://did:plc:me/app.bsky.graph.follow/3kalice' };
+      const profiles = u.searchParams.getAll('actors').map((h) => ({ did: `did:plc:${h.split('.')[0]}`, handle: h, viewer: fol[h] ? { following: fol[h] } : {} }));
+      return json(req, res, { profiles });
+    }
+    if (u.pathname === '/xrpc/com.atproto.repo.createRecord' || u.pathname === '/xrpc/com.atproto.repo.deleteRecord') {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        const b = JSON.parse(body || '{}');
+        const kind = u.pathname.endsWith('createRecord') ? 'create' : 'delete';
+        log.push({ host: 'bsky.social', bskyFollow: kind, subject: b.record?.subject, rkey: b.rkey, repo: b.repo, collection: b.collection, auth: req.headers.authorization === 'Bearer TEST-ACCESS-JWT' });
+        if (b.record?.subject === 'did:plc:expired') return json(req, res, { error: 'ExpiredToken', message: 'Token has expired' }, 400);
+        if (kind === 'create') return json(req, res, { uri: `at://did:plc:me/app.bsky.graph.follow/3knew${Date.now()}`, cid: 'bafy' });
+        return json(req, res, {});
+      });
+      return;
+    }
     if (u.pathname === '/xrpc/com.atproto.sync.getBlob') {
       if (u.searchParams.get('cid')?.includes('noblob')) return json(req, res, { error: 'BlobNotFound' }, 400);
       return serveFile(req, res, 'original_upload.mov', { type: 'video/quicktime' });
@@ -779,7 +863,7 @@ export function start(port = 443) {
       return res.end(`no mock for ${host}`);
     }
     if (req.method === 'OPTIONS') {
-      res.writeHead(204, { 'Access-Control-Allow-Origin': req.headers.origin || '*', 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' });
+      res.writeHead(204, { 'Access-Control-Allow-Origin': req.headers.origin || '*', 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': req.headers['access-control-request-headers'] || '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' });
       return res.end();
     }
     try {

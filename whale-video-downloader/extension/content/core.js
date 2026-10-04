@@ -382,6 +382,73 @@
     return { x, y, w, h, vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio || 1 };
   }
 
+  // 요약에 쓸 '피드 본문'. 탭 제목·작성자 이름이 아니라 게시물 글을 쓴다.
+  const TEXT_SEL = '[data-testid="tweetText"], [data-testid="postText"], [data-e2e="browse-video-desc"], [data-e2e="video-desc"], #desc, .note-text, .desc, ._a9zs, [data-ad-preview="message"]';
+  function feedText(el, title) {
+    const box = el.closest(POST_SEL) || el.closest('[role="dialog"]');
+    let t = '';
+    if (box) t = box.querySelector(TEXT_SEL)?.innerText || '';
+    // X 사진·영상 확대 보기: 같은 게시물 글을 화면에서 찾는다
+    if (!t) {
+      const id = /\/status\/(\d+)/.exec(location.pathname)?.[1];
+      if (id) {
+        for (const a of document.querySelectorAll(`article a[href*="/status/${id}"]`)) {
+          const tt = a.closest('article')?.querySelector('[data-testid="tweetText"]')?.innerText;
+          if (tt) {
+            t = tt;
+            break;
+          }
+        }
+      }
+    }
+    if (t.trim()) return t.trim();
+    let s = String(title || '').trim();
+    // 'OO on X: "본문" / X', 'X의 OO님: "본문"' 형태면 본문만
+    const q = /[:：]\s*["“](.+)["”]\s*(?:\/\s*X)?\s*$/s.exec(s);
+    if (q) return q[1].trim();
+    // X 의 탭 제목('(1) 이름 / X')은 작성자·알림 수일 뿐 본문이 아니다
+    const pageTitles = [document.title, U.metaTitle()].map((x) => String(x || '').trim());
+    if (!s || /^(\(\d+\)\s*)?.{0,60}\s\/\s*X$/.test(s) || (adapter.id === 'x' && pageTitles.includes(s))) return '';
+    return s;
+  }
+
+  // 피드 글 부분(프로필 사진·이름·본문) 영역. raw=true 면 화면 밖이어도 그대로 돌려준다(스크롤 판단용).
+  function textRect(el, raw = false) {
+    if (window.top !== window) return null;
+    const box = el.closest(POST_SEL) || el.closest('[role="dialog"]');
+    if (!box) return null;
+    const text = box.querySelector(TEXT_SEL);
+    const parts = [
+      box.querySelector('[data-testid="Tweet-User-Avatar"]'),
+      box.querySelector('[data-testid="User-Name"]'),
+      text,
+    ].filter(Boolean);
+    let rects = parts.map((p) => p.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+    const vr = el.getBoundingClientRect();
+    if (!rects.length || !text) {
+      // 사이트 표시가 없으면 게시물 위쪽~영상 위쪽(글이 있는 부분)
+      const br = box.getBoundingClientRect();
+      if (vr.top - br.top < 24) return null;
+      rects = [{ left: br.left, top: br.top, right: br.right, bottom: vr.top - 2 }];
+    }
+    const br = box.getBoundingClientRect();
+    const r = {
+      left: Math.max(br.left, Math.min(...rects.map((x) => x.left)) - 6),
+      top: Math.min(...rects.map((x) => x.top)) - 6,
+      right: Math.min(br.right, Math.max(...rects.map((x) => x.right)) + 6),
+      bottom: Math.max(...rects.map((x) => x.bottom)) + 6,
+    };
+    // 영상과 겹치면 영상 위쪽까지만
+    if (r.bottom > vr.top && r.top < vr.top) r.bottom = vr.top - 2;
+    if (raw) return r;
+    const x = Math.max(0, r.left);
+    const y = Math.max(0, r.top);
+    const w = Math.min(innerWidth, r.right) - x;
+    const h = Math.min(innerHeight, r.bottom) - y;
+    if (w < 60 || h < 16) return null;
+    return { x, y, w, h, vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio || 1 };
+  }
+
   let shotStyle = null;
   async function hideButtonsForShot(on) {
     if (!on) {
@@ -420,26 +487,45 @@
       if (entry.kind === 'image') entry.badge.textContent = 'AI 이미지';
     }
     req.ai = !!entry.ai;
-    req.captionText = String(req.title || '').slice(0, 1000);
+    req.captionText = feedText(video, req.title).slice(0, 1000);
     req.title = U.cleanTitle(req.title);
-    // ②·③ 방식: 클릭한 순간의 피드(게시물) 화면을 찍을 영역. 버튼은 잠깐 숨긴다.
-    const wantShot = entry.kind === 'video' && (settings.captionCover || settings.captionIntro);
-    if (wantShot) {
-      req.shot = postRect(video);
-      if (req.shot) await hideButtonsForShot(true);
+    // 클릭한 순간의 화면을 찍어 둔다. 버튼은 잠깐 숨긴다.
+    //  ① 피드 글 부분(프로필·이름·본문) 캡처를 사진·영상 빈 공간에 붙이기
+    //  ②·③ 게시물 전체 캡처를 표지·인트로로
+    const wantText = settings.captionOnMedia !== false;
+    const wantPost = entry.kind === 'video' && (settings.captionCover || settings.captionIntro);
+    let scrolled = 0;
+    if (wantText || wantPost) {
+      // 글 부분이 화면 위로 잘려 있으면 잠깐 내려 보여 준 뒤 찍고 되돌린다
+      const tr0 = wantText ? textRect(video, true) : null;
+      if (tr0 && tr0.top < 0 && tr0.top > -innerHeight) {
+        scrolled = Math.round(tr0.top - 8);
+        scrollBy(0, scrolled);
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      }
+      if (wantPost) req.shot = postRect(video);
+      if (wantText) req.textShot = textRect(video);
+      if (req.shot || req.textShot) await hideButtonsForShot(true);
+      else if (scrolled) scrollBy(0, -scrolled);
     }
+    const undoShot = () => {
+      if (!req.shot && !req.textShot) return;
+      hideButtonsForShot(false);
+      if (scrolled) scrollBy(0, -scrolled);
+      scrolled = 0;
+    };
     let res;
     try {
       res = await chrome.runtime.sendMessage({ type: 'smd:download', request: req });
     } catch (err) {
-      if (req.shot) hideButtonsForShot(false);
+      undoShot();
       return showError(entry, {
         step: '확장프로그램 연결',
         reason: `확장프로그램 백그라운드와 연결이 끊겼습니다 (${err?.message || err}). 확장프로그램이 업데이트되었거나 다시 시작된 경우입니다.`,
         action: '페이지를 새로고침(F5)한 뒤 다시 시도하세요.',
       });
     }
-    if (req.shot) hideButtonsForShot(false);
+    undoShot();
     if (!res || res.error) return showError(entry, res?.error || { step: '다운로드 요청', reason: '백그라운드가 응답하지 않았습니다.', action: '페이지를 새로고침한 뒤 다시 시도하세요.' });
     entry.jobId = res.jobId;
     entry.lastMsg = Date.now();
@@ -533,11 +619,16 @@
         if (!(t instanceof HTMLImageElement) && !t.closest?.('[data-testid="swipe-to-dismiss"]')) return;
         const modal = t.closest('[aria-modal="true"], [role="dialog"]');
         if (!modal) return;
-        const close = modal.querySelector('[data-testid="app-bar-close"], [aria-label="Close"], [aria-label="닫기"]') || document.querySelector('[data-testid="app-bar-close"]');
         ev.preventDefault();
         ev.stopPropagation();
-        if (close) close.click();
-        else history.back();
+        // X 가 사진 탭으로 스스로 닫는 경우도 있다 → 잠깐 기다렸다가 아직 열려 있을 때만 닫는다(뒤로가기 두 번 방지)
+        const href = location.href;
+        setTimeout(() => {
+          if (location.href !== href || !/\/photo\/\d+/.test(location.pathname) || !modal.isConnected) return;
+          const close = modal.querySelector('[data-testid="app-bar-close"], [aria-label="Close"], [aria-label="닫기"]') || document.querySelector('[data-testid="app-bar-close"]');
+          if (close) close.click();
+          else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+        }, 180);
       },
       true,
     );

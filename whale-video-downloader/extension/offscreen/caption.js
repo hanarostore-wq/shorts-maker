@@ -39,6 +39,38 @@ export async function summarize(text) {
 // ── 빈 공간 고르기 ──
 // 피부색 비율과 경계(무늬) 밀도가 낮은 띠가 '빈 공간'이다.
 export function chooseRegion(source, w, h) {
+  const sc = bandScores(source, w, h);
+  return sc.bottom - BOTTOM_BIAS <= sc.top ? 'bottom' : 'top';
+}
+
+// 사람 얼굴은 보통 화면 위쪽에 있어서, 점수가 비슷하면 아래를 고른다
+const BOTTOM_BIAS = 0.04;
+
+// 영상: 첫 프레임(검은 화면·페이드 인일 때가 많음)만 보지 않고 영상 전체에서 여러 장을 골라 합산한다
+export async function chooseRegionForTrack(vt) {
+  const start = await vt.getFirstTimestamp().catch(() => 0);
+  const end = await vt.computeDuration().catch(() => 0);
+  const len = Math.max(0, end - start);
+  const ts = len > 0 ? [0.1, 0.25, 0.4, 0.55, 0.7, 0.85].map((f) => start + len * f) : [start];
+  const sink = new MB.CanvasSink(vt, { width: 96, poolSize: 1 });
+  let top = 0;
+  let bottom = 0;
+  let n = 0;
+  for await (const wc of sink.canvasesAtTimestamps(ts)) {
+    if (!wc) continue;
+    const c = wc.canvas;
+    const sc = bandScores(c, c.width, c.height);
+    // 거의 단색인 프레임(검은 화면 등)은 판단에 쓰지 않는다
+    if (sc.flat) continue;
+    top += sc.top;
+    bottom += sc.bottom;
+    n++;
+  }
+  if (!n) return 'bottom';
+  return bottom / n - BOTTOM_BIAS <= top / n ? 'bottom' : 'top';
+}
+
+export function bandScores(source, w, h) {
   const sw = 96;
   const sh = Math.max(16, Math.round((h / w) * sw));
   const c = new OffscreenCanvas(sw, sh);
@@ -67,12 +99,18 @@ export function chooseRegion(source, w, h) {
     }
     return (skin / n) * 3 + edge / n / 255;
   };
-  const cands = [
-    { pos: 'top', s: score(0.03, 0.22) },
-    { pos: 'bottom', s: score(0.76, 0.95) },
-  ];
-  cands.sort((a, b) => a.s - b.s);
-  return cands[0].pos;
+  // 화면 전체가 거의 단색인지(밝기 편차)
+  let sum = 0;
+  let sq = 0;
+  const cnt = sw * sh;
+  for (let i = 0; i < px.length; i += 4) {
+    const l = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+    sum += l;
+    sq += l * l;
+  }
+  const mean = sum / cnt;
+  const flat = Math.sqrt(Math.max(0, sq / cnt - mean * mean)) < 6;
+  return { top: score(0.03, 0.22), bottom: score(0.76, 0.95), flat };
 }
 
 function wrap(ctx, text, maxW, maxLines) {
@@ -91,6 +129,41 @@ function wrap(ctx, text, maxW, maxLines) {
     lines[maxLines - 1] = `${[...lines[maxLines - 1]].slice(0, -1).join('')}…`;
   }
   return lines;
+}
+
+// 캡처한 피드 글 이미지를 빈 공간(위/아래)에 붙인다. 너비는 화면의 최대 90%, 높이는 최대 28%.
+export function drawShotOverlay(ctx, w, h, img, pos) {
+  const iw = img.width;
+  const ih = img.height;
+  const k = Math.min((w * 0.9) / iw, (h * 0.28) / ih);
+  const dw = Math.round(iw * k);
+  const dh = Math.round(ih * k);
+  const x = Math.round((w - dw) / 2);
+  const y = Math.round(pos === 'top' ? h * 0.03 : h * 0.97 - dh);
+  const r = Math.max(4, Math.min(dw, dh) * 0.08);
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.45)';
+  ctx.shadowBlur = Math.max(4, dh * 0.08);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + dw, y, x + dw, y + dh, r);
+  ctx.arcTo(x + dw, y + dh, x, y + dh, r);
+  ctx.arcTo(x, y + dh, x, y, r);
+  ctx.arcTo(x, y, x + dw, y, r);
+  ctx.closePath();
+  ctx.fillStyle = '#000';
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.clip();
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, x, y, dw, dh);
+  ctx.restore();
+}
+
+// 글자(요약) 또는 캡처 이미지 중 있는 것으로 그린다
+export function drawOverlay(ctx, w, h, ov, pos) {
+  if (ov?.image) drawShotOverlay(ctx, w, h, ov.image, pos);
+  else if (ov?.text) drawCaption(ctx, w, h, ov.text, pos);
 }
 
 export function drawCaption(ctx, w, h, text, pos) {
@@ -127,18 +200,20 @@ export function drawCaption(ctx, w, h, text, pos) {
 }
 
 // ── 사진 ──
-export async function captionImage(blob, text, kind) {
+export async function captionImage(blob, ov, kind) {
+  if (typeof ov === 'string') ov = { text: ov };
   const bmp = await createImageBitmap(blob);
   const c = new OffscreenCanvas(bmp.width, bmp.height);
   const ctx = c.getContext('2d');
   ctx.drawImage(bmp, 0, 0);
-  drawCaption(ctx, bmp.width, bmp.height, text, chooseRegion(bmp, bmp.width, bmp.height));
+  drawOverlay(ctx, bmp.width, bmp.height, ov, chooseRegion(bmp, bmp.width, bmp.height));
   const type = kind === 'jpg' ? 'image/jpeg' : 'image/png';
   return c.convertToBlob({ type, quality: 0.95 });
 }
 
 // ── 영상: 모든 프레임에 요약 글자를 그리고 다시 인코딩 ──
-export async function captionVideo(file, text, writable, onProgress) {
+export async function captionVideo(file, ov, writable, onProgress) {
+  if (typeof ov === 'string') ov = { text: ov };
   const input = new MB.Input({ source: new MB.BlobSource(file), formats: MB.ALL_FORMATS });
   try {
     const vt = await input.getPrimaryVideoTrack();
@@ -149,7 +224,7 @@ export async function captionVideo(file, text, writable, onProgress) {
     if (!codec) throw new Error('이 브라우저에서 쓸 수 있는 영상 인코더가 없습니다');
     const canvas = new OffscreenCanvas(w, h);
     const ctx = canvas.getContext('2d', { willReadFrequently: false });
-    let pos = null;
+    let pos = await chooseRegionForTrack(vt).catch(() => null);
     const output = new MB.Output({ format: new MB.Mp4OutputFormat({ fastStart: false }), target: new MB.StreamTarget(writable, { chunked: true, chunkSize: 4 * 1024 * 1024 }) });
     const conv = await MB.Conversion.init({
       input,
@@ -163,7 +238,7 @@ export async function captionVideo(file, text, writable, onProgress) {
         process: (sample) => {
           sample.draw(ctx, 0, 0, w, h);
           if (!pos) pos = chooseRegion(canvas, w, h);
-          drawCaption(ctx, w, h, text, pos);
+          drawOverlay(ctx, w, h, ov, pos);
           return canvas;
         },
       },
@@ -182,13 +257,14 @@ export async function captionVideo(file, text, writable, onProgress) {
 
 // ── 피드 스크린샷 ──
 // 탭 화면 전체 캡처(dataUrl)에서 게시물 영역만 잘라 낸다. 없으면 요약 글자로 카드를 그린다.
-export async function cropShot(shot) {
-  if (!shot?.dataUrl || !shot.rect) throw new Error('찍어 둔 피드 화면이 없습니다');
+export async function cropShot(shot, which = 'rect') {
+  if (!shot?.dataUrl || !shot[which]) throw new Error(shot?.dataUrl ? '게시물 영역을 찾지 못했습니다' : '찍어 둔 피드 화면이 없습니다');
   const blob = await (await fetch(shot.dataUrl)).blob();
   const bmp = await createImageBitmap(blob);
-  const r = shot.rect;
+  const r = shot[which];
+  // 캡처 크기 = 화면 크기 × 화면 배율. 세로는 창마다 다르게 잘릴 수 있어 가로 비율 하나로 맞춘다.
   const sx = bmp.width / (r.vw || bmp.width);
-  const sy = bmp.height / (r.vh || bmp.height);
+  const sy = sx;
   const x = Math.max(0, Math.round(r.x * sx));
   const y = Math.max(0, Math.round(r.y * sy));
   const w = Math.min(bmp.width - x, Math.round(r.w * sx));
@@ -281,7 +357,7 @@ function fitDraw(ctx, src, w, h) {
   ctx.drawImage(src, (w - sw * k) / 2, (h - sh * k) / 2, sw * k, sh * k);
 }
 
-export async function introVideo(file, { image, seconds = 3, overlayText = '' }, writable, onProgress) {
+export async function introVideo(file, { image, seconds = 3, overlay = null }, writable, onProgress) {
   const input = new MB.Input({ source: new MB.BlobSource(file), formats: MB.ALL_FORMATS });
   try {
     const vt = await input.getPrimaryVideoTrack();
@@ -328,14 +404,14 @@ export async function introVideo(file, { image, seconds = 3, overlayText = '' },
     // 2) 본 영상 프레임(필요하면 요약 글자도 그린다)
     const vSink = new MB.VideoSampleSink(vt);
     let t0 = null;
-    let pos = null;
+    let pos = overlay ? await chooseRegionForTrack(vt).catch(() => null) : null;
     let first = true;
     for await (const sample of vSink.samples()) {
       if (t0 === null) t0 = Math.max(0, sample.timestamp);
       sample.draw(ctx, 0, 0, w, h);
-      if (overlayText) {
+      if (overlay) {
         if (!pos) pos = chooseRegion(canvas, w, h);
-        drawCaption(ctx, w, h, overlayText, pos);
+        drawOverlay(ctx, w, h, overlay, pos);
       }
       const ts = seconds + Math.max(0, sample.timestamp - t0);
       const out = new MB.VideoSample(canvas, { timestamp: ts, duration: sample.duration || 1 / fps });

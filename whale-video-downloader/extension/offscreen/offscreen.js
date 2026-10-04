@@ -2,7 +2,19 @@
 //   OPFS 임시 파일에 쓴 뒤 blob 주소를 서비스워커에 넘겨 웨일 다운로드 폴더(사용자가 지정한 폴더)로 저장한다.
 //   사진은 원본 그대로, jpg·png·gif 가 아니면 PNG 로 변환한다.
 import { copyFile, mergeStreams, remuxHls, StepError, STEP } from './engine.js';
-import { summarize, captionImage, captionVideo, feedImage, canvasPng, coverVideo, introVideo } from './caption.js';
+import { summarize, captionImage, captionVideo, feedImage, canvasPng, coverVideo, introVideo, cropShot } from './caption.js';
+
+// ① 방식: 찍어 둔 피드 글 부분 캡처가 있으면 그것을, 없으면 요약 글자를 붙인다
+async function overlayFor(cap, summary, warns) {
+  if (cap.shot?.textRect) {
+    try {
+      return { ov: { image: await cropShot(cap.shot, 'textRect') }, used: `[피드 글 캡처] ${summary || ''}`.trim() };
+    } catch (err) {
+      warns.push(`피드 글 캡처를 쓰지 못해 요약 글자로 넣었습니다 (${err?.message || err}).`);
+    }
+  } else if (cap.shotError) warns.push(`피드 글 캡처를 쓰지 못해 요약 글자로 넣었습니다 (${cap.shotError}).`);
+  return summary ? { ov: { text: summary }, used: summary } : { ov: null, used: '' };
+}
 
 const running = new Map(); // jobId -> { ac, target }
 const finished = new Map(); // jobId -> { url, cleanup }
@@ -103,12 +115,17 @@ async function saveImage(jobId, desc) {
   }
   let extra = null;
   let warning = '';
-  if (desc.caption?.overlay && desc.caption.text && ext !== 'gif') {
+  let captionUsed = '';
+  if (desc.caption?.overlay && (desc.caption.text || desc.caption.shot?.textRect) && ext !== 'gif') {
     try {
-      const summary = await summarize(desc.caption.text);
-      if (summary) {
+      const warns = [];
+      const summary = desc.caption.text ? await summarize(desc.caption.text) : '';
+      const { ov, used } = await overlayFor(desc.caption, summary, warns);
+      warning = warns.join(' ');
+      if (ov) {
+        captionUsed = used;
         const orig = blob;
-        blob = await captionImage(blob, summary, ext);
+        blob = await captionImage(blob, ov, ext);
         if (desc.caption.keepOriginal) extra = { blobUrl: URL.createObjectURL(orig.slice(0, orig.size, MIME[ext] || 'image/png')), ext };
       }
     } catch (err) {
@@ -117,7 +134,7 @@ async function saveImage(jobId, desc) {
   }
   const url = URL.createObjectURL(blob.slice(0, blob.size, MIME[ext] || 'image/png'));
   finished.set(jobId, { url, extraUrl: extra?.blobUrl });
-  send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: blob.size, ext, extra, warning });
+  send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: blob.size, ext, extra, warning, captionUsed });
 }
 
 async function run({ jobId, desc, filename, mode, prefer }) {
@@ -172,10 +189,17 @@ async function run({ jobId, desc, filename, mode, prefer }) {
     let warning = '';
     const extras = [];
     const warns = [];
+    let captionUsed = '';
     const cap = desc.caption;
     if (cap && (cap.overlay || cap.cover || cap.intro)) {
       const summary = cap.text ? await summarize(cap.text) : '';
-      const overlayText = cap.overlay ? summary : '';
+      let overlay = null;
+      captionUsed = summary;
+      if (cap.overlay) {
+        const o = await overlayFor(cap, summary, warns);
+        overlay = o.ov;
+        if (o.used) captionUsed = o.used;
+      }
       let feed = null;
       if (cap.cover || cap.intro) {
         send({ type: 'smd:engine-progress', jobId, phase: 'shot', percent: null, quality });
@@ -185,13 +209,13 @@ async function run({ jobId, desc, filename, mode, prefer }) {
       const origFile = file;
       const cleanups = [target.cleanup];
       // ①·③: 다시 인코딩 (③ 이 켜져 있으면 ① 글자도 같은 과정에서 함께 그린다)
-      if (cap.intro || overlayText) {
+      if (cap.intro || overlay) {
         const re = await opfsTarget(`${jobId}-cap`, filename);
         try {
           send({ type: 'smd:engine-progress', jobId, phase: 'caption', percent: 0, quality });
           const prog = (pct) => onProgress({ phase: 'caption', percent: Math.min(99, pct) });
-          if (cap.intro) await introVideo(outFile, { image: feed.canvas, seconds: 3, overlayText }, re.writable, prog);
-          else await captionVideo(outFile, overlayText, re.writable, prog);
+          if (cap.intro) await introVideo(outFile, { image: feed.canvas, seconds: 3, overlay }, re.writable, prog);
+          else await captionVideo(outFile, overlay, re.writable, prog);
           const reFile = await re.fh.getFile();
           if (!reFile.size) throw new Error('결과 파일이 비어 있음');
           outFile = reFile;
@@ -199,7 +223,7 @@ async function run({ jobId, desc, filename, mode, prefer }) {
           cleanups.push(re.cleanup);
         } catch (err) {
           await re.fail().catch(() => {});
-          const what = cap.intro ? '영상 시작에 피드 화면 3초를 넣지' : '영상에 요약 글자를 넣지';
+          const what = cap.intro ? '영상 시작에 피드 화면 3초를 넣지' : overlay?.image ? '영상에 피드 글 캡처를 넣지' : '영상에 요약 글자를 넣지';
           warns.push(`${what} 못해 원본으로 저장했습니다 (${err?.message || err}).`);
         }
       }
@@ -238,7 +262,7 @@ async function run({ jobId, desc, filename, mode, prefer }) {
     warning = warns.join(' ');
     const url = URL.createObjectURL(outFile.slice(0, outFile.size, MIME[ext] || 'video/mp4'));
     finished.set(jobId, { url, cleanup, extraUrls: extras.map((x) => x.blobUrl) });
-    send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: outFile.size, quality, duration: measured, ext: ext !== (filename.split('.').pop() || '').toLowerCase() ? ext : undefined, extras, warning });
+    send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: outFile.size, quality, duration: measured, ext: ext !== (filename.split('.').pop() || '').toLowerCase() ? ext : undefined, extras, warning, captionUsed });
   } catch (err) {
     running.delete(jobId);
     await target?.fail().catch(() => {});

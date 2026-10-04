@@ -128,7 +128,7 @@ async function renderFolder() {
   renderPreview();
 }
 renderFolder();
-for (const id of ['captionOnMedia', 'captionCover', 'captionIntro', 'captionKeepOriginal', 'ytShortsStats', 'adBlock', 'xHighQuality', 'xKeepControls', 'xThickBar', 'xFollowButtons', 'xAutoSound', 'xWideLayout']) {
+for (const id of ['captionOnMedia', 'captionCover', 'captionIntro', 'captionKeepOriginal', 'keepScroll', 'ytShortsStats', 'adBlock', 'xHighQuality', 'xKeepControls', 'xThickBar', 'xFollowButtons', 'xAutoSound', 'xAutoPlay', 'bskyAutoSound', 'bskyFollowButtons', 'xWideLayout']) {
   $(`#${id}`).checked = settings[id] !== false;
   $(`#${id}`).addEventListener('change', (e) => save({ [id]: e.target.checked }));
 }

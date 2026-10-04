@@ -25,6 +25,10 @@ ff -f lavfi -i testsrc2=size=1920x1080:rate=30 -f lavfi -i sine=frequency=700 -t
   -hls_segment_filename "hls_fmp4/s%v_%d.m4s" -hls_fmp4_init_filename "init_%v.mp4" -master_pl_name master.m3u8 \
   -var_stream_map "v:0,agroup:aud v:1,agroup:aud a:0,agroup:aud,default:yes" hls_fmp4/p%v.m3u8
 ff -f lavfi -i testsrc2=size=320x180:rate=15 -f lavfi -i sine=frequency=400 -t 95 -c:v libvpx-vp9 -b:v 80k -deadline realtime -cpu-used 8 -c:a libopus -b:a 32k long_95s.webm
+# 첫 0.6초는 검은 화면, 그 뒤로 위쪽에 사람(피부색)이 있고 아래쪽은 비어 있는 영상 → 요약 글자는 아래로 가야 함
+ff -f lavfi -i color=c=black:s=640x360:r=30:d=0.6 -f lavfi -i "color=c=0x2a3040:s=640x360:r=30:d=5.4" -f lavfi -i sine=frequency=500:duration=6 \
+  -filter_complex "[1:v]drawbox=x=200:y=8:w=240:h=150:color=0xE0AC90:t=fill,drawbox=x=150:y=60:w=340:h=40:color=0xD49A80:t=fill,noise=alls=12:allf=t[p];[0:v][p]concat=n=2:v=1:a=0[v]" \
+  -map "[v]" -map 2:a -c:v libvpx-vp9 -b:v 600k -deadline realtime -cpu-used 8 -c:a libopus -b:a 64k person_top.webm
 mkdir -p images
 ff -f lavfi -i testsrc2=size=1200x800 -frames:v 1 images/photo.webp
 ff -f lavfi -i testsrc2=size=1600x1000 -frames:v 1 images/photo.jpg

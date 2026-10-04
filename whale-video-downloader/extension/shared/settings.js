@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS = {
   captionKeepOriginal: false, // 요약 넣을 때 원본도 함께 저장
   captionCover: false, // [재인코딩 없음] 영상 표지(썸네일)에 피드 스크린샷 + 설명 정보에 피드 내용 + 같은 이름 PNG
   captionIntro: false, // 영상 맨 앞에 피드 스크린샷 3초(재인코딩)
+  keepScroll: true, // 모든 사이트: 뒤로·앞으로 가기 때 보던 위치 유지
   ytShortsStats: true, // 유튜브 쇼츠 오른쪽 위에 조회수·구독자 수
   adBlock: true, // 지원 사이트 광고 차단(피드 광고 숨김·유튜브 광고 건너뛰기·광고 서버 차단)
   xKeepControls: true, // X 재생바 항상 표시
@@ -14,6 +15,9 @@ export const DEFAULT_SETTINGS = {
   xHighQuality: true, // X 재생 화질 항상 최고
   xFollowButtons: true, // X 피드 작성자 옆 팔로우/팔로잉 버튼
   xAutoSound: true,
+  xAutoPlay: true,
+  bskyAutoSound: true,
+  bskyFollowButtons: true, // 블루스카이 피드 게시물에 팔로우/팔로잉 버튼 // 블루스카이 영상 재생 시 소리 자동 켜기 // X 영상 자동 재생(화면에 가장 많이 보이는 영상)
   xWideLayout: true, // X 오른쪽 사이드바 숨기고 가운데 피드 크게 // X 영상 재생 시 소리 자동 켜기
   sortFolders: true, // 사진 / 영상 1분30초 이하 / 영상 1분30초 초과 폴더로 자동 분류
   flagPrefix: true,
