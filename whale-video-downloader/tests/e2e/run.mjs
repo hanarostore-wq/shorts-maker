@@ -639,6 +639,57 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── 블루스카이 사진·스레드 영상 제목: 고정된 탭 제목('ㅎㅊㅁㅃ')을 쓰지 않는다 ──
+{
+  const shoot = async (page, sel) => {
+    const el = page.locator(sel);
+    await el.scrollIntoViewIfNeeded();
+    await el.hover();
+    await page.waitForTimeout(500);
+    const before = new Set(listFiles(DL));
+    await page.locator('smd-anchor .btn.show').last().click();
+    const saved = await waitFile(before, 30000);
+    return saved ? path.basename(saved) : '';
+  };
+  const cases = [
+    ['피드 사진 = 작성자 이름 - 본문', async (page) => shoot(page, '#ep'), (n) => /에린 - 바다 사진이에요/.test(n) && !/@erin/.test(n)],
+    ['크게 보기 창 사진 = 방금 누른 게시물 제목', async (page) => {
+      await page.locator('#ep').click();
+      await page.waitForTimeout(400);
+      return shoot(page, '#lbimg');
+    }, (n) => /에린 - 바다 사진이에요/.test(n)],
+    ['(오류 경로) 게시물 밖 사진 = 블루스카이 사진', async (page) => shoot(page, '#lone'), (n) => /블루스카이 사진/.test(n)],
+  ];
+  for (const [label, act, check] of cases) {
+    const page = await ctx.newPage();
+    try {
+      await setSettings({ captionOnMedia: false, preventDuplicates: false });
+      await page.goto('https://bsky.app/feedphoto', { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      const name = await act(page);
+      record(`[블루스카이] ${label}`, !!name && check(name) && !/ㅎㅊㅁㅃ/.test(name), { note: name || '저장 안 됨' });
+    } catch (err) {
+      record(`[블루스카이] ${label}`, false, { note: err.message.split('\n')[0] });
+    } finally {
+      await page.close();
+    }
+  }
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://bsky.app/profile/fran.test/post/3kthreadpost', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const before = new Set(listFiles(DL));
+    await page.locator('smd-anchor .btn.show').first().click();
+    const saved = await waitFile(before, 60000);
+    const name = saved ? path.basename(saved) : '';
+    record('[블루스카이] 게시물 상세 화면 영상 = 작성자 이름 - 본문', /프랜 - 강아지 산책 영상/.test(name) && !/ㅎㅊㅁㅃ/.test(name), { note: name || '저장 안 됨' });
+  } catch (err) {
+    record('[블루스카이] 게시물 상세 영상 제목', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
 // ── 블루스카이 제목: 누른 게시물의 작성자 이름·본문(탭 제목이 처음 것으로 남아 있어도) ──
 {
   const page = await ctx.newPage();

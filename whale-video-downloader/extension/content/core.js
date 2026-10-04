@@ -932,7 +932,7 @@
     for (let i = 0; i < imgs.length; i++) {
       try {
         const req = await SITES.imageRequest(imgs[i]);
-        Object.assign(req, { site: adapter.id, siteName: adapter.name, pageUrl: location.href, kind: 'image', id: String(i + 1).padStart(3, '0'), title: `${page} 사진` });
+        Object.assign(req, { site: adapter.id, siteName: adapter.name, pageUrl: location.href, kind: 'image', id: String(i + 1).padStart(3, '0'), title: adapter.id === 'bluesky' ? req.title : `${page} 사진` });
         const res = await chrome.runtime.sendMessage({ type: 'smd:download', request: req });
         if (res?.jobId) started++;
       } catch {}

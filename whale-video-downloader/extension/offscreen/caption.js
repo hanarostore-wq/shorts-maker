@@ -4,6 +4,9 @@
 //  - 사진은 원본에 바로 그리고, 영상은 모든 프레임에 그려 다시 인코딩한다(화질은 최대한 높게).
 import * as MB from '../vendor/mediabunny.min.mjs';
 
+// 영상·사진에 쓰는 글자 크기(모든 사이트 공통 고정값)
+export const TEXT_PX = 28;
+
 // ── 요약 ──
 export function quickSummary(text) {
   let s = String(text || '')
@@ -158,7 +161,8 @@ export function drawOverlay(ctx, w, h, ov) {
 
 export function drawCaption(ctx, w, h, text, pos, flush = false) {
   if (!text) return;
-  const size = Math.round(Math.max(14, Math.min(56, Math.min(w, h * 0.9) * (flush ? 0.036 : 0.045))));
+  // 모든 사이트·모든 크기에서 피드 글자와 같은 28px 로 고정(사용자 요청)
+  const size = TEXT_PX;
   ctx.save();
   ctx.font = `700 ${size}px "Pretendard","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR","Noto Sans CJK KR",sans-serif`;
   ctx.textBaseline = 'top';
@@ -595,8 +599,8 @@ export function postCard(author, text) {
 // 피드 본문 글자만 왼쪽 위에 쓴다(상자 없이 흰 글자 + 검은 테두리, 최대 3줄)
 export function drawTopLeftText(ctx, w, h, text) {
   if (!text) return;
-  // 글자 크기: 영상·사진 크기와 상관없이 항상 28px 로 고정(사용자 요청)
-  const size = 28;
+  // 글자 크기: 사이트·영상·사진 크기와 상관없이 항상 28px 로 고정(사용자 요청)
+  const size = TEXT_PX;
   ctx.save();
   ctx.font = `800 ${size}px "Pretendard","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR","Noto Sans CJK KR",sans-serif`;
   ctx.textBaseline = 'top';

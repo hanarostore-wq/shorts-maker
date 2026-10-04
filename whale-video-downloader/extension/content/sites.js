@@ -528,6 +528,50 @@
   });
 
   // ── Bluesky ──
+  // 블루스카이는 화면을 옮겨도 탭 제목·og:title 이 처음 연 페이지 것으로 남아 있어(예: 'ㅎㅊㅁㅃ') 제목에 쓰면 안 된다.
+  // 그래서 누른 사진·영상이 들어 있는 게시물(작성자 이름 - 본문)에서 읽는다.
+  //   게시물 밖(사진 크게 보기 창 등)이면 ① 게시물 상세 화면의 본 게시물 ② 방금 누른 게시물 순으로 찾는다.
+  let bskyLastItem = null;
+  let bskyLastAt = 0;
+  const BSKY_ITEM = '[data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]';
+  if (/(^|\.)bsky\.app$/.test(location.hostname)) {
+    addEventListener('pointerdown', (e) => {
+      const it = e.target?.closest?.(BSKY_ITEM);
+      if (it) {
+        bskyLastItem = it;
+        bskyLastAt = Date.now();
+      }
+    }, true);
+  }
+  function bskyItemOf(el) {
+    const own = el.closest?.(BSKY_ITEM) || [...document.querySelectorAll('[data-testid^="postThreadItem-by-"]')].find((x) => x.contains(el));
+    if (own) return own;
+    const path = /^\/profile\/([^/]+)\/post\//.exec(location.pathname);
+    if (path) {
+      const h = decodeURIComponent(path[1]);
+      const main = document.querySelector(`[data-testid="postThreadItem-by-${CSS.escape(h)}"]`);
+      if (main) return main;
+    }
+    if (bskyLastItem?.isConnected && Date.now() - bskyLastAt < 10 * 60 * 1000) return bskyLastItem;
+    return null;
+  }
+  function bskyPost(el, kindKo) {
+    const item = bskyItemOf(el);
+    const handle = item?.dataset.testid.replace(/^(feedItem|postThreadItem)-by-/, '') || /^\/profile\/([^/]+)/.exec(location.pathname)?.[1] || '';
+    let name = '';
+    if (item && handle) {
+      for (const a of item.querySelectorAll(`a[href="/profile/${handle}"], a[href^="/profile/${handle}"]`)) {
+        const t = (a.innerText || '').split('\n')[0].replace(/\s+/g, ' ').replace(/\s*@\S+.*$/, '').trim();
+        if (t && !/^\d+[smhd분시간일]/.test(t)) {
+          name = t.slice(0, 60);
+          break;
+        }
+      }
+    }
+    const text = (item?.querySelector('[data-testid="postText"]')?.innerText || '').replace(/\s+/g, ' ').trim();
+    const who = name || (handle ? `@${decodeURIComponent(handle)}` : '');
+    return { title: [who, text].filter(Boolean).join(' - ') || `블루스카이 ${kindKo}`, author: name || handle, found: !!item };
+  }
   add({
     id: 'bluesky',
     name: '블루스카이',
@@ -535,25 +579,7 @@
     offset: 48,
     async resolve(video) {
       // 제목·작성자는 누른 게시물에서 읽는다(블루스카이는 페이지를 옮겨도 탭 제목·메타 정보가 처음 것으로 남아 있음)
-      const meta = (() => {
-        const item = video.closest('[data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]')
-          || [...document.querySelectorAll('[data-testid^="postThreadItem-by-"]')].find((x) => x.contains(video))
-          || null;
-        const handle = item?.dataset.testid.replace(/^(feedItem|postThreadItem)-by-/, '') || /^\/profile\/([^/]+)\//.exec(location.pathname)?.[1] || '';
-        let name = '';
-        if (item && handle) {
-          for (const a of item.querySelectorAll(`a[href="/profile/${handle}"], a[href^="/profile/${handle}"]`)) {
-            const t = (a.innerText || '').replace(/\s+/g, ' ').trim();
-            if (t && !t.startsWith('@') && !/^\d+[smhd분시간일]/.test(t)) {
-              name = t.split('\n')[0].slice(0, 60);
-              break;
-            }
-          }
-        }
-        const text = (item?.querySelector('[data-testid="postText"]')?.innerText || '').replace(/\s+/g, ' ').trim();
-        const who = name || (handle ? `@${handle}` : '');
-        return { title: [who, text].filter(Boolean).join(' - ') || U.metaTitle(), author: name || handle };
-      })();
+      const meta = bskyPost(video, '영상');
       const re = /\/watch\/(did(?:%3A|:)[^/]+)\/([a-z0-9]{20,})\//i;
       const srcs = [video.getAttribute('poster'), video.currentSrc, video.querySelector('source')?.src, ...[...U.container(video).querySelectorAll('img')].map((i) => i.src)];
       for (const s of srcs) {
@@ -1089,13 +1115,23 @@
       });
     }
     const alt = (img.getAttribute('alt') || '').trim();
+    const goodAlt = alt && alt.length > 2 && !/^(image|이미지|사진|photo)$/i.test(alt) ? alt.slice(0, 80) : '';
+    let title = goodAlt || `${U.metaTitle().slice(0, 60)} 사진`;
+    let author;
+    if (site.id === 'bluesky') {
+      // 고정된 탭 제목 대신 사진이 달린 게시물의 작성자·본문
+      const post = bskyPost(img, '사진');
+      title = post.found ? post.title : goodAlt || post.title;
+      author = post.author || undefined;
+    }
     return {
       id: '',
-      title: alt && alt.length > 2 && !/^(image|이미지|사진|photo)$/i.test(alt) ? alt.slice(0, 80) : `${U.metaTitle().slice(0, 60)} 사진`,
+      title,
+      author,
       info: { image: { url: urls[0], fallbacks: urls.slice(1), width: img.naturalWidth, height: img.naturalHeight } },
       siteNameOverride: site.name,
     };
   }
 
-  globalThis.__SMD_SITES = { sites, generic, pick, U, SiteError, igMediaId, imageRequest, originalImageUrls, xUsers };
+  globalThis.__SMD_SITES = { sites, generic, pick, U, SiteError, igMediaId, imageRequest, originalImageUrls, xUsers, bskyPost };
 })();
