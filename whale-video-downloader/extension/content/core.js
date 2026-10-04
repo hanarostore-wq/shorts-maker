@@ -620,7 +620,31 @@
   // ───────────── 다운로드 누르면 작성자 자동 팔로우 ─────────────
   // X·블루스카이는 각 도구(x-tools / bsky-tools)가 처리하고, 그 밖의 사이트는 영상 가까이에 있는 팔로우·구독 버튼을 대신 누른다.
   // 이미 팔로우 중이면 아무것도 하지 않는다(언팔로우 버튼은 절대 누르지 않음).
-  const FOLLOW_TEXT = /^(\+\s*)?(팔로우|팔로우하기|follow|구독|subscribe|关注|關注|フォロー)$/i;
+  const FOLLOW_TEXT = /^(\+\s*)?(팔로우|팔로우하기|follow|follow back|구독|구독하기|subscribe|关注|關注|加关注|フォロー|フォローする|seguir|suivre|abonnieren|segui|takip et|ikuti)$/i;
+  // 사이트별 팔로우·구독 단추 위치(영상과 떨어져 있는 경우: 유튜브 보기 화면 등). 영상에서 가장 가까운 것을 누른다.
+  const SITE_FOLLOW = {
+    youtube: ['ytd-subscribe-button-renderer button', '#subscribe-button button', 'yt-subscribe-button-view-model button', 'ytd-reel-player-overlay-renderer #subscribe-button button'],
+    tiktok: ['[data-e2e="follow-button"]', '[data-e2e="feed-follow"]', '[data-e2e="browse-follow"]'],
+    instagram: ['header button', 'article header [role="button"]', '[role="dialog"] header button'],
+    facebook: ['[aria-label="팔로우"]', '[aria-label="Follow"]'],
+    pinterest: ['[data-test-id="user-follow-button"] button', '[data-test-id="creator-follow-button"] button', 'button[aria-label*="팔로우"]', 'button[aria-label*="Follow" i]'],
+    bilibili: ['.follow-btn', '.up-panel-container .follow-btn', '.bili-follow-btn'],
+    weibo: ['button[class*="follow"]', '.woo-button-main'],
+    douyin: ['[data-e2e="feed-follow-icon"]', '[data-e2e="user-info-follow-btn"]', 'button[class*="follow"]'],
+    kuaishou: ['.follow-button', '.profile-follow', 'button[class*="follow"]'],
+    xiaohongshu: ['.follow-button', '.note-detail-follow-btn', 'button[class*="follow"]'],
+    vimeo: ['button[class*="Follow"]', '[data-testid*="follow" i] button'],
+    dailymotion: ['button[class*="Follow"]', '[data-testid*="follow" i]'],
+    naver: ['button[class*="subscribe"]', 'button[class*="follow"]', 'a[class*="subscribe"][role="button"]'],
+    snapchat: ['button[class*="Subscribe"]', 'button[class*="subscribe"]'],
+  };
+  const isFollowBtn = (b) => {
+    if (!b || b.closest('smd-anchor') || b.disabled) return false;
+    if (b.closest('a[href]') && !b.matches('[role="button"]')) return false;
+    const t = (b.innerText || b.textContent || '').replace(/\s+/g, ' ').trim();
+    const label = (b.getAttribute('aria-label') || '').trim();
+    return FOLLOW_TEXT.test(t) || (!t && FOLLOW_TEXT.test(label)) || (t.length < 2 && FOLLOW_TEXT.test(label));
+  };
   const NO_DOM_FOLLOW = new Set(['x', 'bluesky']);
   function autoFollow(el) {
     if (settings.autoFollow === false) return;
@@ -630,18 +654,31 @@
     const vr = el.getBoundingClientRect();
     for (let p = el.parentElement, i = 0; p && p !== document.documentElement && i < 10; p = p.parentElement, i++) {
       if (p.getBoundingClientRect().height > Math.max(innerHeight * 2.5, vr.height * 4)) break;
-      const btn = [...p.querySelectorAll('button, [role="button"], [data-e2e="follow-button"], [data-e2e="feed-follow"]')].find((b) => {
-        // 다른 페이지로 옮기는 링크형 버튼은 누르지 않는다(로그인 화면 이동 등)
-        if (b.closest('smd-anchor') || b.disabled || b.closest('a[href]')) return false;
-        const t = (b.innerText || b.textContent || '').replace(/\s+/g, ' ').trim();
-        const label = (b.getAttribute('aria-label') || '').trim();
-        return FOLLOW_TEXT.test(t) || (!t && FOLLOW_TEXT.test(label));
-      });
+      // 다른 페이지로 옮기는 링크형 버튼은 누르지 않는다(로그인 화면 이동 등)
+      const btn = [...p.querySelectorAll('button, [role="button"], [data-e2e="follow-button"], [data-e2e="feed-follow"]')].find(isFollowBtn);
       if (btn) {
         btn.click();
         return;
       }
     }
+    // 영상 묶음 안에 없으면 사이트별 단추 위치에서 영상과 가장 가까운 것(이미 팔로우·구독 중이면 글자가 달라 고르지 않음)
+    const sels = SITE_FOLLOW[adapter.id];
+    if (!sels) return;
+    let best = null;
+    let bestD = Infinity;
+    for (const sel of sels) {
+      for (const b of document.querySelectorAll(sel)) {
+        if (!isFollowBtn(b)) continue;
+        const r = b.getBoundingClientRect();
+        if (r.width < 4 || r.height < 4) continue;
+        const d = Math.hypot(Math.max(0, r.left - vr.right, vr.left - r.right), Math.max(0, r.top - vr.bottom, vr.top - r.bottom));
+        if (d < bestD) {
+          bestD = d;
+          best = b;
+        }
+      }
+    }
+    if (best && bestD < innerHeight * 1.5) best.click();
   }
 
   async function start(entry) {

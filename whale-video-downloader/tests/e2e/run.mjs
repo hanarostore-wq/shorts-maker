@@ -473,6 +473,25 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── X 재생 단추를 한 번 누르면 바로 재생(영상 눌러도 정지 안 되게 기능과 충돌 없음) ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ noClickPause: true });
+    await page.goto('https://x.com/xplay', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const b = await page.locator('#pb').boundingBox();
+    await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+    await page.waitForTimeout(700);
+    const st = await page.evaluate(() => ({ started: window.__started || 0, paused: document.getElementById('pv').paused, muted: document.getElementById('pv').muted }));
+    record('[X] 재생 단추 한 번 누르면 바로 재생(두 번 안 눌러도 됨)', st.started === 1 && !st.paused && !st.muted, { note: JSON.stringify(st) });
+  } catch (err) {
+    record('[X] 재생 단추', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
 // ── 모든 사이트: 영상 눌러도 정지 안 되게 ──
 {
   const page = await ctx.newPage();
@@ -596,6 +615,21 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     const g = await page.evaluate(() => ({ followed: window.__followed || 0, unfollowed: !!window.__unfollowed, label: document.getElementById('fb').textContent }));
     record('[자동 팔로우] 일반 사이트: 가까운 팔로우 버튼만 누름(이미 팔로잉은 그대로)', g.followed === 1 && !g.unfollowed && g.label === '팔로잉', { note: JSON.stringify(g) });
 
+    // 유튜브 보기 화면: 플레이어와 떨어진 구독 단추를 누름 / 이미 구독 중이면 안 누름
+    {
+      await page.goto('https://www.youtube.com/watch?v=YTwatch0001', { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      await page.locator('smd-anchor .btn.show').first().click();
+      await page.waitForTimeout(1500);
+      const sub = await page.evaluate(() => ({ n: window.__subscribed || 0, label: document.getElementById('subbtn').textContent }));
+      await page.goto('https://www.youtube.com/watch?v=YTsubbed001', { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      await page.locator('smd-anchor .btn.show').first().click();
+      await page.waitForTimeout(1500);
+      const sub2 = await page.evaluate(() => window.__subscribed || 0);
+      record('[자동 팔로우] 유튜브: 다운로드 누르면 떨어진 구독 단추도 눌러 구독(이미 구독 중이면 안 누름)', sub.n === 1 && sub.label === '구독중' && sub2 === 0, { note: `구독 ${sub.n}회(${sub.label}) · 이미 구독 중 페이지 ${sub2}회` });
+    }
+
     // 첫 클릭에 바로 다운로드(팔로우 버튼이 로그인 창을 띄워도)
     {
       page.once('dialog', (d) => d.dismiss());
@@ -699,10 +733,17 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     // 받은 파일을 모두 지우면 다시 받음
     for (const f of [first, forced]) if (f) fs.unlinkSync(f);
     await page.waitForTimeout(500);
-    before = new Set(listFiles(DL));
-    await btn().click();
-    const again = await waitFile(before, 30000);
-    record('[중복 막기] 받은 파일을 지웠으면 그냥 다시 받음', !!again, { note: again ? path.basename(again) : `저장 안 됨 · 안내: ${(await panelText()).slice(0, 80)}` });
+    // 웨일(크롬)은 파일이 지워졌는지 묻는 순간 확인을 시작하고 결과가 늦게 올 수 있다 → 사용자가 몇 번 다시 누르는 상황으로 확인
+    let again = null;
+    let tries = 0;
+    while (!again && tries < 3) {
+      tries++;
+      before = new Set(listFiles(DL));
+      await btn().click();
+      again = await waitFile(before, 8000);
+      if (!again) await page.waitForTimeout(3000);
+    }
+    record('[중복 막기] 받은 파일을 지웠으면 그냥 다시 받음', !!again, { note: again ? `${path.basename(again)} (${tries}번째 누름)` : `저장 안 됨 · 안내: ${(await panelText()).slice(0, 80)}` });
   } catch (err) {
     record('[중복 막기]', false, { note: err.message.split('\n')[0] });
   } finally {

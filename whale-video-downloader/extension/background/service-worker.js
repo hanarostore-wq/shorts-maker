@@ -97,19 +97,25 @@ async function findDuplicate(key) {
     // 웨일(크롬)은 search 를 불러야 파일이 남아 있는지 확인을 시작하고, 결과는 조금 뒤에 반영된다 → 한 번 묻고 잠깐 기다렸다 다시 묻는다
     const first = (await chrome.downloads.search({ id: rec.downloadId }).catch(() => []))[0] || null;
     if (first && first.exists !== false) {
-      await new Promise((resolve) => {
-        const t = setTimeout(done, 700);
-        function onChanged(d) {
-          if (d.id === rec.downloadId && d.exists) done();
-        }
-        function done() {
-          clearTimeout(t);
-          chrome.downloads.onChanged.removeListener(onChanged);
-          resolve();
-        }
-        chrome.downloads.onChanged.addListener(onChanged);
-      });
-      item = (await chrome.downloads.search({ id: rec.downloadId }).catch(() => []))[0] || null;
+      // 확인 결과(onChanged 의 exists 변경)를 최대 2초 기다리며 중간중간 다시 조회한다(바쁠 때 느림)
+      const t0 = Date.now();
+      item = first;
+      while (Date.now() - t0 < 2000) {
+        await new Promise((resolve) => {
+          const t = setTimeout(done, 400);
+          function onChanged(d) {
+            if (d.id === rec.downloadId && d.exists) done();
+          }
+          function done() {
+            clearTimeout(t);
+            chrome.downloads.onChanged.removeListener(onChanged);
+            resolve();
+          }
+          chrome.downloads.onChanged.addListener(onChanged);
+        });
+        item = (await chrome.downloads.search({ id: rec.downloadId }).catch(() => []))[0] || null;
+        if (!item || item.exists === false) break;
+      }
     } else item = first;
   }
   // 다운로드 기록에 있고 파일이 지워졌으면 → 다시 받아도 됨(기억 지움)

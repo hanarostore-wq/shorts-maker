@@ -329,7 +329,11 @@ const handlers = {
 
   // ── YouTube ──
   'www.youtube.com': (req, res, u) => {
-    if (u.pathname === '/watch') return html(res, ytPage(u.searchParams.get('v'), false));
+    if (u.pathname === '/watch') {
+      // 보기 화면: 구독 단추는 플레이어와 떨어진 곳(제목 아래)에 있다
+      const sub = u.searchParams.get('v') === 'YTsubbed001' ? '구독중' : '구독';
+      return html(res, ytPage(u.searchParams.get('v'), false).replace('</body>', `<div id="below" style="margin-top:40px"><ytd-channel-name>테스트 채널</ytd-channel-name> <ytd-subscribe-button-renderer><button id="subbtn" onclick="window.__subscribed = (window.__subscribed || 0) + 1; this.textContent = '구독중'">${sub}</button></ytd-subscribe-button-renderer></div></body>`));
+    }
     if (u.pathname === '/adsfeed') {
       return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>YouTube</title></head><body>
         <ytd-rich-item-renderer id="vid1"><p>일반 영상</p></ytd-rich-item-renderer>
@@ -533,6 +537,13 @@ const handlers = {
       // 다운로드 누르면 자동 팔로우: @auto_user 의 사진 게시물(팔로우 상태 모름 → 팔로우 요청)
       return html(res, page('홈 / X', `<article data-testid="tweet" style="width:560px"><div style="display:flex;justify-content:space-between"><div data-testid="User-Name"><a href="/auto_user"><span>자동 팔로우 대상</span></a> <a href="/auto_user">@auto_user</a> · <a href="/auto_user/status/1790000000000000077"><time>1시간</time></a></div><button data-testid="caret">⋯</button></div>
         <div data-testid="tweetText">사진 게시물</div><img id="pic" alt="이미지" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=large" style="width:480px;height:320px;object-fit:cover"></article>`, `document.cookie = 'ct0=mockcsrf123; path=/';${XMENU}`));
+    }
+    if (u.pathname === '/xplay') {
+      // X 처럼: 영상은 소리 없이 미리보기로 돌고 있고, 가운데에 role 없는 재생 단추(div)가 떠 있다. 단추를 누르면 X 가 소리와 함께 '진짜 재생'을 시작
+      return html(res, page('X 재생 단추', `<div data-testid="videoPlayer" id="pl" style="position:relative;width:480px;height:270px">
+          <video id="pv" src="https://cdn.example-videos.com/preview.webm" muted loop autoplay playsinline style="width:100%;height:100%;background:#000"></video>
+          <div data-testid="playButton" id="pb" style="position:absolute;left:190px;top:85px;width:100px;height:100px;border-radius:50%;background:#1d9bf0"
+            onclick="const v = document.getElementById('pv'); v.muted = false; v.play(); window.__started = (window.__started || 0) + 1; this.style.display = 'none'"></div></div>`));
     }
     if (u.pathname === '/controls') {
       // X 처럼(엄격하게): 진짜 마우스 움직임만 인정(가짜 이벤트 무시), 2초 동안 안 움직이면 재생바를 흐리게 숨김(opacity·visibility)

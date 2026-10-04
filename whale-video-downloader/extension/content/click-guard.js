@@ -14,7 +14,16 @@
     });
   } catch {}
 
-  const CONTROL = 'button, a[href], input, select, textarea, label, [role="button"], [role="slider"], [role="link"], [role="menuitem"], [role="checkbox"], [contenteditable="true"], smd-anchor, smd-follow, smd-bfollow, smd-toolbar, smd-ytstats';
+  // 조작 요소: 버튼·링크·재생바, 그리고 사이트의 재생/일시정지 단추(X 의 재생 단추는 role 이 없는 div 다)
+  const CONTROL = 'button, a[href], input, select, textarea, label, [role="button"], [role="slider"], [role="link"], [role="menuitem"], [role="checkbox"], [contenteditable="true"], smd-anchor, smd-follow, smd-bfollow, smd-toolbar, smd-ytstats, [data-testid="playButton"], [data-testid*="play" i], [aria-label*="재생"], [aria-label*="일시정지"], [aria-label*="Play" i], [aria-label*="Pause" i], [class*="play-button" i], [class*="playButton" i], [class*="play-btn" i]';
+  // 사이트가 '멈춤' 상태로 보고 재생 단추를 띄워 둔 플레이어(영상 요소는 미리보기로 돌고 있어도)는 건드리지 않는다
+  const sitePaused = (v) => {
+    const pl = v.closest('[data-testid="videoPlayer"]') || v.parentElement?.parentElement || v.parentElement;
+    const b = pl?.querySelector('[data-testid="playButton"], [aria-label="재생"], [aria-label="Play"], [aria-label="Play video" i]');
+    if (!b) return false;
+    const r = b.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(b).visibility !== 'hidden' && getComputedStyle(b).opacity !== '0';
+  };
   // 누른 위치에 있는 재생 중 영상
   function videoAt(x, y) {
     for (const v of document.querySelectorAll('video')) {
@@ -35,7 +44,7 @@
     if (ev.type === 'pointerdown' || !guard || guard.t !== ev.timeStamp) guard = null;
     if (!on || ev.button !== 0) return;
     const v = videoAt(ev.clientX, ev.clientY);
-    if (!v || isControl(ev) || onNativeBar(v, ev.clientY)) return;
+    if (!v || isControl(ev) || onNativeBar(v, ev.clientY) || sitePaused(v)) return;
     guard = { v, until: Date.now() + 700, t: ev.timeStamp };
   };
   addEventListener('pointerdown', onPress, true);
