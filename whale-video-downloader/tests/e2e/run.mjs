@@ -776,6 +776,52 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── 보고 있는 영상 정지 막기 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ playLock: true, captionOnMedia: false, preventDuplicates: false });
+    await page.goto('https://www.example-videos.com/locktest', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const st = (id) => page.evaluate((i) => !document.getElementById(i).paused, id);
+    const s0 = await st('l1');
+    // 1) 확장 다운로드 버튼을 누름 → 사이트가 멈추려 해도 계속 재생
+    await page.locator('smd-anchor .btn.show').first().click();
+    await page.waitForTimeout(800);
+    const s1 = await st('l1');
+    // 2) 창이 포커스를 잃음 → 사이트가 멈추려 해도 계속 재생
+    await page.evaluate(() => dispatchEvent(new Event('blur')));
+    await page.waitForTimeout(300);
+    const s2 = await st('l1');
+    const tried = await page.evaluate(() => ({ site: window.__sitePause || 0, blur: window.__blurPause || 0 }));
+    // 3) 사용자가 직접 정지 → 멈춤
+    await page.locator('#pause1').click();
+    await page.waitForTimeout(400);
+    const s3 = await st('l1');
+    // 4) 다시 재생 후 다른 영상을 소리와 함께 재생 → 이전 영상 멈춤
+    await page.locator('#play1').click();
+    await page.waitForTimeout(500);
+    await page.locator('#play2').click();
+    await page.waitForTimeout(700);
+    const s4 = { l1: await st('l1'), l2: await st('l2') };
+    record('[정지 막기] 확장 버튼·창 전환 때 사이트가 멈춰도 계속 재생, 직접 정지·다른 영상 재생 때만 멈춤', s0 && s1 && s2 && tried.site > 0 && tried.blur > 0 && !s3 && !s4.l1 && s4.l2, { note: JSON.stringify({ 처음: s0, 다운로드후: s1, 창전환후: s2, 사이트시도: tried, 직접정지후: s3, 다른영상: s4 }) });
+    // 설정 끄면 사이트가 멈출 수 있음
+    await setSettings({ playLock: false });
+    await page.waitForTimeout(400);
+    await page.evaluate(() => document.getElementById('l1').play());
+    await page.waitForTimeout(400);
+    await page.evaluate(() => dispatchEvent(new Event('blur')));
+    await page.waitForTimeout(300);
+    const offL1 = await st('l1');
+    record('[정지 막기] 설정 끄면 원래대로(사이트가 멈출 수 있음)', !offL1, { note: `창 전환 후 l1 재생 중=${offL1}` });
+  } catch (err) {
+    record('[정지 막기]', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ playLock: true });
+    await page.close();
+  }
+}
+
 // ── 설정 기억: 확장 ID 고정 + 동기화 저장소 백업 ──
 {
   try {

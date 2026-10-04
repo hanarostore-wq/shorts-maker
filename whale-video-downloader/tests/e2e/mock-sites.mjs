@@ -240,6 +240,17 @@ const handlers = {
     if (u.pathname === '/dupvideo') {
       return html(res, page('중복 테스트 영상', `<div class="card"><video src="https://cdn.example-videos.com/dup_only.mp4" muted style="width:480px;height:270px;background:#000"></video></div>`));
     }
+    if (u.pathname === '/locktest') {
+      // 사이트가 무엇이든 눌리면(확장 버튼 포함, capture 단계) 0.2초 뒤 영상을 멈추고, 창이 포커스를 잃어도 멈춘다
+      return html(res, page('정지 막기 테스트', `
+        <div style="position:relative;width:480px;height:270px"><video id="l1" src="https://cdn.example-videos.com/preview.webm" loop playsinline autoplay style="width:100%;height:100%;background:#000"></video>
+          <button id="pause1" style="position:absolute;left:8px;bottom:8px" onclick="document.getElementById('l1').pause()">정지</button>
+          <button id="play1" style="position:absolute;left:70px;bottom:8px" onclick="document.getElementById('l1').play()">재생</button></div>
+        <div style="position:relative;width:480px;height:270px"><video id="l2" src="https://cdn.example-videos.com/preview.webm" loop playsinline style="width:100%;height:100%;background:#000"></video>
+          <button id="play2" style="position:absolute;left:8px;bottom:8px" onclick="document.getElementById('l2').play()">재생</button></div>`,
+        `document.addEventListener('pointerdown', () => setTimeout(() => { window.__sitePause = (window.__sitePause || 0) + 1; document.getElementById('l1').pause(); }, 200), true);
+         addEventListener('blur', () => { window.__blurPause = (window.__blurPause || 0) + 1; document.getElementById('l1').pause(); });`));
+    }
     if (u.pathname === '/clicktoggle') {
       // 흔한 사이트 플레이어: 영상을 덮은 투명 막을 누르면 재생/정지(클릭), 두 번째는 누르는 순간(pointerdown) 정지, 막 안에 '좋아요' 버튼
       return html(res, page('클릭 정지 테스트', `

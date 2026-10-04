@@ -15,11 +15,19 @@
     !(settings.disabledSites || []).includes(adapter.id) &&
     (adapter.id !== 'generic' || settings.genericButtons !== false);
 
+  // 보고 있는 영상 정지 막기(play-lock.js, 페이지 쪽)에 설정 전달
+  const syncPlayLock = () => {
+    document.documentElement.dataset.smdPlaylock = settings.playLock === false ? '0' : '1';
+  };
   chrome.storage.local.get('settings').then((r) => {
     settings = { ...DEFAULTS, ...(r.settings || {}) };
+    syncPlayLock();
   }, () => {});
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.settings) settings = { ...DEFAULTS, ...(changes.settings.newValue || {}) };
+    if (area === 'local' && changes.settings) {
+      settings = { ...DEFAULTS, ...(changes.settings.newValue || {}) };
+      syncPlayLock();
+    }
   });
 
   // ───────────── MAIN world 브리지 ─────────────

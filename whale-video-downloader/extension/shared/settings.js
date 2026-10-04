@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS = {
   translateCaption: true, // 피드 글이 한국어가 아니면 한국어 번역을 캡처 아래에 붙임 // 요약 넣을 때 원본도 함께 저장
   captionCover: false, // [재인코딩 없음] 영상 표지(썸네일)에 피드 스크린샷 + 설명 정보에 피드 내용 + 같은 이름 PNG
   captionIntro: false, // 영상 맨 앞에 피드 스크린샷 3초(재인코딩)
+  playLock: true, // 보고 있는 영상은 사용자가 직접 멈추거나 다른 영상을 틀기 전까지 멈추지 않게
   preventDuplicates: true, // 같은 파일 중복 다운로드 막기(파일이 지워졌으면 다시 받음)
   autoFollow: true, // 다운로드 누르면 그 게시물 작성자 자동 팔로우(팔로우 기능이 있는 사이트)
   aiLabel: true, // AI 영상·사진 표시 + 파일 이름 [AI]
