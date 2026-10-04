@@ -232,7 +232,7 @@ const scenarios = [
 
 console.log(`확장프로그램 ID: ${extId}\n`);
 // 일반 시나리오는 원본 그대로 저장되는지 보므로 요약 글자 넣기는 끄고, 아래 전용 테스트에서 켠다.
-await setSettings({ captionOnMedia: false });
+await setSettings({ captionOnMedia: false, preventDuplicates: false }); // 같은 페이지를 여러 번 받는 시나리오가 많아 중복 막기는 전용 테스트에서만 켠다
 for (const s of scenarios) await scenario(s);
 
 // ── 저장 위치: 하위 폴더 설정 반영 ──
@@ -576,7 +576,7 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.waitForTimeout(1200);
     await clickSave(page, '#pic');
     const xr = log.slice(l).find((e) => e.follow === 'create');
-    record('[자동 팔로우] X: 사진 다운로드 누르면 작성자 팔로우', xr?.screen_name === 'auto_user' && xr.ok, { note: JSON.stringify(xr || '요청 없음') });
+    record('[자동 팔로우] X: 사진 다운로드 누르면 X ⋯ 메뉴로 작성자 팔로우(X 보안 값 포함 요청)', xr?.screen_name === 'auto_user' && xr.ok && xr.tx === 'PAGE-TX', { note: JSON.stringify(xr || '요청 없음') });
 
     l = log.length;
     await page.goto('https://bsky.app/afollow', { waitUntil: 'domcontentloaded' });
@@ -669,6 +669,48 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── 같은 파일 중복 다운로드 막기 ──
+{
+  const page = await ctx.newPage();
+  const panelText = () => page.evaluate(() => [...document.querySelectorAll('smd-anchor')].map((a) => a.shadowRoot.querySelector('.panel')?.textContent || '').join(' '));
+  try {
+    await setSettings({ captionOnMedia: false, preventDuplicates: true });
+    await clearDownloaded();
+    await page.goto('https://www.example-videos.com/dupvideo', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1200);
+    const btn = () => page.locator('smd-anchor .btn.show').first();
+    let before = new Set(listFiles(DL));
+    await btn().click();
+    const first = await waitFile(before, 30000);
+    await page.waitForTimeout(3500);
+    // 두 번째: 막혀야 함
+    before = new Set(listFiles(DL));
+    await btn().click();
+    await page.waitForTimeout(3000);
+    const second = listFiles(DL).filter((f) => !before.has(f) && !/\.crdownload$/.test(f));
+    const p2 = await panelText();
+    record('[중복 막기] 같은 영상 다시 누르면 받지 않고 "이미 받은 파일" + 위치 안내', !!first && second.length === 0 && /이미 받은 파일/.test(p2) && /다시 받기/.test(p2), { note: `처음 ${first ? path.basename(first) : '없음'} · 두 번째 새 파일 ${second.length}개 · 안내: ${p2.slice(0, 80)}` });
+    // 다시 받기
+    before = new Set(listFiles(DL));
+    await page.locator('smd-anchor .panel button[data-a="force"]').first().click();
+    const forced = await waitFile(before, 30000);
+    record('[중복 막기] "다시 받기" 누르면 또 받음', !!forced, { note: forced ? path.basename(forced) : '저장 안 됨' });
+    await page.waitForTimeout(3500);
+    // 받은 파일을 모두 지우면 다시 받음
+    for (const f of [first, forced]) if (f) fs.unlinkSync(f);
+    await page.waitForTimeout(500);
+    before = new Set(listFiles(DL));
+    await btn().click();
+    const again = await waitFile(before, 30000);
+    record('[중복 막기] 받은 파일을 지웠으면 그냥 다시 받음', !!again, { note: again ? path.basename(again) : `저장 안 됨 · 안내: ${(await panelText()).slice(0, 80)}` });
+  } catch (err) {
+    record('[중복 막기]', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ preventDuplicates: false });
+    await page.close();
+  }
+}
+
 // ── 설정 기억: 확장 ID 고정 + 동기화 저장소 백업 ──
 {
   try {
@@ -751,7 +793,7 @@ if (!only || only === 'x' || '팔로우'.includes(only)) {
     await page.waitForTimeout(800);
     const s1 = await state();
     const req1 = log.slice(logStart).find((l) => l.follow === 'create');
-    record('[X] 팔로우 누르기 → 팔로잉으로 바뀜', s1.new_user === '팔로잉' && req1?.ok && req1.user_id === '2002' && req1.auth === 'Bearer PAGE-AUTH-TOKEN', { note: `${s1.new_user} · 요청 ${JSON.stringify(req1)}` });
+    record('[X] 팔로우 누르기 → X ⋯ 메뉴로 실제 팔로우(보안 값 포함) → 팔로잉', s1.new_user === '팔로잉' && req1?.ok && req1.user_id === '2002' && req1.tx === 'PAGE-TX', { note: `${s1.new_user} · 요청 ${JSON.stringify(req1)}` });
 
     const logStart2 = log.length;
     await page.locator('#t-followed_user smd-follow button').click();
@@ -759,7 +801,7 @@ if (!only || only === 'x' || '팔로우'.includes(only)) {
     await page.waitForTimeout(800);
     const s2 = await state();
     const req2 = log.slice(logStart2).find((l) => l.follow === 'destroy');
-    record('[X] 팔로잉 누르기(확인) → 언팔로우', s2.followed_user === '팔로우' && req2?.ok && req2.user_id === '1001', { note: `${s2.followed_user} · 요청 ${JSON.stringify(req2)}` });
+    record('[X] 팔로잉 누르기(확인) → X 메뉴·확인 창으로 실제 언팔로우', s2.followed_user === '팔로우' && req2?.ok && req2.user_id === '1001' && req2.tx === 'PAGE-TX', { note: `${s2.followed_user} · 요청 ${JSON.stringify(req2)}` });
 
     // 쿠키가 없으면 단계·원인·해결 안내
     await page.evaluate(() => (document.cookie = 'ct0=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'));

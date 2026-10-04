@@ -64,6 +64,38 @@ const html = (res, body) => {
 const esc = (s) => String(s).replace(/</g, '\\u003c');
 const PREVIEW = 'https://cdn.example-videos.com/preview.webm';
 const vtag = (attrs = '', w = 360, h = 640) => `<video src="${PREVIEW}" muted playsinline loop autoplay ${attrs} style="width:${w}px;height:${h}px;object-fit:cover;background:#000;display:block"></video>`;
+// 실제 X 처럼 게시물 ⋯ 메뉴: '@아이디 님 팔로우하기 / 언팔로우하기'. 누르면 X 페이지 코드가 보안 값(x-client-transaction-id)을 붙여 직접 요청한다.
+// react_user 는 메뉴에 팔로우 항목이 없다(확장의 직접 요청 경로 시험용).
+const XMENU = `
+  window.__fol = Object.assign({ followed_user: true }, window.__fol || {});
+  const XIDS = { followed_user: '1001', new_user: '2002', react_user: '3003', auto_user: '4004' };
+  const xreq = (kind, sn) => fetch('/i/api/1.1/friendships/' + kind + '.json', { method: 'POST', credentials: 'include', headers: { authorization: 'Bearer PAGE-AUTH-TOKEN', 'x-csrf-token': 'mockcsrf123', 'x-client-transaction-id': 'PAGE-TX', 'content-type': 'application/x-www-form-urlencoded' }, body: 'user_id=' + (XIDS[sn] || '') + '&screen_name=' + sn });
+  const closeX = () => document.querySelectorAll('.xmenu, .xsheet').forEach((e) => e.remove());
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeX(); });
+  document.addEventListener('click', (e) => {
+    const c = e.target.closest && e.target.closest('[data-testid="caret"]');
+    if (!c) return;
+    closeX();
+    const art = c.closest('article');
+    const sn = (art.querySelector('[data-testid="User-Name"] a[href^="/"]')?.getAttribute('href') || '/').slice(1);
+    const m = document.createElement('div');
+    m.className = 'xmenu'; m.setAttribute('role', 'menu');
+    m.style.cssText = 'position:fixed;right:20px;top:60px;background:#222;padding:8px;z-index:50';
+    const add = (t, fn) => { const i = document.createElement('div'); i.setAttribute('role', 'menuitem'); i.textContent = t; i.onclick = () => { closeX(); fn(); }; m.appendChild(i); };
+    if (sn !== 'react_user') {
+      if (window.__fol[sn]) add('@' + sn + ' 님 언팔로우하기', () => {
+        const sh = document.createElement('div'); sh.className = 'xsheet';
+        sh.innerHTML = '<button data-testid="confirmationSheetConfirm">언팔로우</button>';
+        sh.querySelector('button').onclick = () => { closeX(); window.__fol[sn] = false; xreq('destroy', sn); };
+        document.body.appendChild(sh);
+      });
+      else add('@' + sn + ' 님 팔로우하기', () => { window.__fol[sn] = true; xreq('create', sn); });
+    }
+    add('게시물 신고하기', () => {});
+    document.body.appendChild(m);
+  });
+`;
+
 const page = (title, body, script = '', head = '') => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${title}</title><meta property="og:title" content="${title}">${head}
 <style>body{margin:0;background:#0f0f14;color:#eee;font-family:system-ui,sans-serif}.wrap{padding:24px;display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}article,.card{background:#1b1b24;border-radius:12px;padding:10px}</style></head>
 <body><div class="wrap">${body}</div>${script ? `<script>${script}</script>` : ''}</body></html>`;
@@ -156,6 +188,8 @@ const handlers = {
       return;
     }
     if (u.pathname.startsWith('/hls_ts/')) return serveFile(req, res, u.pathname.slice(1));
+    // 중복 막기 테스트 전용 주소(다른 시나리오와 겹치지 않게)
+    if (u.pathname === '/dup_only.mp4') return serveFile(req, res, 'progressive_360p.mp4');
     if (u.pathname.startsWith('/img/')) return serveFile(req, res, `images/${path.basename(u.pathname)}`);
     if (u.pathname === '/live/index.m3u8') {
       // 끝나지 않은 라이브 재생목록(#EXT-X-ENDLIST 없음)
@@ -202,6 +236,9 @@ const handlers = {
            inner.replaceWith(clone);
            window.__rerendered = (window.__rerendered || 0) + 1;
          }, true);`));
+    }
+    if (u.pathname === '/dupvideo') {
+      return html(res, page('중복 테스트 영상', `<div class="card"><video src="https://cdn.example-videos.com/dup_only.mp4" muted style="width:480px;height:270px;background:#000"></video></div>`));
     }
     if (u.pathname === '/clicktoggle') {
       // 흔한 사이트 플레이어: 영상을 덮은 투명 막을 누르면 재생/정지(클릭), 두 번째는 누르는 순간(pointerdown) 정지, 막 안에 '좋아요' 버튼
@@ -495,7 +532,7 @@ const handlers = {
     if (u.pathname === '/afollow') {
       // 다운로드 누르면 자동 팔로우: @auto_user 의 사진 게시물(팔로우 상태 모름 → 팔로우 요청)
       return html(res, page('홈 / X', `<article data-testid="tweet" style="width:560px"><div style="display:flex;justify-content:space-between"><div data-testid="User-Name"><a href="/auto_user"><span>자동 팔로우 대상</span></a> <a href="/auto_user">@auto_user</a> · <a href="/auto_user/status/1790000000000000077"><time>1시간</time></a></div><button data-testid="caret">⋯</button></div>
-        <div data-testid="tweetText">사진 게시물</div><img id="pic" alt="이미지" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=large" style="width:480px;height:320px;object-fit:cover"></article>`, `document.cookie = 'ct0=mockcsrf123; path=/';`));
+        <div data-testid="tweetText">사진 게시물</div><img id="pic" alt="이미지" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=large" style="width:480px;height:320px;object-fit:cover"></article>`, `document.cookie = 'ct0=mockcsrf123; path=/';${XMENU}`));
     }
     if (u.pathname === '/controls') {
       // X 처럼(엄격하게): 진짜 마우스 움직임만 인정(가짜 이벤트 무시), 2초 동안 안 움직이면 재생바를 흐리게 숨김(opacity·visibility)
@@ -545,7 +582,7 @@ const handlers = {
           <div style="display:flex;flex-direction:column;gap:12px;width:560px">${art('followed_user', '팔로우한 사람', '1801', '<img id="fpic" alt="이미지" src="https://pbs.twimg.com/media/MockPic?format=jpg&name=large" style="width:480px;height:300px;object-fit:cover">')}${art('new_user', '처음 보는 사람', '1802')}${art('react_user', '리액트 사람 이름이 아주 길어서 한 줄에 다 안 들어가는 계정입니다', '1803')}${art('me_account', '나', '1804')}</div>
           <div data-testid="videoPlayer" style="position:relative;width:360px;height:200px"><video id="xv" src="https://cdn.example-videos.com/preview.webm" muted loop playsinline style="width:100%;height:100%"></video>
             <button data-testid="unmuteButton" aria-label="Unmute" onclick="document.getElementById('xv').muted=false; window.__unmuteClicked=true" style="position:absolute;right:4px;bottom:4px">🔇</button></div>`,
-        `document.cookie = 'ct0=mockcsrf123; path=/';
+        `document.cookie = 'ct0=mockcsrf123; path=/';${XMENU}
          fetch('/i/api/graphql/q1/HomeTimeline?variables=%7B%7D', { headers: { authorization: 'Bearer PAGE-AUTH-TOKEN' } }).then((r) => r.json());
          const art = document.getElementById('t-react_user');
          art['__reactFiber$mockx2'] = { memoizedProps: { tweet: { core: { user_results: { result: { __typename: 'User', rest_id: '3003', core: { screen_name: 'react_user' }, legacy: { followers_count: 5 }, relationship_perspectives: { following: true } } } } } }, return: null };
@@ -564,7 +601,7 @@ const handlers = {
       req.on('end', () => {
         const p = new URLSearchParams(body);
         const ok = req.method === 'POST' && req.headers['x-csrf-token'] === 'mockcsrf123' && /ct0=mockcsrf123/.test(req.headers.cookie || '') && /^Bearer /.test(req.headers.authorization || '');
-        log.push({ host: 'x.com', follow: u.pathname.includes('create') ? 'create' : 'destroy', user_id: p.get('user_id'), screen_name: p.get('screen_name'), auth: req.headers.authorization, ok });
+        log.push({ host: 'x.com', follow: u.pathname.includes('create') ? 'create' : 'destroy', user_id: p.get('user_id'), screen_name: p.get('screen_name'), auth: req.headers.authorization, tx: req.headers['x-client-transaction-id'] || null, ok });
         if (!ok) return json(req, res, { errors: [{ message: 'bad auth' }] }, 403);
         json(req, res, { id_str: p.get('user_id') || '0', screen_name: p.get('screen_name') || '', following: u.pathname.includes('create') });
       });

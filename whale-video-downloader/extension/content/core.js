@@ -330,7 +330,14 @@
     closePanel(entry);
     const p = document.createElement('div');
     p.className = `panel ${kind}`;
-    if (kind === 'e') {
+    if (kind === 'd') {
+      // 이미 받은 파일(중복 다운로드 막기)
+      p.innerHTML = `<h4><i>${ICON_OK}</i>${data.running ? '지금 받는 중' : '이미 받은 파일'}</h4>
+        <div class="row"><b>안내</b><span>${escapeHtml(data.reason)}</span></div>
+        ${data.where ? `<div class="row"><b>위치</b><span>${escapeHtml(data.where)}</span></div>` : ''}
+        <div class="acts"><button data-a="close">닫기</button>${data.downloadId != null ? '<button data-a="showdup">폴더 열기</button>' : ''}${data.running ? '' : '<button class="pri" data-a="force">다시 받기</button>'}</div>`;
+      entry.panelTimer = setTimeout(() => closePanel(entry), 12000);
+    } else if (kind === 'e') {
       p.innerHTML = `<h4><i>${ICON_ERR}</i>다운로드 실패</h4>
         <div class="row"><b>단계</b><span>${escapeHtml(data.step)}</span></div>
         <div class="row"><b>원인</b><span>${escapeHtml(data.reason)}</span></div>
@@ -356,6 +363,12 @@
         start(entry);
       } else if (a === 'show') {
         chrome.runtime.sendMessage({ type: 'smd:show-file', jobId: entry.jobId }).catch(() => {});
+      } else if (a === 'showdup') {
+        chrome.runtime.sendMessage({ type: 'smd:show-file', downloadId: data.downloadId }).catch(() => {});
+      } else if (a === 'force') {
+        closePanel(entry);
+        entry.force = true;
+        start(entry);
       }
     });
     for (const t of ['mousedown', 'pointerdown', 'mouseup', 'pointerup']) p.addEventListener(t, (ev) => ev.stopPropagation());
@@ -366,6 +379,14 @@
   }
 
   function showError(entry, err) {
+    // 중복 다운로드로 막힌 경우: 오류가 아니라 안내(받은 적 있음 표시)
+    if (err?.duplicate) {
+      entry.lastError = null;
+      setLook(entry, 'idle');
+      if (!err.running) markDownloaded(entry);
+      showPanel(entry, 'd', err);
+      return;
+    }
     entry.lastError = {
       step: err?.step || '알 수 없는 단계',
       reason: err?.reason || err?.message || '원인을 확인하지 못했습니다.',
@@ -638,6 +659,8 @@
         action: err.action || '페이지를 새로고침한 뒤 다시 시도하세요.',
       });
     }
+    req.force = !!entry.force; // '다시 받기'를 누른 경우 중복이어도 받는다
+    entry.force = false;
     req.site = adapter.id;
     req.siteName = adapter.name;
     req.pageUrl = location.href;

@@ -3,7 +3,7 @@
   "manifest_version": 3,
   "name": "웨일 영상 다운로더",
   "short_name": "영상 다운로더",
-  "version": "1.14.0",
+  "version": "1.16.0",
   "description": "유튜브·쇼츠·틱톡·인스타·X·블루스카이·빌리빌리 등 17개 사이트 영상을 원본화질로 바로 저장합니다. 별도 프로그램 없이 확장프로그램만으로 동작합니다.",
   "minimum_chrome_version": "116",
   "icons": {

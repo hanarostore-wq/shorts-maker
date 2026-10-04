@@ -64,6 +64,61 @@ function finish(job, state, extra = {}) {
   if (state === 'done') job.percent = 100;
   notify(job);
   addHistory(job).catch(() => {});
+  if (state === 'done' && job.dupKey) rememberDownload(job).catch(() => {});
+}
+
+// ───────────── 중복 다운로드 막기 ─────────────
+// 받은 파일을 '사이트+게시물·영상 ID'(사진은 원본 주소)로 기억해 두고, 같은 것을 다시 받으려 하면
+// 웨일 다운로드 기록으로 파일이 아직 있는지 확인한다. 있으면 받지 않고 안내(다시 받기 가능), 지워졌으면 그냥 받는다.
+const REG_KEY = 'dlRegistry';
+const REG_MAX = 5000;
+function dupKeyOf(req, desc) {
+  if (desc?.type === 'image' || req.kind === 'image') return `img:${String(desc?.url || req.info?.image?.url || '').replace(/#.*$/, '')}`;
+  if (req.id) return `${req.site}:${req.id}`;
+  const u = String(desc?.url || req.pageUrl || '').replace(/[?#].*$/, '');
+  return u ? `${req.site}:${u}` : '';
+}
+async function rememberDownload(job) {
+  const r = await chrome.storage.local.get(REG_KEY);
+  const reg = r[REG_KEY] || {};
+  reg[job.dupKey] = { downloadId: job.downloadId ?? null, where: job.where || '', filename: job.filename || '', title: job.title || '', t: Date.now() };
+  const keys = Object.keys(reg);
+  if (keys.length > REG_MAX) for (const k of keys.sort((a, b) => reg[a].t - reg[b].t).slice(0, keys.length - REG_MAX)) delete reg[k];
+  await chrome.storage.local.set({ [REG_KEY]: reg });
+}
+// 이미 받은 파일이면 그 정보를, 아니면 null
+async function findDuplicate(key) {
+  if (!key) return null;
+  const reg = (await chrome.storage.local.get(REG_KEY))[REG_KEY] || {};
+  const rec = reg[key];
+  if (!rec) return null;
+  let item = null;
+  if (rec.downloadId != null) {
+    // 웨일(크롬)은 search 를 불러야 파일이 남아 있는지 확인을 시작하고, 결과는 조금 뒤에 반영된다 → 한 번 묻고 잠깐 기다렸다 다시 묻는다
+    const first = (await chrome.downloads.search({ id: rec.downloadId }).catch(() => []))[0] || null;
+    if (first && first.exists !== false) {
+      await new Promise((resolve) => {
+        const t = setTimeout(done, 700);
+        function onChanged(d) {
+          if (d.id === rec.downloadId && d.exists) done();
+        }
+        function done() {
+          clearTimeout(t);
+          chrome.downloads.onChanged.removeListener(onChanged);
+          resolve();
+        }
+        chrome.downloads.onChanged.addListener(onChanged);
+      });
+      item = (await chrome.downloads.search({ id: rec.downloadId }).catch(() => []))[0] || null;
+    } else item = first;
+  }
+  // 다운로드 기록에 있고 파일이 지워졌으면 → 다시 받아도 됨(기억 지움)
+  if (item && (item.exists === false || item.state === 'interrupted')) {
+    delete reg[key];
+    await chrome.storage.local.set({ [REG_KEY]: reg });
+    return null;
+  }
+  return { ...rec, where: item?.filename || rec.where, verified: !!item };
 }
 
 function toErr(err, step) {
@@ -463,6 +518,28 @@ async function runJob(job) {
   }
   if (job.canceled) return;
   if (!job.title && desc.title) job.title = desc.title;
+  // 같은 파일 중복 다운로드 막기
+  job.dupKey = dupKeyOf(req, desc);
+  if (settings.preventDuplicates !== false && !req.force && job.dupKey) {
+    const running = [...jobs.values()].find((j) => j !== job && j.state === 'running' && j.dupKey === job.dupKey);
+    if (running) {
+      return finish(job, 'error', { error: { step: '중복 확인', reason: '같은 파일을 지금 받고 있습니다.', action: '받기가 끝날 때까지 기다리세요.', duplicate: true, running: true } });
+    }
+    const dup = await findDuplicate(job.dupKey).catch(() => null);
+    if (dup) {
+      const name = String(dup.where || dup.filename || '').split(/[\\/]/).pop();
+      return finish(job, 'error', {
+        error: {
+          step: '중복 확인',
+          reason: `이미 받은 파일입니다${name ? `: ${name}` : ''}${dup.verified ? '' : ' (웨일 다운로드 기록이 지워져 파일이 남아 있는지 확인하지 못했습니다)'}.`,
+          action: '같은 파일을 또 받으려면 "다시 받기"를 누르세요.',
+          duplicate: true,
+          where: dup.where || '',
+          downloadId: dup.verified ? dup.downloadId : null,
+        },
+      });
+    }
+  }
   job.duration = Number(req.duration) || Number(desc.duration) || 0;
   applyCredentials(desc, req);
   // 화면에서 본문을 못 찾았으면 사이트 데이터의 본문(desc.title)을 쓴다. 탭 제목은 쓰지 않는다.

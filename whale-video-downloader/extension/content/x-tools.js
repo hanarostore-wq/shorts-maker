@@ -139,12 +139,67 @@
     setTimeout(() => s.remove(), 9000);
   }
 
+  // X 의 게시물 ⋯ 메뉴에 있는 '팔로우 / 언팔로우' 항목을 대신 누른다.
+  // X 는 팔로우 요청에 페이지 코드만 만들 수 있는 보안 값(x-client-transaction-id)을 요구해,
+  // 확장이 직접 보낸 요청은 '성공' 응답을 받아도 실제로는 팔로우되지 않을 수 있다 → X 화면 기능을 그대로 쓴다.
+  const waitFor = (fn, ms = 1500) =>
+    new Promise((resolve) => {
+      const t0 = Date.now();
+      const tick = () => {
+        const v = fn();
+        if (v || Date.now() - t0 > ms) return resolve(v || null);
+        setTimeout(tick, 50);
+      };
+      tick();
+    });
+  const closeMenu = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+  async function followViaMenu(article, sn, follow) {
+    const caret = article?.isConnected && article.querySelector('[data-testid="caret"]');
+    if (!caret) return 'nomenu';
+    caret.click();
+    const menu = await waitFor(() => document.querySelector('[role="menu"]'));
+    if (!menu) return 'nomenu';
+    const items = [...menu.querySelectorAll('[role="menuitem"]')];
+    const has = (el) => (el.textContent || '').toLowerCase().includes(`@${sn.toLowerCase()}`);
+    const unf = items.find((el) => has(el) && /언팔로우|unfollow/i.test(el.textContent));
+    const fol = items.find((el) => has(el) && /팔로우|follow/i.test(el.textContent) && !/언팔로우|unfollow/i.test(el.textContent));
+    if (follow ? unf : fol) {
+      // 이미 원하는 상태
+      closeMenu();
+      return 'already';
+    }
+    const target = follow ? fol : unf;
+    if (!target) {
+      closeMenu();
+      return 'nomenu';
+    }
+    target.click();
+    if (!follow) {
+      const ok = await waitFor(() => document.querySelector('[data-testid="confirmationSheetConfirm"]'), 1500);
+      if (ok) ok.click();
+    }
+    return 'done';
+  }
+
   async function toggle(entry, onlyFollow = false) {
     const key = entry.sn.toLowerCase();
     let u = SITES.xUsers.get(key) || { screenName: entry.sn };
     if (onlyFollow && u.following === true) return; // 자동 팔로우: 이미 팔로우 중이면 그대로
     const unfollow = u.following === true;
-    if (unfollow && !window.confirm(`@${entry.sn} 님 팔로우를 취소할까요?`)) return;
+    if (unfollow && !onlyFollow && !window.confirm(`@${entry.sn} 님 팔로우를 취소할까요?`)) return;
+    // 1) X 화면의 ⋯ 메뉴로(실제로 팔로우됨)
+    entry.btn.classList.add('busy');
+    let via = 'nomenu';
+    try {
+      via = await followViaMenu(entry.article, entry.sn, !unfollow);
+    } catch {}
+    entry.btn.classList.remove('busy');
+    if (via === 'done' || via === 'already') {
+      SITES.xUsers.set(key, { ...(SITES.xUsers.get(key) || {}), screenName: entry.sn, following: !unfollow, t: Date.now() });
+      renderAll(entry.sn);
+      return;
+    }
+    // 2) 메뉴가 없으면(사진·영상 보기 등) 직접 요청
     const ct0 = cookie('ct0');
     if (!ct0) return showErr(entry, '팔로우 실패(로그인 확인): X 로그인 쿠키가 없습니다. X에 로그인한 뒤 새로고침하세요.');
     if (!pageAuth) pageAuth = (await ask({ kind: 'reactuser', token: '', screenName: '' }, 800)).auth || '';
@@ -171,6 +226,13 @@
         return showErr(entry, `${unfollow ? '언팔로우' : '팔로우'} 실패(HTTP ${res.status}): ${why}`);
       }
       const j = await res.json().catch(() => ({}));
+      // 응답이 200 이어도 본문에 오류가 들어 있으면 실패(실제로 팔로우되지 않음)
+      if (Array.isArray(j.errors) && j.errors.length) {
+        return showErr(entry, `${unfollow ? '언팔로우' : '팔로우'} 실패(X 응답): ${j.errors.map((e) => e.message || e.code).join(', ')} → X 화면의 ⋯ 메뉴에서 직접 팔로우하거나 새로고침 후 다시 누르세요.`);
+      }
+      if (!j.id_str && !j.screen_name) {
+        return showErr(entry, `${unfollow ? '언팔로우' : '팔로우'} 확인 실패: X 가 결과를 돌려주지 않았습니다 → 프로필에서 실제로 팔로우됐는지 확인하세요.`);
+      }
       SITES.xUsers.set(key, { id: String(j.id_str || u.id || ''), screenName: entry.sn, following: !unfollow, t: Date.now() });
       renderAll(entry.sn);
     } catch (err) {
@@ -212,7 +274,7 @@
       const host = document.createElement('smd-follow');
       const sh = host.attachShadow({ mode: 'open' });
       sh.innerHTML = `<style>${CSS}</style><button type="button"></button>`;
-      const entry = { host, btn: sh.querySelector('button'), sn };
+      const entry = { host, btn: sh.querySelector('button'), sn, article };
       for (const t of ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup']) {
         entry.btn.addEventListener(t, (ev) => {
           ev.stopPropagation();
@@ -255,7 +317,7 @@
     }
     let sn = handleOf(article) || /^\/([A-Za-z0-9_]{1,15})\/status\//.exec(location.pathname)?.[1] || '';
     if (!sn || sn.toLowerCase() === myHandle()) return;
-    const entry = (article && buttons.get(article)) || { sn, btn: document.createElement('button') };
+    const entry = (article && buttons.get(article)) || { sn, btn: document.createElement('button'), article };
     (async () => {
       // 팔로우 상태를 모르면 먼저 화면 데이터로 확인하고, 이미 팔로우 중이면 아무것도 하지 않는다
       const known = SITES.xUsers.get(sn.toLowerCase());
