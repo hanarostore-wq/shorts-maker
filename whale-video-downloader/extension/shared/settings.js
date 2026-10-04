@@ -14,13 +14,10 @@ export const DEFAULT_SETTINGS = {
   xPhotoTapClose: true, // X 사진 확대 보기에서 사진 누르면 닫기
   noClickPause: true, // 모든 사이트: 영상 공간을 눌러도 재생이 멈추지 않게
   ytShortsStats: true, // 유튜브 쇼츠 오른쪽 위에 조회수·구독자 수
-  adBlock: true, // 지원 사이트 광고 차단(피드 광고 숨김·유튜브 광고 건너뛰기·광고 서버 차단)
   xKeepControls: true, // X 재생바 항상 표시
   xThickBar: true, // X 진행 막대 두껍게
   xHighQuality: true, // X 재생 화질 항상 최고
   xFollowButtons: true, // X 피드 작성자 옆 팔로우/팔로잉 버튼
-  hoverPlay: true, // 모든 사이트: 마우스를 올린 영상을 소리와 함께 재생, 다른 영상에 올리면 이전 영상 멈춤
-  bskyAutoSound: true, // 블루스카이 영상 재생 시 소리 자동 켜기
   bskyFollowButtons: true, // 블루스카이 피드 게시물에 팔로우/팔로잉 버튼
   xWideLayout: true, // X 오른쪽 사이드바 숨기고 가운데 피드 크게 // X 영상 재생 시 소리 자동 켜기
   sortFolders: true,
@@ -52,9 +49,8 @@ export async function getSettings() {
     if (!s.buttonPosition || s.buttonPosition === 'right') s.buttonPosition = 'mid-right';
     s.posVersion = 2;
   }
-  // v1.12.0: X 전용 '마우스 올리면 재생'을 모든 사이트 공용으로
-  if (s.xHoverPlay === false && s.hoverPlay !== false) s.hoverPlay = false;
-  delete s.xHoverPlay;
+  // 삭제한 기능의 설정은 지운다(광고 차단, 마우스 올리면 재생, 소리 자동 켜기)
+  for (const k of ['adBlock', 'hoverPlay', 'xHoverPlay', 'bskyAutoSound', 'xAutoSound', 'xAutoPlay', 'keepScroll']) delete s[k];
   return s;
 }
 

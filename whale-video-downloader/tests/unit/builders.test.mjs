@@ -230,3 +230,36 @@ test('나라별 하위 폴더 이름', () => {
   assert.equal(countryFolder('', 'generic'), '기타');
   assert.equal(countryFolder('12345', 'generic'), '기타');
 });
+
+test('나라 판단은 원문 언어로(일본어는 한자가 많아도 일본)', () => {
+  assert.equal(countryFolder('今日は猫と遊びました', 'x'), '일본');
+  assert.equal(countryFolder('東京駅で写真を撮った #旅行 https://t.co/abc', 'x'), '일본');
+  assert.equal(countryFolder('장어 덮밥 먹고 힘내요', 'x'), '한국');
+  assert.equal(countryFolder('Had a great day at the beach @friend', 'x'), '미국');
+  assert.equal(countryFolder('今天吃了火锅', 'x'), '중국');
+});
+
+test('모든 나라: 원문 언어별 폴더', () => {
+  const cases = [
+    ['Hoje foi um dia muito bom, obrigado a todos', '브라질'],
+    ['Hoy fue un día muy bueno, gracias a todos', '스페인'],
+    ["Aujourd'hui c'est une très belle journée avec vous", '프랑스'],
+    ['Heute ist ein sehr schöner Tag und ich bin glücklich', '독일'],
+    ['Oggi è una giornata molto bella, grazie a tutti', '이탈리아'],
+    ['Bugün çok güzel bir gün, teşekkür ederim', '튀르키예'],
+    ['Hari ini saya sangat senang dengan kamu', '인도네시아'],
+    ['Hôm nay tôi rất vui, cảm ơn bạn', '베트남'],
+    ['Dziś jest bardzo ładny dzień, dzięki', '폴란드'],
+    ['Сегодня был отличный день', '러시아'],
+    ['Сьогодні був чудовий день, дякую їм', '우크라이나'],
+    ['اليوم كان يوما جميلا جدا', '사우디아라비아'],
+    ['วันนี้อากาศดีมาก', '태국'],
+    ['आज का दिन बहुत अच्छा था', '인도'],
+    ['היום היה יום יפה', '이스라엘'],
+    ['今天天氣很好，我們去公園', '대만'],
+    ['今天天气很好，我们去公园', '중국'],
+    ['Σήμερα ήταν υπέροχη μέρα', '그리스'],
+    ['Today was a great day with my friends', '미국'],
+  ];
+  for (const [t, want] of cases) assert.equal(countryFolder(t, 'x'), want, t);
+});

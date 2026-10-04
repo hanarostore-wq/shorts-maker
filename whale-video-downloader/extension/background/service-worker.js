@@ -515,7 +515,9 @@ async function runChain(job, desc, settings, req) {
   for (let i = 0; i < chain.length; i++) {
     const d = chain[i];
     job.quality = d.quality?.label || job.quality || '';
-    job.country = countryFolder(`${job.title || desc.title || ''} ${req.author || desc.author || ''}`, job.site);
+    // 나라 판단은 게시물 원문 본문으로(없으면 사이트 데이터의 본문 → 제목)
+    const countryText = String(req.captionText || '').trim() || String(desc.title || '').trim() || `${job.title || ''} ${req.author || desc.author || ''}`;
+    job.country = countryFolder(countryText, job.site);
     job.filename = buildFilename(settings.filenameTemplate, {
       title: job.title || desc.title,
       site: job.site,
@@ -524,6 +526,7 @@ async function runChain(job, desc, settings, req) {
       author: req.author || desc.author,
       quality: job.quality,
       ai: settings.aiLabel !== false && !!req.ai,
+      countryText,
       flag: settings.flagPrefix === false ? false : settings.flagStyle === 'emoji' ? 'emoji' : 'name',
     }, d.ext || 'mp4');
     try {
@@ -699,25 +702,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 getSettings().then((s) => chrome.storage.local.set({ settings: s })).catch(() => {});
 
-// ───────────── 광고 서버 요청 차단 (지원 사이트에서 시작된 요청만) ─────────────
-const AD_RULE_BASE = 9000;
-const AD_DOMAINS = ['doubleclick.net', 'googlesyndication.com', 'googleadservices.com', 'adservice.google.com', 'pagead2.googlesyndication.com', 'amazon-adsystem.com', 'taboola.com', 'outbrain.com', 'criteo.com', 'criteo.net', 'adnxs.com', 'pubmatic.com', 'rubiconproject.com', 'ads-twitter.com', 'static.ads-twitter.com', 'ads.tiktok.com', 'analytics.tiktok.com', 'veta.naver.com', 'adcr.naver.com', 'cm.bilibili.com', 'mobads.baidu.com', 'pos.baidu.com', 'ads.pinterest.com'];
-const SUPPORTED_DOMAINS = ['youtube.com', 'tiktok.com', 'bsky.app', 'instagram.com', 'xiaohongshu.com', 'snapchat.com', 'douyin.com', 'kuaishou.com', 'bilibili.com', 'weibo.com', 'weibo.cn', 'facebook.com', 'x.com', 'twitter.com', 'pinterest.com', 'pinterest.co.kr', 'naver.com', 'vimeo.com', 'dailymotion.com'];
-async function syncAdRules() {
-  const s = await getSettings();
-  const existing = (await chrome.declarativeNetRequest.getDynamicRules()).filter((r) => r.id >= AD_RULE_BASE && r.id < AD_RULE_BASE + 100).map((r) => r.id);
-  const addRules = s.adBlock === false ? [] : [{
-    id: AD_RULE_BASE,
-    priority: 1,
-    action: { type: 'block' },
-    condition: { requestDomains: AD_DOMAINS, initiatorDomains: SUPPORTED_DOMAINS, resourceTypes: ['script', 'image', 'sub_frame', 'xmlhttprequest', 'media', 'ping', 'other'] },
-  }];
-  await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: existing, addRules }).catch((err) => console.warn('[영상 다운로더] 광고 차단 규칙 적용 실패', err));
-}
-syncAdRules();
-chrome.storage.onChanged.addListener((c, area) => {
-  if (area === 'local' && c.settings && c.settings.oldValue?.adBlock !== c.settings.newValue?.adBlock) syncAdRules();
-});
+// 광고 차단 기능은 삭제했다(사용자 요청). 예전 버전이 남긴 광고 차단 규칙(9000~9099)은 지운다.
+chrome.declarativeNetRequest.getDynamicRules().then((rules) => {
+  const ids = rules.filter((r) => r.id >= 9000 && r.id < 9100).map((r) => r.id);
+  if (ids.length) chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: ids }).catch(() => {});
+}).catch(() => {});
 
 // ───────────── 설정 기억(새 버전 설치·폴더 바꿔 다시 불러오기에도 유지) ─────────────
 // 1) manifest 의 key 로 확장 ID 를 고정 → 같은 ID 의 저장소를 그대로 씀

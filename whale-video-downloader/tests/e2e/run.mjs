@@ -453,65 +453,22 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
-// ── X 영상 마우스 올리면 재생, 떠나면 멈춤 ──
+// ── 누르는 순간 사이트가 플레이어를 다시 그려도 한 번 클릭에 다운로드 ──
 {
   const page = await ctx.newPage();
   try {
-    await page.goto('https://x.com/autoplay', { waitUntil: 'domcontentloaded' });
-    await page.mouse.move(900, 20);
-    await page.waitForTimeout(1800);
-    const st = () => page.evaluate(() => ({ v1: !document.getElementById('v1').paused, v2: !document.getElementById('v2').paused }));
-    const s0 = await st();
-    const b1 = await page.locator('#v1').boundingBox();
-    const b2 = await page.locator('#v2').boundingBox();
-    await page.mouse.move(b1.x + 100, b1.y + 100, { steps: 3 });
-    await page.waitForTimeout(700);
-    const s1 = await st();
-    await page.mouse.move(b2.x + 100, b2.y + 100, { steps: 3 });
-    await page.waitForTimeout(700);
-    const s2 = await st();
-    await page.mouse.move(900, 20, { steps: 3 });
-    await page.waitForTimeout(900);
-    const s3 = await st();
-    record('[X] 마우스 올리면 재생, 나가도 계속, 다른 영상에 올리면 이전 영상 멈춤 (X 자체 자동 재생도 멈춤)', !s0.v1 && !s0.v2 && s1.v1 && !s1.v2 && !s2.v1 && s2.v2 && !s3.v1 && s3.v2, { note: `처음 ${JSON.stringify(s0)} · v1 위 ${JSON.stringify(s1)} · v2 위 ${JSON.stringify(s2)} · 밖 ${JSON.stringify(s3)}` });
+    await setSettings({ captionOnMedia: false });
+    await clearDownloaded();
+    await page.goto('https://www.example-videos.com/rerender', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const before = new Set(listFiles(DL));
+    await page.locator('smd-anchor .btn.show').first().click();
+    const saved = await waitFile(before, 30000);
+    const re = await page.evaluate(() => window.__rerendered || 0);
+    record('[다운로드] 누르는 순간 사이트가 플레이어를 다시 그려도 한 번 클릭에 다운로드', !!saved && re > 0, { note: `${saved ? path.basename(saved) : '저장 안 됨'} · 사이트 다시 그림 ${re}회` });
   } catch (err) {
-    record('[X] 마우스 올리면 재생', false, { note: err.message.split('\n')[0] });
+    record('[다운로드] 한 번 클릭', false, { note: err.message.split('\n')[0] });
   } finally {
-    await page.close();
-  }
-}
-
-// ── 모든 사이트: 마우스 올리면 소리와 함께 재생, 다른 영상에 올리면 이전 영상 멈춤 ──
-{
-  const page = await ctx.newPage();
-  try {
-    await page.goto('https://www.example-videos.com/hover2', { waitUntil: 'domcontentloaded' });
-    await page.mouse.move(1000, 10);
-    await page.waitForTimeout(1200);
-    const st = () => page.evaluate(() => ['h1', 'h2'].map((id) => { const v = document.getElementById(id); return `${v.paused ? '멈춤' : '재생'}${v.muted ? '(음소거)' : ''}`; }));
-    await page.locator('#h1').hover();
-    await page.waitForTimeout(600);
-    await page.keyboard.press('Shift'); // 첫 입력 때 소리 켜짐
-    await page.waitForTimeout(300);
-    const s1 = await st();
-    await page.mouse.move(1000, 10);
-    await page.waitForTimeout(800);
-    const s2 = await st();
-    await page.locator('#h2').hover();
-    await page.waitForTimeout(700);
-    const s3 = await st();
-    record('[모든 사이트] 마우스 올리면 소리와 함께 재생 · 나가도 계속 · 다음 영상에 올리면 이전 영상 멈춤', s1[0] === '재생' && s1[1] === '멈춤' && s2[0] === '재생' && s3[0] === '멈춤' && s3[1] === '재생', { note: `h1 위 ${s1} · 밖 ${s2} · h2 위 ${s3}` });
-    await setSettings({ hoverPlay: false });
-    await page.waitForTimeout(300);
-    await page.evaluate(() => document.querySelectorAll('video').forEach((v) => v.pause()));
-    await page.locator('#h1').hover();
-    await page.waitForTimeout(600);
-    const off = await st();
-    record('[모든 사이트] 마우스 올리면 재생 설정 끄면 재생 안 함', off[0] === '멈춤' && off[1] === '멈춤', { note: String(off) });
-  } catch (err) {
-    record('[모든 사이트] 마우스 올리면 재생', false, { note: err.message.split('\n')[0] });
-  } finally {
-    await setSettings({ hoverPlay: true });
     await page.close();
   }
 }
@@ -559,24 +516,6 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
-// ── 블루스카이 영상 소리 자동 켜기 ──
-{
-  const page = await ctx.newPage();
-  try {
-    await page.goto('https://bsky.app/sound', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1500);
-    // 아직 페이지를 누르지 않은 상태: 브라우저 정책상 음소거로 계속 재생돼야 함(멈추면 안 됨)
-    const s0 = await page.evaluate(() => ({ muted: document.getElementById('bv').muted, paused: document.getElementById('bv').paused }));
-    await page.mouse.click(700, 500);
-    await page.waitForTimeout(800);
-    const s1 = await page.evaluate(() => ({ muted: document.getElementById('bv').muted, paused: document.getElementById('bv').paused, clicked: !!window.__bskyUnmute }));
-    record('[블루스카이] 영상 재생되면 소리 자동 켜기(블루스카이 음소거 버튼 사용)', !s0.paused && !s1.muted && !s1.paused && s1.clicked, { note: `클릭 전 ${JSON.stringify(s0)} · 클릭 후 ${JSON.stringify(s1)}` });
-  } catch (err) {
-    record('[블루스카이] 소리 자동 켜기', false, { note: err.message.split('\n')[0] });
-  } finally {
-    await page.close();
-  }
-}
 
 // ── 블루스카이 팔로우 버튼 ──
 {
@@ -707,17 +646,40 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── 나라 구분: 원문 언어로(한국어 화면의 일본어 게시물 → 일본) ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ captionOnMedia: false, countryFolders: true, flagPrefix: true, flagStyle: 'name' });
+    await clearDownloaded();
+    await page.goto('https://www.example-videos.com/jpfeed', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1200);
+    await page.locator('#pic').hover();
+    await page.waitForTimeout(500);
+    const before = new Set(listFiles(DL));
+    await page.locator('article smd-anchor .btn.show').first().click();
+    const saved = await waitFile(before, 30000);
+    const folder = saved ? path.basename(path.dirname(saved)) : '';
+    const name = saved ? path.basename(saved) : '';
+    record('[나라 구분] 한국어 화면이어도 원문이 일본어면 일본 폴더 + [일본] 표시', folder === '일본' && /^\[일본\]/.test(name), { note: saved ? `${folder}/${name}` : '저장 안 됨' });
+  } catch (err) {
+    record('[나라 구분]', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
 // ── 설정 기억: 확장 ID 고정 + 동기화 저장소 백업 ──
 {
   try {
-    await setSettings({ xWideLayout: false, adBlock: false });
+    await setSettings({ xWideLayout: false, aiLabel: false });
     await new Promise((r) => setTimeout(r, 800));
     const b = await sw.evaluate(async () => (await chrome.storage.sync.get('settingsBackup')).settingsBackup || null);
-    record('[설정 기억] 확장 ID 고정 + 켜고 끈 설정이 동기화 저장소에 자동 백업', extId === 'epjgkfpjaemapmbokgmojcbbadknhnbd' && b?.xWideLayout === false && b?.adBlock === false, { note: `ID ${extId} · 백업 ${b ? `xWideLayout=${b.xWideLayout}, adBlock=${b.adBlock}` : '없음'}` });
+    record('[설정 기억] 확장 ID 고정 + 켜고 끈 설정이 동기화 저장소에 자동 백업', extId === 'epjgkfpjaemapmbokgmojcbbadknhnbd' && b?.xWideLayout === false && b?.aiLabel === false, { note: `ID ${extId} · 백업 ${b ? `xWideLayout=${b.xWideLayout}, aiLabel=${b.aiLabel}` : '없음'}` });
   } catch (err) {
     record('[설정 기억]', false, { note: err.message.split('\n')[0] });
   } finally {
-    await setSettings({ xWideLayout: true, adBlock: true });
+    await setSettings({ xWideLayout: true, aiLabel: true });
   }
 }
 
@@ -806,17 +768,6 @@ if (!only || only === 'x' || '팔로우'.includes(only)) {
     const err = await page.locator('#t-react_user smd-follow').evaluate((h) => h.shadowRoot.querySelector('.err')?.textContent || '');
     record('[X] 로그인 쿠키 없을 때 오류 안내', /로그인/.test(err) && /새로고침/.test(err), { note: err });
 
-    // 마우스를 올리면 소리와 함께 재생, 올려 둔 동안 멈췄다 재생했다 반복하지 않음
-    await page.hover('#xv');
-    await page.waitForTimeout(500);
-    await page.keyboard.press('Shift'); // 아직 페이지를 누른 적이 없다면 첫 입력 때 소리가 켜짐
-    const samples = [];
-    for (let i = 0; i < 8; i++) {
-      samples.push(await page.evaluate(() => document.getElementById('xv').paused));
-      await page.waitForTimeout(150);
-    }
-    const sound = await page.evaluate(() => ({ muted: document.getElementById('xv').muted, clicked: !!window.__unmuteClicked, paused: document.getElementById('xv').paused }));
-    record('[X] 마우스 올리면 소리와 함께 재생(X 음소거 버튼 사용), 깜빡임 없음', !sound.muted && sound.clicked && !sound.paused && samples.every((p) => !p), { note: `${JSON.stringify(sound)} · 멈춤 표본 ${samples.filter(Boolean).length}/8` });
   } catch (err) {
     record('[X] 팔로우 버튼', false, { note: err.message.split('\n')[0] });
   } finally {
@@ -957,7 +908,7 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       const pp = await extPage();
       const warn = await pp.evaluate(async () => (await chrome.storage.local.get('history')).history?.[0]?.warning || '');
       await pp.close();
-      record('[요약] 글자 넣기 실패 시 영상이 사라지지 않고 원본 저장 + 안내', info?.vcodec === 'h264' && !!info.acodec && /요약 글자를 넣지 못해 원본으로 저장/.test(warn), { note: `${saved ? path.basename(saved) : '없음'} · ${info?.vcodec} · 안내: ${warn.slice(0, 90)}` });
+      record('[요약] 글자 넣기 실패 시 영상이 사라지지 않고 원본 저장 + 안내', info?.vcodec === 'h264' && !!info.acodec && /피드 내용을 넣지 못해 원본으로 저장/.test(warn), { note: `${saved ? path.basename(saved) : '없음'} · ${info?.vcodec} · 안내: ${warn.slice(0, 90)}` });
     } catch (err) {
       record('[요약] 실패 시 원본 저장', false, { note: err.message.split('\n')[0] });
     } finally {
@@ -1134,45 +1085,60 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       record(`[번역] ${path_}`, false, { note: err.message.split('\n')[0] });
     }
   }
+  // 피드 캡처: 화면에 보이는 게시물은 작성자 줄+본문을 여백 없이(해시태그 제외),
+  // 고정 머리줄에 가려진 게시물은 스크롤하지 않고 작성자 이름+본문 카드를 그려 넣음
+  for (const [label, offset, expectShot] of [['보이는 게시물', 150, true], ['고정 머리줄에 가려진 게시물', 30, false]]) {
+    await setSettings({ captionOnMedia: true, translateCaption: true, captionCover: false, captionIntro: false, captionKeepOriginal: false });
+    await clearDownloaded();
+    try {
+      const page = await ctx.newPage();
+      let saved = null;
+      let moved = 0;
+      try {
+        await page.goto('https://www.example-videos.com/stickyfeed', { waitUntil: 'domcontentloaded' });
+        await page.waitForTimeout(1000);
+        await page.evaluate((o) => scrollTo(0, document.getElementById('post').getBoundingClientRect().top + scrollY - o), offset);
+        await page.waitForTimeout(300);
+        const y0 = await page.evaluate(() => scrollY);
+        await page.locator('#pic').hover();
+        await page.waitForTimeout(500);
+        const yh = await page.evaluate(() => scrollY);
+        const before = new Set(listFiles(DL));
+        await page.locator('#post smd-anchor .btn.show').first().click();
+        await page.waitForTimeout(200);
+        moved = (await page.evaluate(() => scrollY)) - yh;
+        saved = await waitFile(before, 30000);
+        if (yh !== y0) moved += 0; // hover 자체의 스크롤은 무시
+      } finally {
+        await page.close();
+      }
+      let red = -1, green = -1, pink = -1, w = 0, hh = 0;
+      if (saved) {
+        const raw = execFileSync('ffmpeg', ['-v', 'error', '-i', saved, '-vf', 'crop=iw:ih*0.15:0:0,scale=320:-1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']);
+        red = green = pink = 0;
+        for (let i = 0; i < raw.length; i += 3) {
+          const [r, g, b] = [raw[i], raw[i + 1], raw[i + 2]];
+          if (r > 200 && g < 60 && b < 60) red++;
+          if (g > 200 && r < 80 && b < 80) green++;
+          if (r > 200 && g > 120 && g < 190 && b > 150) pink++;
+        }
+      }
+      const pp = await extPage();
+      const h = await pp.evaluate(async () => (await chrome.storage.local.get('history')).history?.[0] || {});
+      await pp.close();
+      if (saved) execFileSync('cp', [saved, path.join(SHOTS, `caption-${expectShot ? 'tight' : 'card'}.jpg`)]);
+      const ok = expectShot
+        ? /^\[피드 글 캡처\]/.test(h.captionUsed || '') && red < 20 && green < 5 && pink > 20
+        : /^\[피드 카드\]/.test(h.captionUsed || '') && red < 20 && green < 5 && !/초록해시태그/.test(h.captionUsed || '');
+      record(`[요약①] ${label}: ${expectShot ? '작성자 줄+본문 캡처(해시태그 제외)' : '스크롤 없이 카드로 대신'}, 페이지 스크롤 안 함`, !!saved && ok && moved === 0, { note: `${h.captionUsed || '(없음)'} · 빨강 ${red} · 초록 ${green} · 프로필 ${pink} · 스크롤 변화 ${moved}` });
+    } catch (err) {
+      record(`[요약①] ${label}`, false, { note: err.message.split('\n')[0] });
+    }
+  }
   await setSettings({ captionCover: false, captionIntro: false });
   await setSettings({ captionOnMedia: false, captionKeepOriginal: false });
 }
 
-// ── 광고 차단 ──
-if (!only || only === 'ad' || '광고'.includes(only)) {
-  const page = await ctx.newPage();
-  try {
-    await page.goto('https://x.com/ads', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1800);
-    const vis = () => page.evaluate(() => Object.fromEntries(['normal', 'promoted', 'tracked'].map((id) => [id, getComputedStyle(document.getElementById(id)).display !== 'none'])));
-    const v1 = await vis();
-    const net1 = await page.evaluate(() => window.__adNet);
-    record('[광고] X 피드 광고(프로모션·placementTracking) 숨김, 일반 게시물 유지', v1.normal && !v1.promoted && !v1.tracked, { note: JSON.stringify(v1) });
-    const bw = await page.evaluate(() => ({ bodyword: getComputedStyle(document.getElementById('bodyword')).display !== 'none', recycleBefore: getComputedStyle(document.getElementById('recycle')).display !== 'none' }));
-    await page.waitForTimeout(3000);
-    const rc = await page.evaluate(() => getComputedStyle(document.getElementById('recycle')).display !== 'none');
-    record('[광고] 본문에 "광고"라고 쓴 일반 게시물은 안 숨김 + 광고 칸이 일반 게시물로 재사용되면 다시 보임', bw.bodyword && !bw.recycleBefore && rc, { note: JSON.stringify({ ...bw, recycleAfter: rc }) });
-    record('[광고] 광고 서버 요청 차단', net1 === 'blocked', { note: `doubleclick 요청: ${net1}` });
-    await setSettings({ adBlock: false });
-    await page.waitForTimeout(800);
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1800);
-    const v2 = await vis();
-    const net2 = await page.evaluate(() => window.__adNet);
-    record('[광고] 광고 차단 끄면 원래대로(게시물·요청)', v2.promoted && v2.tracked && /loaded 200/.test(net2), { note: `${JSON.stringify(v2)} · ${net2}` });
-    await setSettings({ adBlock: true });
-    await page.waitForTimeout(600);
-
-    await page.goto('https://www.youtube.com/adsfeed', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
-    const yt = await page.evaluate(() => ({ ad: getComputedStyle(document.getElementById('ad1')).display, vid: getComputedStyle(document.getElementById('vid1')).display, skipped: !!window.__skipped }));
-    record('[광고] 유튜브 광고 칸 숨김 + 영상 광고 건너뛰기', yt.ad === 'none' && yt.vid !== 'none' && yt.skipped, { note: JSON.stringify(yt) });
-  } catch (err) {
-    record('[광고] 광고 차단', false, { note: err.message.split('\n')[0] });
-  } finally {
-    await page.close();
-  }
-}
 
 // ── X 재생: 최고 화질 고정 · 재생바 항상 표시 · 진행 막대 두껍게 ──
 if (!only || only === 'x') {

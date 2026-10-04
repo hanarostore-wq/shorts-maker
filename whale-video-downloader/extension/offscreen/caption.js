@@ -281,7 +281,39 @@ export async function cropShot(shot, which = 'rect') {
   const c = new OffscreenCanvas(w, h);
   c.getContext('2d').drawImage(bmp, x, y, w, h, 0, 0, w, h);
   bmp.close?.();
-  return c;
+  return which === 'textRect' ? trimEdges(c) : c;
+}
+
+// 가장자리의 바탕색만 있는 줄·칸을 잘라 글자에 바짝 붙인다
+export function trimEdges(c) {
+  const w = c.width;
+  const h = c.height;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  const d = ctx.getImageData(0, 0, w, h).data;
+  const bg = [d[0], d[1], d[2]];
+  const diff = (i) => Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 36;
+  const rowHas = (y) => {
+    for (let x = 0; x < w; x++) if (diff((y * w + x) * 4)) return true;
+    return false;
+  };
+  const colHas = (x, y0, y1) => {
+    for (let y = y0; y <= y1; y++) if (diff((y * w + x) * 4)) return true;
+    return false;
+  };
+  let top = 0;
+  while (top < h - 1 && !rowHas(top)) top++;
+  let bottom = h - 1;
+  while (bottom > top && !rowHas(bottom)) bottom--;
+  let left = 0;
+  while (left < w - 1 && !colHas(left, top, bottom)) left++;
+  let right = w - 1;
+  while (right > left && !colHas(right, top, bottom)) right--;
+  const nw = right - left + 1;
+  const nh = bottom - top + 1;
+  if (nw < 10 || nh < 6 || (nw === w && nh === h)) return c;
+  const out = new OffscreenCanvas(nw, nh);
+  out.getContext('2d').drawImage(c, left, top, nw, nh, 0, 0, nw, nh);
+  return out;
 }
 
 export function textCard(summary, meta = {}) {
@@ -496,7 +528,7 @@ export async function translateToKorean(text) {
 }
 
 // 캡처 이미지 아래에 한국어 번역 칸을 붙인다(캡처 바탕색에 맞춰 글자색을 고름)
-export function withTranslation(img, ko) {
+export function withTranslation(img, ko, replace = false) {
   const w = img.width;
   const size = Math.round(Math.max(14, Math.min(40, w * 0.032)));
   const probe = new OffscreenCanvas(1, 1).getContext('2d');
@@ -506,22 +538,56 @@ export function withTranslation(img, ko) {
   const meas = new OffscreenCanvas(10, 10).getContext('2d');
   meas.font = `600 ${size}px "Pretendard","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif`;
   const pad = Math.round(size * 0.7);
-  const lines = wrap(meas, `번역: ${ko}`, w - pad * 2, 6);
+  // replace: 원문을 빼고 번역만(작성자 줄 아래에 본문처럼) / 아니면 '번역:' 칸을 덧붙임
+  const lines = wrap(meas, replace ? ko : `번역: ${ko}`, Math.max(w, replace ? 600 : 0) - pad * 2, 6);
   const lh = Math.round(size * 1.4);
-  const h = img.height + pad + lines.length * lh + Math.round(pad * 0.6);
-  const c = new OffscreenCanvas(w, h);
+  const cw = replace ? Math.max(w, Math.min(1080, Math.ceil(Math.max(...lines.map((l) => meas.measureText(l).width))) + pad * 2)) : w;
+  const h = img.height + (replace ? Math.round(pad * 0.4) : pad) + lines.length * lh + Math.round(pad * 0.6);
+  const c = new OffscreenCanvas(cw, h);
   const ctx = c.getContext('2d');
   ctx.fillStyle = `rgb(${r},${g},${b})`;
-  ctx.fillRect(0, 0, w, h);
+  ctx.fillRect(0, 0, cw, h);
   ctx.drawImage(img, 0, 0);
-  ctx.strokeStyle = dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)';
-  ctx.beginPath();
-  ctx.moveTo(pad, img.height + pad * 0.4);
-  ctx.lineTo(w - pad, img.height + pad * 0.4);
-  ctx.stroke();
+  if (!replace) {
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)';
+    ctx.beginPath();
+    ctx.moveTo(pad, img.height + pad * 0.4);
+    ctx.lineTo(w - pad, img.height + pad * 0.4);
+    ctx.stroke();
+  }
   ctx.font = meas.font;
   ctx.textBaseline = 'top';
   ctx.fillStyle = dark ? '#f1f3f5' : '#14171a';
-  lines.forEach((l, i) => ctx.fillText(l, pad, img.height + pad + i * lh));
+  const y0 = img.height + (replace ? Math.round(pad * 0.4) : pad);
+  lines.forEach((l, i) => ctx.fillText(l, replace ? 0 : pad, y0 + i * lh));
+  return c;
+}
+
+// 화면 캡처가 없을 때: 피드 모양(작성자 이름 줄 + 본문) 카드를 직접 그린다
+export function postCard(author, text) {
+  const w = 1080;
+  const pad = 36;
+  const meas = new OffscreenCanvas(10, 10).getContext('2d');
+  const bodyFont = '500 38px "Pretendard","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif';
+  const nameFont = '800 36px "Pretendard","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif';
+  meas.font = bodyFont;
+  const lines = wrap(meas, String(text || '').replace(/\s+/g, ' ').trim(), w - pad * 2, 3);
+  const nameH = author ? 52 : 0;
+  const h = pad + nameH + lines.length * 52 + pad - 8;
+  const c = new OffscreenCanvas(w, Math.max(h, 80));
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, w, c.height);
+  ctx.textBaseline = 'top';
+  let y = pad - 6;
+  if (author) {
+    ctx.font = nameFont;
+    ctx.fillStyle = '#e7e9ea';
+    ctx.fillText(author, pad, y);
+    y += nameH;
+  }
+  ctx.font = bodyFont;
+  ctx.fillStyle = '#e7e9ea';
+  lines.forEach((l, i) => ctx.fillText(l, pad, y + i * 52));
   return c;
 }

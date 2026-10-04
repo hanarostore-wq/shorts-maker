@@ -1,6 +1,6 @@
 {
   "name": "whale-video-downloader",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "private": true,
   "description": "웨일 브라우저용 영상 다운로더 확장프로그램 (로컬 헬퍼 없는 단독 동작)",
   "type": "module",

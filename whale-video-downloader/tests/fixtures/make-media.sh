@@ -30,6 +30,7 @@ ff -f lavfi -i color=c=black:s=640x360:r=30:d=0.6 -f lavfi -i "color=c=0x2a3040:
   -filter_complex "[1:v]drawbox=x=200:y=8:w=240:h=150:color=0xE0AC90:t=fill,drawbox=x=150:y=60:w=340:h=40:color=0xD49A80:t=fill,noise=alls=12:allf=t[p];[0:v][p]concat=n=2:v=1:a=0[v]" \
   -map "[v]" -map 2:a -c:v libvpx-vp9 -b:v 600k -deadline realtime -cpu-used 8 -c:a libopus -b:a 64k person_top.webm
 mkdir -p images
+ff -f lavfi -i color=c=0x808080:s=1600x1000 -frames:v 1 images/gray.jpg
 ff -f lavfi -i testsrc2=size=1200x800 -frames:v 1 images/photo.webp
 ff -f lavfi -i testsrc2=size=1600x1000 -frames:v 1 images/photo.jpg
 ff -f lavfi -i testsrc2=size=2000x1500 -frames:v 1 images/x_orig.jpg

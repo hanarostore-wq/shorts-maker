@@ -192,6 +192,17 @@ const handlers = {
       return html(res, page('마우스 재생', `<video id="h1" src="https://cdn.example-videos.com/preview.webm" loop playsinline style="width:420px;height:236px;background:#000"></video>
         <video id="h2" src="https://cdn.example-videos.com/preview.webm" loop playsinline style="width:420px;height:236px;background:#000"></video>`));
     }
+    if (u.pathname === '/rerender') {
+      // X 처럼: 플레이어를 누르는 순간(pointerdown) 사이트가 영상 묶음을 새로 그린다 → 우리 버튼이 다시 붙으면서 click 이 사라질 수 있음
+      return html(res, page('다시 그리는 플레이어', `<div id="wrap" style="position:relative;width:480px;height:270px"><div id="inner"><video src="https://cdn.example-videos.com/progressive_360p.mp4" muted style="width:480px;height:270px;background:#000"></video></div></div>`,
+        `document.getElementById('wrap').addEventListener('pointerdown', () => {
+           const inner = document.getElementById('inner');
+           const clone = document.createElement('div'); clone.id = 'inner';
+           while (inner.firstChild) clone.appendChild(inner.firstChild);
+           inner.replaceWith(clone);
+           window.__rerendered = (window.__rerendered || 0) + 1;
+         }, true);`));
+    }
     if (u.pathname === '/clicktoggle') {
       // 흔한 사이트 플레이어: 영상을 덮은 투명 막을 누르면 재생/정지(클릭), 두 번째는 누르는 순간(pointerdown) 정지, 막 안에 '좋아요' 버튼
       return html(res, page('클릭 정지 테스트', `
@@ -216,6 +227,26 @@ const handlers = {
           <div style="display:flex;gap:8px;align-items:center"><div data-testid="Tweet-User-Avatar" style="width:40px;height:40px;border-radius:50%;background:#4a8"></div><div data-testid="User-Name"><b>Emma</b> <span style="color:#888">@emma_test · Jun 2</span></div></div>
           <div data-testid="tweetText" lang="en">${body}</div>
           <img src="https://cdn.example-videos.com/img/photo.jpg" style="width:640px;height:400px;object-fit:cover;display:block">
+        </article></body></html>`);
+    }
+    if (u.pathname === '/stickyfeed') {
+      // X 프로필처럼 맨 위에 고정 머리줄(빨강, 70px), 본문에 해시태그(초록)
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>(3) 키스 / X</title></head><body style="margin:0;background:#000;color:#eee">
+        <div style="position:fixed;top:0;left:0;right:0;height:70px;background:#ff0000;color:#fff;z-index:10;font:700 20px sans-serif;padding:10px">프로필 이름 · 200 게시물</div>
+        <div style="height:400px"></div>
+        <article id="post" style="width:660px;margin:20px">
+          <div style="display:flex;gap:8px;align-items:center"><div data-testid="Tweet-User-Avatar" style="width:40px;height:40px;border-radius:50%;background:#ff99cc"></div><div data-testid="User-Name"><b>키스</b> <span style="color:#888">@kiss · 9월 2일</span></div></div>
+          <div data-testid="tweetText">장어 덮밥 먹고 힘내요 <a href="/hashtag/test" style="background:#00ff00;color:#00ff00">#초록해시태그</a></div>
+          <img id="pic" src="https://cdn.example-videos.com/img/gray.jpg" style="width:640px;height:400px;object-fit:cover;display:block">
+        </article><div style="height:1500px"></div></body></html>`);
+    }
+    if (u.pathname === '/jpfeed') {
+      // 한국어 화면(탭 제목 '홈 / X')에 일본어 게시물
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>(2) 홈 / X</title></head><body style="margin:0;background:#000;color:#eee">
+        <article style="width:660px;margin:20px">
+          <div data-testid="User-Name"><b>さくら</b> <span style="color:#888">@sakura_jp · 9월 2일</span></div>
+          <div data-testid="tweetText" lang="ja">今日は東京で美味しいラーメンを食べました</div>
+          <img id="pic" src="https://cdn.example-videos.com/img/gray.jpg" style="width:640px;height:400px;object-fit:cover;display:block">
         </article></body></html>`);
     }
     if (u.pathname === '/feedpost') {

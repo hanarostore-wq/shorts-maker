@@ -2,28 +2,42 @@
 //   OPFS 임시 파일에 쓴 뒤 blob 주소를 서비스워커에 넘겨 웨일 다운로드 폴더(사용자가 지정한 폴더)로 저장한다.
 //   사진은 원본 그대로, jpg·png·gif 가 아니면 PNG 로 변환한다.
 import { copyFile, mergeStreams, remuxHls, StepError, STEP } from './engine.js';
-import { summarize, captionImage, captionVideo, feedImage, canvasPng, coverVideo, introVideo, cropShot, needsKorean, translateToKorean, withTranslation } from './caption.js';
+import { summarize, captionImage, captionVideo, feedImage, canvasPng, coverVideo, introVideo, cropShot, needsKorean, translateToKorean, withTranslation, postCard } from './caption.js';
 
 // ① 방식: 찍어 둔 피드 글 부분 캡처가 있으면 그것을, 없으면 요약 글자를 붙인다
 async function overlayFor(cap, summary, warns) {
   // 한국어가 아니면 번역(실패하면 원문 그대로 + 안내)
   let ko = '';
-  if (cap.translate && cap.text && needsKorean(cap.text)) {
+  // 해시태그(#…)는 번역·요약에 넣지 않는다
+  const body = String(cap.text || '').replace(/(^|\s)[#＃][\p{L}\p{N}_]+/gu, ' ').replace(/\s+/g, ' ').trim();
+  if (cap.translate && body && needsKorean(body)) {
     try {
-      ko = await translateToKorean(cap.text);
+      ko = await translateToKorean(body);
     } catch (err) {
       warns.push(`피드 글 번역 실패(번역 단계): ${err?.message || err} → 원문 그대로 넣었습니다. 인터넷 연결을 확인하거나 설정에서 '피드 글 한국어 번역'을 끄세요.`);
     }
   }
   if (cap.shot?.textRect) {
     try {
-      let image = await cropShot(cap.shot, 'textRect');
-      if (ko) image = withTranslation(image, ko);
+      let image;
+      const tr = cap.shot.textRect;
+      if (ko) {
+        // 번역했으면 원문은 빼고: 작성자 줄만 찍은 것 아래에 한국어 번역을 본문처럼 쓴다
+        image = tr.head
+          ? withTranslation(await cropShot({ dataUrl: cap.shot.dataUrl, textRect: { ...tr.head, vw: tr.vw, vh: tr.vh } }, 'textRect'), ko, true)
+          : postCard(cap.author || '', ko);
+      } else image = await cropShot(cap.shot, 'textRect');
       return { ov: { image }, used: `[피드 글 캡처${ko ? '+번역' : ''}] ${ko ? ko.slice(0, 60) : summary || ''}`.trim() };
     } catch (err) {
       warns.push(`피드 글 캡처를 쓰지 못해 요약 글자로 넣었습니다 (${err?.message || err}).`);
     }
   } else if (cap.shotError) warns.push(`피드 글 캡처를 쓰지 못해 요약 글자로 넣었습니다 (${cap.shotError}).`);
+  // 캡처가 없으면 피드 모양 카드(작성자 이름 + 본문)를 그려 같은 자리에 붙인다
+  if (body) {
+    // 번역했으면 원문 대신 번역만
+    const image = postCard(cap.author || '', ko || body);
+    return { ov: { image }, used: `[피드 카드${ko ? '+번역' : ''}] ${(ko || body).slice(0, 60)}` };
+  }
   const text = ko ? await summarize(ko) : summary;
   return text ? { ov: { text }, used: ko ? `[번역] ${text}` : text } : { ov: null, used: '' };
 }
@@ -235,7 +249,7 @@ async function run({ jobId, desc, filename, mode, prefer }) {
           cleanups.push(re.cleanup);
         } catch (err) {
           await re.fail().catch(() => {});
-          const what = cap.intro ? '영상 시작에 피드 화면 3초를 넣지' : overlay?.image ? '영상에 피드 글 캡처를 넣지' : '영상에 요약 글자를 넣지';
+          const what = cap.intro ? '영상 시작에 피드 화면 3초를 넣지' : '영상에 피드 내용을 넣지';
           warns.push(`${what} 못해 원본으로 저장했습니다 (${err?.message || err}).`);
         }
       }

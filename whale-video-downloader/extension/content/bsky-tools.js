@@ -1,21 +1,17 @@
 // 블루스카이 전용 도구 (ISOLATED world)
-//  - 영상이 재생되면 소리 자동 켜기 (블루스카이 음소거 버튼을 눌러 화면 상태도 맞춘다)
 //  - 홈·탐색 피드 게시물 오른쪽 위에 팔로우 / 팔로잉 버튼 (눌러서 팔로우·언팔로우)
 (() => {
   'use strict';
   if (globalThis.__SMD_BSKYTOOLS || !/(^|\.)bsky\.app$/.test(location.hostname) || window.top !== window) return;
   globalThis.__SMD_BSKYTOOLS = true;
 
-  let on = true;
   let followOn = true;
   chrome.storage.local.get('settings').then((r) => {
-    on = r.settings?.bskyAutoSound !== false;
     followOn = r.settings?.bskyFollowButtons !== false;
     scanFollow();
   }, () => {});
   chrome.storage.onChanged.addListener((c, area) => {
     if (area === 'local' && c.settings) {
-      on = c.settings.newValue?.bskyAutoSound !== false;
       followOn = c.settings.newValue?.bskyFollowButtons !== false;
       if (!followOn) {
         document.querySelectorAll('smd-bfollow').forEach((e) => e.remove());
@@ -209,60 +205,5 @@
     scanFollow.t = setTimeout(scanFollow, 250);
   }).observe(document.documentElement, { childList: true, subtree: true });
 
-  const UNMUTE_SEL = 'button[aria-label*="Unmute" i], button[aria-label*="음소거 해제"], [role="button"][aria-label*="Unmute" i], [role="button"][aria-label*="음소거 해제"]';
-  // 영상 주변(몇 단계 위 부모까지)에서 블루스카이 음소거 해제 버튼을 찾는다
-  function unmuteButton(v) {
-    let p = v.parentElement;
-    for (let i = 0; p && i < 6; i++, p = p.parentElement) {
-      const b = p.querySelector(UNMUTE_SEL);
-      if (b) return b;
-    }
-    return null;
-  }
-
-  let pendingSound = null;
-  function unmute(v) {
-    if (!on || !v.muted) return;
-    const btn = unmuteButton(v);
-    if (btn) btn.click();
-    else v.muted = false;
-    if (v.volume === 0) v.volume = 1;
-    // 페이지를 한 번도 누르지 않았으면 브라우저가 소리 재생을 막고 영상을 멈춘다 → 음소거로 계속 재생, 첫 클릭 때 소리 켜기
-    setTimeout(() => {
-      if (v.paused && !v.ended) {
-        v.muted = true;
-        v.play().catch(() => {});
-        pendingSound = v;
-      }
-    }, 150);
-  }
-  // 영상마다 한 번만 자동으로 켠다(사용자가 다시 음소거하면 그대로 둔다)
-  const handled = new WeakSet();
-  const onPlay = (v) => {
-    if (handled.has(v)) return;
-    handled.add(v);
-    unmute(v);
-  };
-  document.addEventListener('playing', (ev) => ev.target instanceof HTMLVideoElement && onPlay(ev.target), true);
-  // 스크립트가 늦게 들어와 이미 재생 중인 영상도 처리
-  const scan = () => {
-    if (!on) return;
-    for (const v of document.querySelectorAll('video')) if (!v.paused && !v.ended && v.muted) onPlay(v);
-  };
-  scan();
-  setInterval(scan, 1000);
-  const onGesture = (ev) => {
-    // 음소거 버튼을 직접 누른 경우는 사용자의 선택이므로 건드리지 않는다
-    if (ev.target?.closest?.(UNMUTE_SEL) || ev.target?.closest?.('button[aria-label*="Mute" i], button[aria-label*="음소거"]')) {
-      pendingSound = null;
-      return;
-    }
-    if (pendingSound && pendingSound.isConnected && !pendingSound.paused) {
-      const v = pendingSound;
-      pendingSound = null;
-      setTimeout(() => unmute(v), 0);
-    }
-  };
-  document.addEventListener('pointerdown', onGesture, true);
-  document.addEventListener('keydown', onGesture, true);
+  // (영상 소리 자동 켜기는 사용자 요청으로 삭제)
 })();

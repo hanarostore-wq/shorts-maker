@@ -223,13 +223,32 @@
     b.type = 'button';
     b.title = '원본 화질로 다운로드';
     b.innerHTML = `<span class="ico">${ICON_DL}</span><span class="txt">다운로드</span>`;
-    b.addEventListener('click', (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
+    const activate = () => {
+      entry.activatedAt = Date.now();
       if (editMode) return;
       if (entry.state === 'busy' || entry.state === 'resolving') return;
       if (entry.state === 'error' && entry.lastError) return showPanel(entry, 'e', entry.lastError);
       start(entry);
+    };
+    b.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      // 바로 앞의 '누르고 떼기'로 이미 시작했으면 다시 하지 않는다
+      if (Date.now() - (entry.activatedAt || 0) < 600) return;
+      activate();
+    });
+    // 안전장치: 사이트가 누르는 사이 플레이어 화면을 다시 그리면(X 등) click 이 사라질 수 있다.
+    // 이 버튼에서 누르고 뗐는데 click 이 오지 않으면 그대로 다운로드를 시작한다(첫 번째 클릭이 무시되는 문제).
+    b.addEventListener('pointerdown', (ev) => {
+      if (ev.button === 0) entry.pressAt = Date.now();
+    });
+    b.addEventListener('pointerup', (ev) => {
+      if (ev.button !== 0 || !entry.pressAt || Date.now() - entry.pressAt > 1500) return;
+      const pressed = entry.pressAt;
+      entry.pressAt = 0;
+      setTimeout(() => {
+        if ((entry.activatedAt || 0) < pressed) activate();
+      }, 120);
     });
     for (const t of ['mousedown', 'mouseup', 'pointerdown', 'pointerup', 'dblclick', 'touchstart']) {
       b.addEventListener(t, (ev) => ev.stopPropagation());
@@ -414,27 +433,27 @@
   }
 
   // 피드 글 부분(프로필 사진·이름·본문) 영역. raw=true 면 화면 밖이어도 그대로 돌려준다(스크롤 판단용).
-  // 사이트별 '피드 본문' 위치: box = 게시물 묶음, parts = 본문 글 요소(이것만 캡처)
+  // 사이트별 캡처 위치: box = 게시물 묶음, parts = 작성자 줄 + 본문 요소(이것만 캡처)
   const SHOT_SITES = {
-    x: { box: 'article[data-testid="tweet"]', parts: ['[data-testid="tweetText"]'] },
-    bluesky: { box: '[data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]', parts: ['[data-testid="postText"]'] },
-    instagram: { box: 'article, [role="dialog"]', parts: ['h1', '._a9zs'] },
-    tiktok: { box: '[data-e2e="recommend-list-item-container"], [data-e2e="browse-video"], article', parts: ['[data-e2e="video-desc"]', '[data-e2e="browse-video-desc"]'], page: true },
-    douyin: { box: '[data-e2e="feed-item"], [data-e2e="detail-video-info"]', parts: ['[data-e2e="video-desc"]', '[data-e2e="detail-video-info"] h1'], page: true },
-    facebook: { box: '[role="article"], div[data-pagelet^="FeedUnit"]', parts: ['[data-ad-preview="message"]', '[data-ad-comet-preview="message"]'] },
-    youtube: { box: 'ytd-reel-video-renderer[is-active], ytd-watch-metadata, ytd-rich-item-renderer', parts: ['yt-shorts-video-title-view-model', '#title h1', '#video-title'], page: true },
-    weibo: { box: 'article', parts: ['[class*="wbtext"]', '.weibo-text'] },
-    xiaohongshu: { box: '#noteContainer, .note-container, section.note-item', parts: ['#detail-title', '#detail-desc', '.title'], page: true },
-    bilibili: { box: '#viewbox_report, .video-info-container', parts: ['h1.video-title', '.video-title'], page: true },
-    pinterest: { box: '[data-test-id="closeup-body"], [data-test-id="pin"]', parts: ['[data-test-id="pin-closeup-title"]', '[data-test-id="closeup-title"]', '[data-test-id="truncated-description"]'], page: true },
-    kuaishou: { box: '.video-info, .feed-item, .short-video-info', parts: ['.video-info-title', '.title'], page: true },
+    x: { box: 'article[data-testid="tweet"]', parts: ['[data-testid="Tweet-User-Avatar"]', '[data-testid="User-Name"]', '[data-testid="tweetText"]'] },
+    bluesky: { box: '[data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]', parts: ['[data-testid="userAvatarImage"]', 'a[href^="/profile/"]:not([aria-label])', '[data-testid="postText"]'] },
+    instagram: { box: 'article, [role="dialog"]', parts: ['header', 'h1', '._a9zs'] },
+    tiktok: { box: '[data-e2e="recommend-list-item-container"], [data-e2e="browse-video"], article', parts: ['[data-e2e="video-author-avatar"]', '[data-e2e="video-author-uniqueid"]', '[data-e2e="browse-username"]', '[data-e2e="video-desc"]', '[data-e2e="browse-video-desc"]'], page: true },
+    douyin: { box: '[data-e2e="feed-item"], [data-e2e="detail-video-info"]', parts: ['[data-e2e="feed-video-nickname"]', '[data-e2e="video-desc"]', '[data-e2e="detail-video-info"] h1'], page: true },
+    facebook: { box: '[role="article"], div[data-pagelet^="FeedUnit"]', parts: ['h2', 'h3', 'h4', '[data-ad-preview="message"]', '[data-ad-comet-preview="message"]'] },
+    youtube: { box: 'ytd-reel-video-renderer[is-active], ytd-watch-metadata, ytd-rich-item-renderer', parts: ['yt-shorts-video-title-view-model', 'ytd-channel-name', '#title h1', '#owner', '#video-title'], page: true },
+    weibo: { box: 'article', parts: ['header', '[class*="wbtext"]', '.weibo-text'] },
+    xiaohongshu: { box: '#noteContainer, .note-container, section.note-item', parts: ['.author-wrapper', '.author', '#detail-title', '#detail-desc', '.title'], page: true },
+    bilibili: { box: '#viewbox_report, .video-info-container, .up-panel-container', parts: ['.up-info-container', '.up-name', 'h1.video-title', '.video-title'], page: true },
+    pinterest: { box: '[data-test-id="closeup-body"], [data-test-id="pin"]', parts: ['[data-test-id="pinner-name"]', '[data-test-id="pin-closeup-title"]', '[data-test-id="closeup-title"]', '[data-test-id="truncated-description"]'], page: true },
+    kuaishou: { box: '.video-info, .feed-item, .short-video-info', parts: ['.profile-user-name', '.video-info-title', '.title'], page: true },
     naver: { box: '.se_component_wrap, ._articleBody, .video_info, .clip_info', parts: ['.title', '.desc', 'h3', 'h2'], page: true },
     vimeo: { box: 'main', parts: ['h1', '[class*="ClipTitle"]'], page: true },
     dailymotion: { box: 'main', parts: ['h1', '[class*="VideoInfoTitle"]'], page: true },
     snapchat: { box: 'main', parts: ['h1', '[class*="caption"]'], page: true },
   };
-  // 본문 글만 캡처한다(프로필 사진·이름·아이디·날짜는 빼고)
-  const DEFAULT_SHOT = { box: POST_SEL, parts: TEXT_SEL.split(', ') };
+  // 작성자 줄(프로필 사진·이름·아이디·날짜) + 본문을 한 덩어리로 캡처한다(영상·사진은 빼고)
+  const DEFAULT_SHOT = { box: POST_SEL, parts: ['[data-testid="Tweet-User-Avatar"]', '[data-testid="User-Name"]', 'header'].concat(TEXT_SEL.split(', ')) };
 
   // 게시물 묶음: 영상을 감싼 것이 먼저, 없으면(page:true 사이트) 화면에서 영상과 가장 가까운 것
   function shotBox(el, conf) {
@@ -466,25 +485,27 @@
     const vr = el.getBoundingClientRect();
     const seen = new Set();
     let rects = [];
+    const heads = []; // 작성자 줄(프로필 사진·이름·아이디·날짜) — 번역하면 본문 대신 번역을 붙이므로 따로 기억
     for (const sel of conf.parts) {
       for (const p of box.querySelectorAll(sel)) {
         if (seen.has(p) || p.contains(el) || p.closest('smd-anchor')) continue;
-        const r = p.getBoundingClientRect();
+        const r = tightRect(p);
         if (r.width < 4 || r.height < 4) continue;
         seen.add(p);
         rects.push(r);
+        if (!p.matches(BODY_SEL)) heads.push(r);
         break; // 선택자마다 첫 번째 하나
       }
     }
     // 본문이 없는 게시물은 캡처하지 않는다
     if (!rects.length) return null;
     const br = box.getBoundingClientRect();
-    // 본문 글자 칸에 거의 딱 맞게(여백 2px) — 위아래 프로필 사진·이름이 끼지 않게
+    // 작성자 줄 + 본문 글자에 여백 없이 딱 맞게
     const union = (list) => list.length && {
-      left: Math.max(br.left, Math.min(...list.map((x) => x.left)) - 2),
+      left: Math.max(br.left, Math.min(...list.map((x) => x.left))),
       top: Math.min(...list.map((x) => x.top)),
-      right: Math.min(Math.max(br.right, vr.right), Math.max(...list.map((x) => x.right)) + 2),
-      bottom: Math.max(...list.map((x) => x.bottom)) + 2,
+      right: Math.min(Math.max(br.right, vr.right), Math.max(...list.map((x) => x.right))),
+      bottom: Math.max(...list.map((x) => x.bottom)),
     };
     const mid = (vr.top + vr.bottom) / 2;
     const above = union(rects.filter((r) => (r.top + r.bottom) / 2 < mid));
@@ -503,9 +524,63 @@
     };
     const parts = groups.map(clip).filter(Boolean);
     if (!parts.length) return null;
-    return { ...parts[0], rects: parts, vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio || 1 };
+    const hu = union(heads);
+    const head = hu ? clip(hu) : null;
+    return { ...parts[0], rects: parts, head, vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio || 1 };
   }
 
+  // 요소 상자가 아니라 실제 글자·그림이 차지한 범위(짧은 글 오른쪽 빈칸 등 여백 제외)
+  function tightRect(p) {
+    const list = [];
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(p);
+      for (const r of range.getClientRects()) if (r.width > 0.5 && r.height > 0.5) list.push(r);
+    } catch {}
+    for (const m of p.querySelectorAll('img, svg, video, canvas')) {
+      const r = m.getBoundingClientRect();
+      if (r.width > 4 && r.height > 4) list.push(r);
+    }
+    if (!list.length) return p.getBoundingClientRect();
+    // 숨긴(해시태그 등) 줄은 getClientRects 에 안 나온다
+    return {
+      left: Math.min(...list.map((r) => r.left)),
+      top: Math.min(...list.map((r) => r.top)),
+      right: Math.max(...list.map((r) => r.right)),
+      bottom: Math.max(...list.map((r) => r.bottom)),
+      get width() { return this.right - this.left; },
+      get height() { return this.bottom - this.top; },
+    };
+  }
+
+  // 본문 요소(작성자 줄이 아닌 것)
+  const BODY_SEL = `${TEXT_SEL}, h1, ._a9zs, #detail-title, .title, yt-shorts-video-title-view-model, #video-title, #title h1, [data-test-id="pin-closeup-title"], [data-test-id="closeup-title"], .video-title`;
+
+  // 화면 위쪽에 고정(position: fixed/sticky)된 사이트 요소가 덮는 높이(캡처 영역 가로 범위 안)
+  function topCover(r) {
+    let cover = 0;
+    const xs = [r.left + 8, (r.left + r.right) / 2, r.right - 8].map((x) => Math.min(innerWidth - 1, Math.max(0, x)));
+    for (const x of xs) {
+      for (let y = 2; y < innerHeight * 0.4; y += 12) {
+        const el = document.elementFromPoint(x, y);
+        if (!el || el.closest('smd-anchor, smd-toolbar, smd-follow, smd-bfollow, smd-ytstats')) break;
+        let fixed = null;
+        for (let p = el; p && p !== document.documentElement; p = p.parentElement) {
+          const pos = getComputedStyle(p).position;
+          if (pos === 'fixed' || pos === 'sticky') {
+            fixed = p;
+            break;
+          }
+        }
+        if (!fixed) break;
+        cover = Math.max(cover, fixed.getBoundingClientRect().bottom);
+        y = Math.max(y, fixed.getBoundingClientRect().bottom);
+      }
+    }
+    return Math.min(cover, innerHeight * 0.4);
+  }
+
+  const HASHTAG_SEL = 'a[href^="/hashtag/"], a[href*="/hashtag/"], a[href*="/explore/tags/"], a[href*="/tag/"], a[href*="search?q=%23"], a[href*="search?q=#"], a[href*="/search?q=%23"], a[href*="huati.weibo"], a[href*="/topic/"]';
   let shotStyle = null;
   async function hideButtonsForShot(on) {
     if (!on) {
@@ -514,7 +589,9 @@
       return;
     }
     shotStyle = document.createElement('style');
-    shotStyle.textContent = 'smd-anchor, smd-toolbar, smd-follow, smd-ytstats { visibility: hidden !important; }';
+    // 캡처에 넣지 않을 것: 다운로더 버튼들 + 해시태그(#…) 링크
+    shotStyle.textContent = `smd-anchor, smd-toolbar, smd-follow, smd-bfollow, smd-ytstats { visibility: hidden !important; }
+      ${HASHTAG_SEL} { display: none !important; }`;
     (document.head || document.documentElement).appendChild(shotStyle);
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   }
@@ -578,25 +655,22 @@
     //  ②·③ 게시물 전체 캡처를 표지·인트로로
     const wantText = settings.captionOnMedia !== false;
     const wantPost = entry.kind === 'video' && (settings.captionCover || settings.captionIntro);
-    let scrolled = 0;
     if (wantText || wantPost) {
-      // 글 부분이 화면 위로 잘려 있으면 잠깐 내려 보여 준 뒤 찍고 되돌린다
-      const tr0 = wantText ? textRect(video, true) : null;
-      if (tr0 && tr0.top < 0 && tr0.top > -innerHeight) {
-        scrolled = Math.round(tr0.top - 8);
-        scrollBy(0, scrolled);
-        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      }
+      // 버튼·해시태그를 먼저 숨긴 뒤(글 줄바꿈이 바뀌므로) 위치를 잰다. 페이지는 절대 스크롤하지 않는다.
+      await hideButtonsForShot(true);
       if (wantPost) req.shot = postRect(video);
-      if (wantText) req.textShot = textRect(video);
-      if (req.shot || req.textShot) await hideButtonsForShot(true);
-      else if (scrolled) scrollBy(0, -scrolled);
+      if (wantText) {
+        // 캡처할 부분이 화면 밖이거나 사이트 고정 머리줄(X 프로필 '이름 · 게시물 수' 줄 등)에 가려져 있으면
+        // 찍지 않고, 저장 엔진이 작성자 이름 + 본문 카드를 그려 넣는다
+        const tr0 = textRect(video, true);
+        const hidden = !tr0 || tr0.top < topCover(tr0) - 1 || tr0.bottom > innerHeight + 1 || tr0.top < 0;
+        req.textShot = hidden ? null : textRect(video);
+      }
+      if (!req.shot && !req.textShot) hideButtonsForShot(false);
     }
     const undoShot = () => {
       if (!req.shot && !req.textShot) return;
       hideButtonsForShot(false);
-      if (scrolled) scrollBy(0, -scrolled);
-      scrolled = 0;
     };
     let res;
     try {
