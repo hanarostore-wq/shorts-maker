@@ -653,23 +653,15 @@
     // 클릭한 순간의 화면을 찍어 둔다. 버튼은 잠깐 숨긴다.
     //  ① 피드 본문 글 캡처를 사진·영상 빈 공간에 붙이기
     //  ②·③ 게시물 전체 캡처를 표지·인트로로
-    const wantText = settings.captionOnMedia !== false;
     const wantPost = entry.kind === 'video' && (settings.captionCover || settings.captionIntro);
-    if (wantText || wantPost) {
-      // 버튼·해시태그를 먼저 숨긴 뒤(글 줄바꿈이 바뀌므로) 위치를 잰다. 페이지는 절대 스크롤하지 않는다.
+    // ① 은 화면을 찍지 않고 글자만 쓴다(본문은 req.captionText). ②·③ 만 게시물 화면을 찍는다.
+    if (wantPost) {
       await hideButtonsForShot(true);
-      if (wantPost) req.shot = postRect(video);
-      if (wantText) {
-        // 캡처할 부분이 화면 밖이거나 사이트 고정 머리줄(X 프로필 '이름 · 게시물 수' 줄 등)에 가려져 있으면
-        // 찍지 않고, 저장 엔진이 작성자 이름 + 본문 카드를 그려 넣는다
-        const tr0 = textRect(video, true);
-        const hidden = !tr0 || tr0.top < topCover(tr0) - 1 || tr0.bottom > innerHeight + 1 || tr0.top < 0;
-        req.textShot = hidden ? null : textRect(video);
-      }
-      if (!req.shot && !req.textShot) hideButtonsForShot(false);
+      req.shot = postRect(video);
+      if (!req.shot) hideButtonsForShot(false);
     }
     const undoShot = () => {
-      if (!req.shot && !req.textShot) return;
+      if (!req.shot) return;
       hideButtonsForShot(false);
     };
     let res;

@@ -832,15 +832,6 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
     const out = execFileSync('ffmpeg', ['-v', 'error', ...(ss ? ['-ss', String(ss)] : []), '-i', a, ...(ss ? ['-ss', String(ss)] : []), '-i', b, '-filter_complex', `[0:v]${crop},format=gray[x];[1:v]${crop},format=gray[y];[x][y]blend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-`, '-frames:v', '1', '-f', 'null', '-']).toString();
     return Number(/YAVG=([\d.]+)/.exec(out)?.[1] || 0);
   };
-  const boxDiff = (a, b, w, h, x0, x1, y0, y1, ss = 0) => {
-    // 두 영상/사진의 같은 사각형 영역 평균 차이(0~255)
-    const crop = `crop=${Math.round(w * (x1 - x0))}:${Math.round(h * (y1 - y0))}:${Math.round(w * x0)}:${Math.round(h * y0)}`;
-    const out = execFileSync('ffmpeg', ['-v', 'error', ...(ss ? ['-ss', String(ss)] : []), '-i', a, ...(ss ? ['-ss', String(ss)] : []), '-i', b, '-filter_complex', `[0:v]${crop},format=gray[x];[1:v]${crop},format=gray[y];[x][y]blend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-`, '-frames:v', '1', '-f', 'null', '-']).toString();
-    return Number(/YAVG=([\d.]+)/.exec(out)?.[1] || 0);
-  };
-  // 좌측 상단 작은 상자(예전 크기의 1/5: 가로 최대 20%, 세로 최대 3.6%)와 그 밖의 위쪽(오른쪽 절반)
-  const corner = (a, b, w, h, ss) => boxDiff(a, b, w, h, 0, 0.12, 0, 0.025, ss);
-  const topRight = (a, b, w, h, ss) => boxDiff(a, b, w, h, 0.3, 1, 0, 0.22, ss);
   // 사진
   {
     const page = await ctx.newPage();
@@ -855,12 +846,11 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       await page.locator('smd-anchor .btn.show').first().click();
       const saved = await waitFile(before, 30000);
       const orig = path.join(ROOT, 'tests/fixtures/media/images/photo.jpg');
-      const top = corner(orig, saved, 1600, 1000);
-      const right = topRight(orig, saved, 1600, 1000);
+      const top = bandDiff(orig, saved, 1600, 1000, 0.0, 0.08);
       const mid = bandDiff(orig, saved, 1600, 1000, 0.40, 0.60);
       const bottom = bandDiff(orig, saved, 1600, 1000, 0.76, 0.95);
       execFileSync('cp', [saved, path.join(SHOTS, 'caption-photo.jpg')]);
-      record('[요약] 사진 좌측 상단에 작게(1/5) 요약 글자, 나머지는 그대로', top > 1.5 && right < 0.5 && mid < 0.5 && bottom < 0.5, { note: `${path.basename(saved)} · 차이 좌상단 ${top.toFixed(1)} / 위 오른쪽 ${right.toFixed(1)} / 가운데 ${mid.toFixed(1)} / 아래 ${bottom.toFixed(1)}` });
+      record('[요약] 사진 왼쪽 위에 본문 글자, 가운데·아래는 그대로', top > 1 && mid < 0.5 && bottom < 0.5, { note: `${path.basename(saved)} · 차이 위 ${top.toFixed(1)} / 가운데 ${mid.toFixed(1)} / 아래 ${bottom.toFixed(1)}` });
     } catch (err) {
       record('[요약] 사진', false, { note: err.message.split('\n')[0] });
     } finally {
@@ -887,17 +877,16 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       const capped = added.find((f) => !/\(원본\)/.test(f));
       const original = added.find((f) => /\(원본\)/.test(f));
       const info = capped && probe(capped);
-      let top = 0, mid = 0, bottom = 0, right = 0;
+      let top = 0, mid = 0, bottom = 0;
       if (capped && original && info?.vcodec) {
-        top = corner(original, capped, 640, 360);
-        right = topRight(original, capped, 640, 360);
+        top = bandDiff(original, capped, 640, 360, 0.0, 0.08);
         mid = bandDiff(original, capped, 640, 360, 0.40, 0.60);
         bottom = bandDiff(original, capped, 640, 360, 0.76, 0.95);
         execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '1', '-i', capped, '-frames:v', '1', path.join(SHOTS, 'caption-video.png')]);
       }
-      const ok = !!info?.vcodec && info.width === 640 && info.height === 360 && !!info.acodec && info.duration > 5 && !!original && top > mid + 5 && Math.abs(bottom - mid) < 3 && Math.abs(right - mid) < 3;
+      const ok = !!info?.vcodec && info.width === 640 && info.height === 360 && !!info.acodec && info.duration > 5 && !!original && top > mid + 3 && Math.abs(bottom - mid) < 3;
       // 가운데·아래 차이는 다시 인코딩한 잡음 수준, 위쪽만 글자만큼 더 달라야 함
-      record('[요약] 영상 좌측 상단에 작게(1/5) 요약 글자(모든 프레임) + 원본도 함께 저장', ok, { note: `${capped ? path.basename(capped) : '없음'} (${info?.vcodec}+${info?.acodec}, ${info?.duration?.toFixed(1)}s) · 원본 ${original ? '있음' : '없음'} · 차이 좌상단 ${top.toFixed(1)} / 위 오른쪽 ${right.toFixed(1)} / 가운데 ${mid.toFixed(1)} / 아래 ${bottom.toFixed(1)}` });
+      record('[요약] 영상 왼쪽 위에 본문 글자(모든 프레임) + 원본도 함께 저장', ok, { note: `${capped ? path.basename(capped) : '없음'} (${info?.vcodec}+${info?.acodec}, ${info?.duration?.toFixed(1)}s) · 원본 ${original ? '있음' : '없음'} · 차이 위 ${top.toFixed(1)} / 가운데 ${mid.toFixed(1)} / 아래 ${bottom.toFixed(1)}` });
     } catch (err) {
       record('[요약] 영상', false, { note: err.message.split('\n')[0] });
     } finally {
@@ -1026,17 +1015,16 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       await pp.close();
       const capped = added.find((f) => !/\(원본\)/.test(f));
       const original = added.find((f) => /\(원본\)/.test(f));
-      let top = 0, bottom = 0, right = 0;
+      let top = 0, bottom = 0;
       if (capped && original) {
-        top = corner(original, capped, 640, 360, 3);
-        right = topRight(original, capped, 640, 360, 3);
+        top = bandDiff(original, capped, 640, 360, 0.03, 0.22, 3);
         bottom = bandDiff(original, capped, 640, 360, 0.76, 0.95, 3);
         execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '3', '-i', capped, '-frames:v', '1', path.join(SHOTS, 'caption-person.png')]);
       }
       const textOk = /한강에서 자전거/.test(h.captionUsed || '') && !/하리니|\/ X/.test(h.captionUsed || '');
-      record('[요약①] 피드 본문 글만 캡처해 영상에 붙임', /^\[피드 글 캡처\]/.test(h.captionUsed || '') && !h.warning, { note: `${h.captionUsed} · 안내: ${h.warning || '없음'}` });
+      record('[요약①] 피드 본문 글자만 왼쪽 위에', /^\[피드 글\] 오늘 한강/.test(h.captionUsed || '') && !/하리니/.test(h.captionUsed || '') && !h.warning, { note: `${h.captionUsed} · 안내: ${h.warning || '없음'}` });
       record('[요약] 탭 제목·아이디가 아니라 게시물 본문을 요약', textOk, { note: `넣은 글자: ${h.captionUsed || '(없음)'}` });
-      record('[요약①] 캡처는 좌측 상단에 작게(1/5), 나머지는 그대로', top > 3 && bottom < top / 3 && right < top / 3, { note: `차이 좌상단 ${top.toFixed(1)} / 위 오른쪽 ${right.toFixed(1)} / 아래 ${bottom.toFixed(1)}` });
+      record('[요약①] 캡처는 항상 화면 맨 위에 바짝(아래는 그대로)', top > 3 && bottom < top / 3, { note: `차이 위 ${top.toFixed(1)} / 아래 ${bottom.toFixed(1)}` });
     } catch (err) {
       record('[요약] 본문·위치', false, { note: err.message.split('\n')[0] });
     }
@@ -1061,7 +1049,7 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       const h = await pp.evaluate(async () => (await chrome.storage.local.get('history')).history?.[0] || {});
       await pp.close();
       if (saved) execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '3', '-i', saved, '-frames:v', '1', path.join(SHOTS, 'caption-stacked.png')]);
-      record('[요약①] 본문이 영상 아래에 있어도(작성자는 영상 위) 본문만 캡처', /^\[피드 글 캡처\]/.test(h.captionUsed || '') && /바다/.test(h.captionUsed || '') && !h.warning, { note: `${h.captionUsed || '(없음)'} · 안내: ${h.warning || '없음'}` });
+      record('[요약①] 본문이 영상 아래에 있어도 본문 글자만', /^\[피드 글\]/.test(h.captionUsed || '') && !/민지/.test(h.captionUsed || '') && /바다/.test(h.captionUsed || '') && !h.warning, { note: `${h.captionUsed || '(없음)'} · 안내: ${h.warning || '없음'}` });
     } catch (err) {
       record('[요약①] 위·아래 이어 붙인 캡처', false, { note: err.message.split('\n')[0] });
     }
@@ -1089,9 +1077,9 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       await pp.close();
       if (expectOk) {
         if (saved) execFileSync('cp', [saved, path.join(SHOTS, 'caption-translated.jpg')]);
-        record('[번역] 한국어가 아닌 피드 글은 캡처 아래에 한국어 번역을 붙임', /^\[피드 글 캡처\+번역\]/.test(h.captionUsed || '') && /해변/.test(h.captionUsed || '') && !h.warning, { note: `${saved ? path.basename(saved) : '저장 안 됨'} · ${h.captionUsed || '(없음)'} · 안내: ${h.warning || '없음'}` });
+        record('[번역] 한국어가 아닌 피드 글은 한국어 번역만(원문 없음)', /^\[피드 글\+번역\]/.test(h.captionUsed || '') && /해변/.test(h.captionUsed || '') && !/sunset/i.test(h.captionUsed || '') && !h.warning, { note: `${saved ? path.basename(saved) : '저장 안 됨'} · ${h.captionUsed || '(없음)'} · 안내: ${h.warning || '없음'}` });
       } else {
-        record('[번역] 번역 실패 시 원문 캡처 + 단계·원인·조치 안내', !!saved && /^\[피드 글 캡처\]/.test(h.captionUsed || '') && /번역 실패\(번역 단계\)/.test(h.warning || '') && /HTTP 500/.test(h.warning || ''), { note: `${h.captionUsed || '(없음)'} · 안내: ${h.warning || '없음'}` });
+        record('[번역] 번역 실패 시 원문 글자 + 단계·원인·조치 안내', !!saved && /^\[피드 글\]/.test(h.captionUsed || '') && /번역 실패\(번역 단계\)/.test(h.warning || '') && /HTTP 500/.test(h.warning || ''), { note: `${h.captionUsed || '(없음)'} · 안내: ${h.warning || '없음'}` });
       }
     } catch (err) {
       record(`[번역] ${path_}`, false, { note: err.message.split('\n')[0] });
@@ -1126,7 +1114,7 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       }
       let red = -1, green = -1, pink = -1, w = 0, hh = 0;
       if (saved) {
-        const raw = execFileSync('ffmpeg', ['-v', 'error', '-i', saved, '-vf', 'crop=iw*0.2:ih*0.05:0:0', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']);
+        const raw = execFileSync('ffmpeg', ['-v', 'error', '-i', saved, '-vf', 'crop=iw:ih*0.15:0:0,scale=320:-1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']);
         red = green = pink = 0;
         for (let i = 0; i < raw.length; i += 3) {
           const [r, g, b] = [raw[i], raw[i + 1], raw[i + 2]];
@@ -1139,10 +1127,9 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       const h = await pp.evaluate(async () => (await chrome.storage.local.get('history')).history?.[0] || {});
       await pp.close();
       if (saved) execFileSync('cp', [saved, path.join(SHOTS, `caption-${expectShot ? 'tight' : 'card'}.jpg`)]);
-      const ok = expectShot
-        ? /^\[피드 글 캡처\]/.test(h.captionUsed || '') && red < 20 && green < 5 && pink > 20
-        : /^\[피드 카드\]/.test(h.captionUsed || '') && red < 20 && green < 5 && !/초록해시태그/.test(h.captionUsed || '');
-      record(`[요약①] ${label}: ${expectShot ? '작성자 줄+본문 캡처(해시태그 제외)' : '스크롤 없이 카드로 대신'}, 페이지 스크롤 안 함`, !!saved && ok && moved === 0, { note: `${h.captionUsed || '(없음)'} · 빨강 ${red} · 초록 ${green} · 프로필 ${pink} · 스크롤 변화 ${moved}` });
+      // 화면 캡처 없이 본문 글자만(작성자·해시태그 없음), 페이지 스크롤 안 함
+      const ok = /^\[피드 글\] 장어 덮밥 먹고 힘내요$/.test(h.captionUsed || '') && red < 20 && green < 5 && pink < 5;
+      record(`[요약①] ${label}: 본문 글자만(작성자·해시태그 제외), 페이지 스크롤 안 함`, !!saved && ok && moved === 0, { note: `${h.captionUsed || '(없음)'} · 빨강 ${red} · 초록 ${green} · 프로필 ${pink} · 스크롤 변화 ${moved}` });
     } catch (err) {
       record(`[요약①] ${label}`, false, { note: err.message.split('\n')[0] });
     }
