@@ -5,8 +5,25 @@ Set-StrictMode -Version Latest
 $desktop = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not (Test-Path (Join-Path $desktop 'package-lock.json'))) { throw 'Run this script from a complete shorts-maker checkout.' }
 if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw 'Node.js and npm are required.' }
-Write-Host 'Enter the social access key shown in the private Manus key file. It will not appear on screen.'
-$secureKey = Read-Host 'Social access key' -AsSecureString
+$settingsDir = Join-Path $env:LOCALAPPDATA 'ShortsMakerControlRoom'
+$keyFile = Join-Path $settingsDir 'social-key.dpapi'
+$secureKey = $null
+if (Test-Path $keyFile) {
+    try {
+        $secureKey = Get-Content -Raw -Encoding UTF8 $keyFile | ConvertTo-SecureString
+        Write-Host 'Using the saved social access key for this Windows account.'
+    } catch {
+        Write-Warning 'The saved key cannot be opened. A new key is needed.'
+    }
+}
+if ($null -eq $secureKey) {
+    Write-Host 'Enter the social access key shown in the private Manus key file. It will not appear on screen.'
+    $secureKey = Read-Host 'Social access key' -AsSecureString
+    if ($secureKey.Length -eq 0) { throw 'Social access key cannot be empty.' }
+    if (-not (Test-Path $settingsDir)) { New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null }
+    # ConvertFrom-SecureString uses Windows DPAPI for the current user, not plaintext.
+    $secureKey | ConvertFrom-SecureString | Set-Content -Encoding UTF8 $keyFile
+}
 $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
 try {
     $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)

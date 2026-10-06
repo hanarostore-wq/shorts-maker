@@ -31,6 +31,8 @@
 
 PC 작업자의 `fetch failed` 로그에 대응하기 위해 서버 통신을 [Electron 공식 `net.fetch`](https://www.electronjs.org/docs/latest/api/net#netfetchinput-init)로 변경했다. 이 API는 Chromium 네트워크와 시스템 프록시를 사용한다. PC에서 실제 네트워크 재시험은 아직 필요하다.
 
+2026-10-06 Windows 재시험에서는 `net::ERR_CONNECTION_CLOSED`와 `net::ERR_HTTP2_PROTOCOL_ERROR`가 발생했지만 동일 PC의 `curl.exe`는 인증 없는 API에서 HTTP 401을 정상 수신했다. 따라서 Electron 경로가 실패한 경우 `curl.exe`를 표준입력 설정으로 호출하는 대체 경로를 추가했다. 실제 PC 재시험 결과는 아직 확인되지 않았다. 접근키는 명령행 인자나 임시 파일에 기록하지 않으며 PC 재실행 시 키는 사용자별 DPAPI 암호화 파일로만 유지한다.
+
 ## 차이와 확인 필요
 
 - **현재 웹판은 원본 Electron 프로그램의 기능 전체 복제품이 아니다.** Codex CLI 원고 자동 생성, PDF/HWP OCR, 이미지 생성, 다중 프로필 분리, Threads의 RSS/상품 수집/자동 댓글·분석 및 Meta 토큰 자동 갱신은 원본 전체 프로그램에서 제공되며 웹 콘솔에는 옮기지 않았다. 사용자는 블로그부서 카드에서 PC용 원본 앱을 별도 창으로 실행할 수 있다.
