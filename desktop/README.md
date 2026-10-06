@@ -18,7 +18,10 @@ npm run start:local  # 로컬 관제실(http://localhost:3000)에 접속
 
 Windows에서는 저장소에 들어 있는 `start-social.ps1`을 쓰면 내려받은 임시
 Downloads 스크립트의 위치에 의존하지 않습니다. 소셜 접근키를 화면에 표시하지
-않고 받아서 데스크톱 브라우저와 예약 작업자를 함께 실행합니다.
+않고 받아 Windows 사용자별 DPAPI 암호화 파일(`%LOCALAPPDATA%\ShortsMakerControlRoom\social-key.dpapi`)에
+보관해 다음 실행부터 재입력을 생략합니다. 이 파일을 삭제하면 키를 다시 묻습니다.
+서버 연결에 Electron HTTP/2 오류가 나면 통신 내용을 파일이나 명령줄에 쓰지 않고
+Windows `curl.exe` 표준입력으로 전달해 재시도합니다.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\Main\shorts-maker-social\desktop\start-social.ps1"

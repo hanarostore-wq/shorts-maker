@@ -1,8 +1,9 @@
-const { WebContentsView, session, net } = require("electron");
+const { WebContentsView, session } = require("electron");
 const { CAPTURE_SOURCE } = require("./capture");
 const { planTask, siteOf } = require("./planner");
 const { runBrowserAgent } = require("./browserAgent");
 const { publishNaverBlog } = require("./naverBlogPublisher");
+const { callApi } = require("./httpClient");
 
 // 관제실에서 작업을 하나씩 꺼내와 실제 브라우저로 수행하는 워커.
 //
@@ -83,23 +84,6 @@ async function captureAllFrames(view) {
   if (frames.length === 0) return null;
   const main = frames.find((f) => f.isTopFrame) ?? frames[0];
   return { url: main.url, html: main.html, frames };
-}
-
-/** 관제실 API 호출 도우미. */
-async function callApi(controlUrl, path, method, body) {
-  const res = await net.fetch(`${controlUrl}${path}`, {
-    method,
-    headers: { "Content-Type": "application/json", ...(process.env.SOCIAL_CONTROL_KEY ? { "x-social-control-key": process.env.SOCIAL_CONTROL_KEY } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  let data = null;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(`서버 응답을 읽지 못했습니다 (상태 ${res.status})`);
-  }
-  return { ok: res.ok, status: res.status, data };
 }
 
 /**

@@ -1,6 +1,6 @@
 const { OBSERVE_SOURCE, buildActSource } = require("./observe");
 const { createClient, decideNext, renderObservation } = require("./brain");
-const { net } = require("electron");
+const { callApi } = require("./httpClient");
 
 // 화면을 보고 → 무엇을 할지 판단하고 → 실행하고 → 다시 보는 순환.
 //
@@ -64,12 +64,8 @@ async function act(view, action) {
 }
 
 async function callGate(controlUrl, taskId, action) {
-  const res = await net.fetch(`${controlUrl}/api/agent/gate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ taskId, action }),
-  });
-  return res.json();
+  const response = await callApi(controlUrl, "/api/agent/gate", "POST", { taskId, action });
+  return response.data;
 }
 
 function siteOf(url) {
