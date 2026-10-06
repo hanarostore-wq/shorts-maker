@@ -1,133 +1,59 @@
-# 운영본부 브라우저 (데스크톱)
+# MoneyOS 블로그부서 데스크톱 실행기
 
-운영본부 관제실이 **닫을 수 없는 첫 번째 고정 탭**으로 내장된 업무용 브라우저입니다.
-담당자가 평소처럼 쇼핑몰·판매자센터에 로그인해서 쓰면, 그 세션 위에서
-에이전트가 일하게 됩니다.
+MoneyOS 관제실을 첫 고정 탭으로 열고, **제공된 원본 프로그램 전체를 별도 Electron 창으로 실행**합니다.
 
-## 실행
+- 네이버블로그: [boksajang/naverblog-extention](https://github.com/boksajang/naverblog-extention)
+- 쓰레드: [boksajang/threads-auto](https://github.com/boksajang/threads-auto)
 
-```bash
-cd desktop
-npm install
+두 앱의 생성·예약·발행·Chrome 확장·계정·로컬 데이터 기능을 웹 큐로 축소하거나 다시 만들지 않습니다. MoneyOS 변경 범위는 **실행 진입점과 CSS·창 크롬 디자인**뿐입니다.
 
-npm start          # 배포된 관제실에 접속
-npm run start:local  # 로컬 관제실(http://localhost:3000)에 접속
-```
+## Windows 최초 실행
 
-`CONTROL_URL` 환경변수로 관제실 주소를 바꿀 수 있습니다.
-
-Windows에서는 저장소에 들어 있는 `start-social.ps1`을 쓰면 내려받은 임시
-Downloads 스크립트의 위치에 의존하지 않습니다. 소셜 접근키를 화면에 표시하지
-않고 받아 Windows 사용자별 DPAPI 암호화 파일(`%LOCALAPPDATA%\ShortsMakerControlRoom\social-key.dpapi`)에
-보관해 다음 실행부터 재입력을 생략합니다. 이 파일을 삭제하면 키를 다시 묻습니다.
-서버 연결에 Electron HTTP/2 오류가 나면 통신 내용을 파일이나 명령줄에 쓰지 않고
-Windows `curl.exe` 표준입력으로 전달해 재시도합니다.
+Node.js `24.15 이상 25 미만` 또는 `26 이상`, Git, npm을 준비합니다. 저장소를 받은 뒤 아래 하나만 실행합니다.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\Main\shorts-maker-social\desktop\start-social.ps1"
 ```
 
-### 제공된 원본 프로그램 전체 설치
+원본 두 앱이 아직 없으면 이 스크립트가 다음을 자동 실행합니다.
 
-블로그부서 카드의 **BlogAuto 전체 실행**·**Threads Auto 전체 실행** 버튼은 별도 창에
-원본 Electron 앱 전체를 시작합니다. 원본 소스는 공용 웹 빌드에 복사하지 않고
-`source-apps.json`의 고정 커밋을 PC의 `desktop/apps/` 아래로 그대로 내려받습니다.
-원본 코드를 줄여서 이식하거나 기존 기능을 생략하지 않습니다.
+1. `desktop/apps/naverblog-extention`에 BlogAuto 원본 저장소 전체를 고정 커밋으로 복제
+2. `desktop/apps/threads-auto`에 Threads Auto 원본 저장소 전체를 고정 커밋으로 복제
+3. 각 원본이 요구하는 `npm ci` 또는 `npm run setup` 실행
+4. 원본 화면에 MoneyOS CSS 파일과 stylesheet 링크만 적용
+5. MoneyOS 관제실 데스크톱 셸 실행
 
-Windows에서 Node.js `24.15 이상 25 미만` 또는 `26 이상`, Git, npm을 준비한 뒤:
+관제실의 **블로그부서 → 네이버블로그 또는 쓰레드 → 전체 실행** 버튼을 누르면 각 원본 앱이 별도 창으로 열립니다. 시작 스크립트는 별도의 소셜 작업자나 접근키를 실행하지 않습니다.
+
+## 원본 앱별 설정
+
+| 앱 | 원본 안에서 직접 설정할 항목 |
+| --- | --- |
+| BlogAuto | 블로그 계정, 일반 Chrome 로그인, BlogAuto Chrome 확장 연결, Codex CLI |
+| Threads Auto | Threads 장기 토큰, 계정 성격·운영 계획, Codex CLI, 필요 시 YouTube·쿠팡·네이버 브랜드커넥트 키와 Chrome 확장 |
+
+Chrome 확장과 로그인 세션은 Chrome을 기준으로 합니다. 웨일은 MoneyOS 웹 관제실을 여는 용도로는 사용할 수 있지만, 원본 앱이 요구하는 Chrome 확장·네이티브 연결을 대신하지 않습니다.
+
+## 소스 고정과 디자인 적용
+
+`source-apps.json`에는 두 원본의 검증한 Git 커밋이 기록돼 있습니다. `install-full-source.ps1`은 기능 파일에 사용자가 수정한 흔적이 있으면 덮어쓰지 않습니다. 허용되는 변경은 아래 디자인 파일뿐입니다.
+
+- `src/renderer/moneyos.css`
+- 원본 HTML의 MoneyOS stylesheet 링크
+- `.moneyos-theme.json`
+
+따라서 MoneyOS 테마 갱신은 원본의 Electron main process, IPC, 데이터베이스, 발행·예약·Codex·확장프로그램 로직을 바꾸지 않습니다.
+
+## 직접 원본 앱 실행
+
+MoneyOS 셸 없이도 원본 앱을 실행할 수 있습니다.
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install-full-source.ps1
+# BlogAuto
+cd "$env:USERPROFILE\Desktop\Main\shorts-maker-social\desktop\apps\naverblog-extention"
+npm.cmd start
+
+# Threads Auto — 다른 PowerShell 창
+cd "$env:USERPROFILE\Desktop\Main\shorts-maker-social\desktop\apps\threads-auto"
+npm.cmd start
 ```
-
-설치 후 이 브라우저를 다시 시작하고 블로그부서 직원 카드의 전체 실행 버튼을 누르세요.
-**웹 예약 원고/토큰과 원본 앱의 로컬 데이터는 서로 자동 동기화되지 않습니다.**
-원본 블로그 앱은 별도 Chrome 계정 프로필과 확장프로그램을 직접 연결하며,
-Threads Auto는 자신의 Meta 토큰·소재 수집 확장프로그램을 따로 설정합니다.
-관제실 화면만 열거나 원고를 입력하는 것은 웨일에서도 가능합니다.
-원본 앱의 Chrome 연동을 웨일 로그인 세션으로 대체하는 기능은 검증되지 않았습니다.
-
-## 구조
-
-| 파일 | 역할 |
-| --- | --- |
-| `main.js` | 창·탭 관리. 탭은 `WebContentsView`로 크롬 영역 아래에 붙는다 |
-| `preload.js` | 셸 UI ↔ main 프로세스 IPC 통로 |
-| `renderer/` | 탭 바·주소창·에이전트 상태줄 (셸 UI). 실제 페이지는 여기 안에 있지 않다 |
-| `agent/runtime.js` | 관제실에서 작업을 꺼내와 실행하는 워커 |
-| `agent/observe.js` | 화면 구조를 AI가 읽을 수 있는 목록으로 뽑아냄 |
-| `agent/brain.js` | 화면을 보고 다음 동작을 고르는 부분 (Claude) |
-| `agent/browserAgent.js` | 관찰 → 판단 → 실행 순환과 승인 관문 |
-| `agent/planner.js` | API 키가 없을 때 쓰는 주소 기반 수집 |
-| `agent/capture.js` | 페이지 안에서 실행되는 수집 스크립트 |
-
-## 에이전트 워커
-
-앱이 켜져 있는 동안 5초마다 관제실에서 작업을 하나씩 꺼내와 실행합니다.
-담당자 화면을 가리지 않도록 창에 붙지 않은 별도 뷰에서 페이지를 엽니다.
-
-수집은 **바깥 페이지와 그 안의 iframe을 모두** 훑습니다. 한국 쇼핑몰은
-상세설명을 별도 iframe에 두는 경우가 많아 바깥만 봐서는 찾을 수 없습니다.
-사이트별 파싱 규칙은 앱이 아니라 서버(`src/lib/siteProfiles.ts`)에 있습니다 —
-규칙을 고칠 때 앱을 다시 배포하지 않아도 되도록 한 것으로, 기존
-확장프로그램과 같은 구조입니다.
-
-### AI가 화면 구조를 직접 분석합니다
-
-우리가 쿠팡·스마트스토어 화면 구조를 미리 알지 못해도 됩니다.
-
-1. **관찰** — 지금 화면에서 사람이 조작할 수 있는 것들을 번호 붙인 목록으로
-   뽑습니다. HTML 원본을 통째로 넘기면 토큰이 크고 정작 중요한 게 묻히므로,
-   버튼·링크·입력칸과 화면에 보이는 글만 추립니다.
-2. **판단** — 그 목록을 보고 모델이 다음에 무엇을 할지 고릅니다.
-3. **실행** — 고른 번호로 바로 조작합니다. 요소를 페이지 안 배열에 그대로
-   들고 있다가 번호로 집기 때문에, 셀렉터를 추측하다 엉뚱한 걸 누르는 일이
-   없습니다.
-4. 실행 후 화면이 바뀌므로 **다시 관찰**합니다. 번호는 매 화면마다 새로
-   매겨집니다.
-
-`ANTHROPIC_API_KEY`가 필요합니다. 키가 없으면 주소가 적힌 수집 지시만
-처리하는 예전 방식으로 동작합니다.
-
-로그인 화면이 나오면 에이전트는 진행하지 않고 담당자를 부릅니다.
-비밀번호 입력칸은 목록에 이름만 올라가고 값은 읽지도 넣지도 않습니다.
-
-### 확정 동작은 두 겹으로 막습니다
-
-1. 모델이 되돌리기 어려운 동작을 하려면 `commit` 도구로 먼저 승인을 받게
-   되어 있습니다.
-2. **모델이 그걸 건너뛰어도**, 누르려는 것이 "발주확인 확정"·"결제하기"처럼
-   확정을 뜻하는 **버튼**이면 관문을 강제로 거칩니다. 안전장치를 모델의
-   판단에만 맡기지 않기 위한 것입니다.
-
-링크(`<a href>`)는 대체로 화면 이동일 뿐이라 막지 않습니다. 글자만 보고
-링크까지 막으면 에이전트가 발주 화면에 들어가지도 못해 업무 자체가
-불가능해집니다. 확정은 버튼에서 일어납니다.
-
-승인 하나는 바로 다음 조작 한 번만 열어 줍니다. 한 번 승인으로 그 뒤 모든
-클릭이 열리지 않습니다.
-
-### 로그인 세션
-
-모든 탭이 `persist:unyoung` 영속 파티션을 공유합니다. 앱을 껐다 켜도
-로그인이 유지되고, **자격증명을 코드나 환경변수로 들고 있지 않습니다.**
-에이전트는 사람이 이미 로그인해 둔 세션을 그대로 씁니다.
-
-### 보안상 중요한 점
-
-탭 안에 로드되는 외부 사이트에는 `preload.js`가 **붙지 않습니다.**
-붙이면 아무 쇼핑몰 페이지나 앱 내부 기능(탭 조작 등)을 호출할 수 있게 됩니다.
-외부 콘텐츠용 뷰는 `sandbox: true`, `nodeIntegration: false`로 생성됩니다.
-
-## 승인 정책
-
-되돌리기 어려운 동작(발주·결제·메시지 발송·상품 등록/수정)은 관제실의
-승인 관문(`/api/agent/gate`)을 반드시 거칩니다. 자세한 규칙은
-`src/lib/agent/policy.ts`를 참고하세요.
-
-핵심 두 가지:
-
-- **쓰기 동작은 기본 잠금.** 관제실에서 명시적으로 켜기 전까지 자동 실행되지 않습니다.
-- **일일 누적 상한이 있습니다.** 임계값 아래 동작을 반복해서 큰 금액이
-  자동으로 빠져나가는 것을 막습니다. (예: 5만원 임계값 + 20만원 일일 상한 →
-  4만원 결제는 5건까지만 자동, 6건째부터 승인 대기)
