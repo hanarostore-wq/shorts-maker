@@ -1,6 +1,6 @@
 "use client";
 import {TradingAnalyticsPanel} from "./TradingAnalyticsPanel";
-import { SocialControlPanel } from "./SocialControlPanel";
+import { OriginalAppsPanel } from "./OriginalAppsPanel";
 import { BlogReadyPanel } from "./BlogReadyPanel";
 import { BlogResearchPanel } from "./BlogResearchPanel";
 import { AdsensePanel } from "./AdsensePanel";
@@ -73,8 +73,8 @@ export function AgentDetailModal({
         {tool === "liveTrading" && <LiveTradingPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
         {tool === "blogReady" && <BlogReadyPanel />}
         {tool === "blogResearch" && <BlogResearchPanel />}
-        {tool === "naverBlog" && <SocialControlPanel platform="naver" />}
-        {tool === "threads" && <SocialControlPanel platform="threads" />}
+        {tool === "naverBlog" && <OriginalAppsPanel platform="naver" />}
+        {tool === "threads" && <OriginalAppsPanel platform="threads" />}
         {tool === "adsense" && <AdsensePanel />}
         {tool === "shortsStudio" && (
           <div className="control-room-panel flex flex-col gap-3 p-4">

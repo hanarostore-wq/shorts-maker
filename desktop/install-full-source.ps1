@@ -24,8 +24,22 @@ foreach ($name in @('naver', 'threads')) {
     }
     $origin = (& git -C $directory remote get-url origin).Trim()
     if ($origin -ne $spec.repository) { throw "Unexpected source repository for $name. Refusing to run it." }
-    $changes = & git -C $directory status --porcelain
-    if ($changes) { throw "Local edits found in $directory. Refusing to overwrite them." }
+    # MoneyOS only appends a renderer CSS file and a stylesheet link. Preserve every
+    # upstream behavior file and refuse to touch user edits outside those visual files.
+    $themeHtml = if ($name -eq 'naver') { 'src/renderer/index.html' } else { 'index.html' }
+    $allowedThemeFiles = @($themeHtml, 'src/renderer/moneyos.css', '.moneyos-theme.json')
+    $changes = @(& git -C $directory status --porcelain)
+    $unexpected = @()
+    foreach ($change in $changes) {
+        $changedPath = $change.Substring(3).Trim()
+        if ($changedPath -notin $allowedThemeFiles) { $unexpected += $changedPath }
+    }
+    if ($unexpected.Count -gt 0) { throw "Local functional edits found in $directory. Refusing to overwrite: $($unexpected -join ', ')" }
+    if ($changes.Count -gt 0) {
+        & git -C $directory restore --staged --worktree -- $themeHtml
+        if ($LASTEXITCODE -ne 0) { throw "Unable to reset prior MoneyOS CSS link: $name" }
+        Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $directory 'src/renderer/moneyos.css'), (Join-Path $directory '.moneyos-theme.json')
+    }
     & git -C $directory fetch origin
     if ($LASTEXITCODE -ne 0) { throw "Fetch failed: $name" }
     & git -C $directory checkout --detach $spec.commit
@@ -34,10 +48,12 @@ foreach ($name in @('naver', 'threads')) {
     if ($actual -ne $spec.commit) { throw "Source commit did not match manifest: $name" }
     Push-Location $directory
     try {
-        if ($name -eq 'naver') { & npm.cmd ci --no-audit --no-fund }
-        else { & npm.cmd run setup }
-        if ($LASTEXITCODE -ne 0) { throw "Dependency setup failed: $name" }
+      if ($name -eq 'naver') { & npm.cmd ci --no-audit --no-fund }
+      else { & npm.cmd run setup }
+      if ($LASTEXITCODE -ne 0) { throw "Dependency setup failed: $name" }
     } finally { Pop-Location }
-    Write-Host "$name complete source installed at $actual"
+    & node (Join-Path $desktop 'moneyos-theme/apply-moneyos-theme.js') --root $directory --kind $name
+    if ($LASTEXITCODE -ne 0) { throw "MoneyOS visual overlay failed: $name" }
+    Write-Host "$name complete original source installed at $actual with MoneyOS visual overlay"
 }
-Write-Host 'Both original programs are installed. Restart the control-room desktop browser and use the full-program launch buttons in the Blog department.'
+Write-Host 'Both original programs are installed. Only renderer CSS and a stylesheet link were changed; original automation behavior remains intact.'

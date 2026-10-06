@@ -2,14 +2,13 @@ const { app, BrowserWindow, WebContentsView, ipcMain, session, shell } = require
 const path = require("node:path");
 const fs = require("node:fs");
 const { spawn } = require("node:child_process");
-const { startAgentRuntime, stopAgentRuntime } = require("./agent/runtime");
 
 // 관제실 주소. 배포본을 그대로 쓰되, 로컬 개발 중엔 CONTROL_URL로 바꿔 띄운다.
 const CONTROL_URL = process.env.CONTROL_URL || "https://shorts-maker-omega.vercel.app";
 
-// 로그인 세션이 앱을 껐다 켜도 유지되도록 영속 파티션을 쓴다. 이게 이
-// 브라우저의 핵심이다 — 에이전트는 담당자가 이미 로그인해 둔 세션 위에서
-// 일한다. 자격증명을 코드나 환경변수로 들고 있지 않는다.
+// MoneyOS 관제실과 일반 탭의 로그인 세션을 앱 종료 뒤에도 유지한다.
+// 블로그부서의 실제 자동화는 이 셸에서 재구현하지 않고, 원본 BlogAuto·
+// Threads Auto Electron 앱이 각자의 로컬 저장소와 Chrome 연결을 사용한다.
 const PARTITION = "persist:unyoung";
 
 const CHROME_HEIGHT = 106; // 탭 바 + 주소창 + 에이전트 상태줄 (renderer/index.html과 맞춰야 함)
@@ -206,26 +205,6 @@ app.whenReady().then(() => {
   const home = createTab(CONTROL_URL, { pinned: true });
   activateTab(home.id);
 
-  // 관제실에서 내려온 작업을 실제로 수행하는 워커. 담당자가 로그인해 둔
-  // 세션을 그대로 쓰도록 탭과 같은 파티션을 넘긴다.
-  startAgentRuntime({
-    controlUrl: CONTROL_URL,
-    partition: PARTITION,
-    // 지시에 주소가 적혀 있으면 거기서, 없으면 담당자가 지금 보고 있는
-    // 화면에서 이어서 시작한다. 관제실 탭은 업무 화면이 아니므로 뺀다.
-    getStartUrl: (instruction) => {
-      const inUrl = String(instruction || "").match(/https?:\/\/[^\s,]+/);
-      if (inUrl) return inUrl[0];
-      const active = tabs.find((t) => t.id === activeTabId);
-      const url = active?.view.webContents.getURL() ?? "";
-      return url && !isControlUrl(url) ? url : null;
-    },
-    log: (message) => {
-      console.log(`[agent] ${message}`);
-      if (win && !win.isDestroyed()) win.webContents.send("agent:log", message);
-    },
-  });
-
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -234,8 +213,6 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
-
-app.on("before-quit", stopAgentRuntime);
 
 // --- 셸(renderer)이 부르는 기능들 ---
 

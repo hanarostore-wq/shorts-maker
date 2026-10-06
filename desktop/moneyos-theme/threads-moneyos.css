@@ -1,0 +1,36 @@
+/* MoneyOS visual overlay for the upstream Threads Auto renderer.
+   It is appended after the upstream stylesheet; no workflow or data code changes. */
+:root{
+  --bg:#05080c;
+  --surface:#0a1118;
+  --surface-alt:#101b27;
+  --border:#22384b;
+  --text:#e7f3ff;
+  --muted:#8ca3b9;
+  --primary:#00d9ff;
+  --primary-dark:#008db5;
+  --success:#36e79d;
+  --warning:#ffca57;
+  --danger:#ff7085;
+  --focus:#00d9ff;
+  --success-soft:#0d2b25;
+  --money-grid:rgba(0,217,255,.042);
+}
+html,body{background:#05080c;color:var(--text);font-family:"Pretendard","Malgun Gothic","Segoe UI",system-ui,sans-serif}
+body{background:linear-gradient(90deg,var(--money-grid) 1px,transparent 1px) 0 0/28px 28px,linear-gradient(var(--money-grid) 1px,transparent 1px) 0 0/28px 28px,radial-gradient(circle at 87% 0,rgba(0,217,255,.12),transparent 30%),var(--bg)}
+.app-shell{grid-template-columns:250px minmax(0,1fr)}
+.sidebar{background:linear-gradient(180deg,#07121c,#060b11);border-right-color:#1c425b;box-shadow:8px 0 25px #0008}
+.brand{height:84px;border-bottom-color:#1c425b;padding:16px}
+.brand-mark{border-radius:3px;background:linear-gradient(135deg,#00d9ff,#00a77c);color:#031921;box-shadow:0 0 22px #00d9ff48}
+.brand div::after{content:"MONEYOS / THREADS OPS";margin-top:4px;color:#6ca4c5;font:700 9px/1 Consolas,monospace;letter-spacing:.11em}
+.brand small{display:none}.sidebar nav{padding:14px 10px;gap:6px}.sidebar nav button{border:1px solid transparent;border-radius:2px;color:#86a4b9;padding:10px 11px}.sidebar nav button:hover{border-color:#1d4a65;background:#0d1d2b;color:#d7f2ff}.sidebar nav button.active{box-shadow:inset 3px 0 #00d9ff;border-color:#295c79;background:#10293c;color:#e6f7ff}.dot.success{box-shadow:0 0 13px #36e79d88}
+main{background:linear-gradient(180deg,#071019c9,#05080c)}
+.statusbar{min-height:50px;border-bottom-color:#1f435b;background:#08131d;padding:8px 25px;color:#b4cfdf;font-family:Consolas,"Malgun Gothic",sans-serif;font-size:11px}.statusbar::before{content:"THREADS AUTO // 원본 엔진";color:#00d9ff;letter-spacing:.1em}.divider{background:#24445c}.codex-install{border-radius:2px;border-color:#2c586f;background:#0b1d29}.codex-install.installed{border-color:#1e7856;color:#77f5c0;background:#0c2a23}
+.page-header{padding:24px 30px 16px;border-bottom:1px solid #17354a;background:linear-gradient(90deg,#08141f,#0a1018)}.page-header h1{font-family:Consolas,"Malgun Gothic",sans-serif;font-size:20px;letter-spacing:.07em;color:#e9f7ff}.page-header h1::before{content:"// ";color:#00d9ff}.page-header p,.section-note{color:#7198ae}.page-body{padding:20px 30px 34px;gap:14px}
+button{border-radius:2px;border-color:#315570;background:#102335;color:#d9f0ff;box-shadow:inset 0 1px #ffffff0a}button:hover{border-color:#64a0c6;background:#173a54}button.primary{background:linear-gradient(90deg,#008db5,#00d9ff);border-color:#23dcff;color:#011a22;box-shadow:0 0 18px #00d9ff36}.danger-button{background:#3c1720;border-color:#864453}.switch input:checked+span{background:#00a9cf}
+.panel,.hero-panel,.metric-card{background:linear-gradient(180deg,#0c1823,#081019);border-color:#233f55;border-radius:3px;box-shadow:inset 0 1px #ffffff07,0 11px 25px #0006}.metric-card{position:relative;overflow:hidden}.metric-card::after{content:"";position:absolute;inset:0 auto 0 0;width:2px;background:#00d9ff}.metric-card.success::after,.metric-tone-success::after{background:#36e79d}.metric-card.danger::after,.metric-tone-danger::after{background:#ff7085}.metric-card.warning::after,.metric-tone-warning::after{background:#ffca57}.metric-card strong{font-family:Consolas,"Malgun Gothic",sans-serif;color:#ecf9ff}.metric-card span{color:#80a8be}.panel h2,.section-heading h2{font-family:Consolas,"Malgun Gothic",sans-serif;font-size:13px;letter-spacing:.06em;color:#dff6ff}.panel h2::before,.section-heading h2::before{content:"▣ ";color:#00d9ff}
+.hero-panel{border-left:3px solid #00d9ff}.automation-icon{border-radius:2px;background:#122c3d;color:#77dfff}.automation-icon.running{background:#0b392b;color:#58f1b2}.badge{border-radius:2px;background:#152a3b;color:#afd9f2}.badge.success{background:#0d3327;color:#76f4bd}.badge.warning{background:#33280e;color:#ffdb83}.badge.danger{background:#3d1721;color:#ffb3c0}.badge.muted{background:#1b2936;color:#9aafc1}
+table{border:1px solid #24445b;background:#071019}th{background:#0d1d2a;color:#84abc2;border-bottom-color:#24445b;text-transform:uppercase;font-family:Consolas,"Malgun Gothic",sans-serif;letter-spacing:.04em}td{border-bottom-color:#173449;color:#d6e8f2}.table-wrap{border:1px solid #24445b}.alert{border:1px solid #833e4c;background:#35151e;color:#ffc4cd;border-radius:2px}.notice{border:1px solid #226283;background:#0d2637;color:#ade8ff;border-radius:2px}
+input,select,textarea{border-radius:2px;border-color:#274960;background:#050b11;color:#e9f8ff;box-shadow:inset 0 1px #ffffff08}input:focus,select:focus,textarea:focus{border-color:#00d9ff;box-shadow:0 0 0 2px #00d9ff24}fieldset{border-radius:2px;border-color:#294960}legend{color:#84b8d4}.modal-backdrop{background:#02060bdd;backdrop-filter:blur(8px)}.modal,.modal header,.modal footer{background:#09141e;border-color:#315a76}.modal{border-radius:3px;box-shadow:0 25px 90px #000}.modal header h2{font-family:Consolas,"Malgun Gothic",sans-serif;color:#dbf7ff}.empty{border-radius:2px;border-color:#26455d;background:#071019;color:#779db5}.log-row{border-bottom-color:#1b3b51;background:#071019}.log-row time{color:#6c94ad}.schedule-status-panel{border-left:3px solid #b992ff}.schedule-account-group{border-color:#284a63}.schedule-view-toggle button.active{background:#14374e;border-color:#00d9ff;color:#dff9ff}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:#071019}::-webkit-scrollbar-thumb{background:#31546d;border:2px solid #071019;border-radius:9px}
+@media(max-width:1050px){.app-shell{grid-template-columns:215px minmax(0,1fr)}.page-body{padding:16px}.page-header{padding:18px}.statusbar::before{display:none}}
