@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { enqueueTask } from "@/lib/agent/store";
+import { isSocialAuthorized } from "@/lib/socialAuth";
 import {
   claimDueBlogSlots,
   confirmPublishAndCleanup,
@@ -13,7 +14,8 @@ import {
   upsertBlogArticle,
 } from "@/lib/blogStore";
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!isSocialAuthorized(request)) return NextResponse.json({ error: "소셜 접근키가 필요합니다." }, { status: 401 });
   await recoverStaleBlogPublishes();
   return NextResponse.json(await getBlogDashboard(), { headers: { "Cache-Control": "no-store" } });
 }
@@ -36,12 +38,13 @@ function makeInstruction(article: Awaited<ReturnType<typeof listBlogArticles>>[n
 }
 
 async function enqueueArticle(article: Awaited<ReturnType<typeof listBlogArticles>>[number]) {
-  const task = await enqueueTask({ departmentId: "blog", agentId: "b_naver", instruction: makeInstruction(article) });
+  const task = await enqueueTask({ departmentId: "ops", agentId: "b_naver", instruction: makeInstruction(article) });
   await patchBlogArticle(article.id, { status: "queued", error: null });
   return task;
 }
 
 export async function POST(request: Request) {
+  if (!isSocialAuthorized(request)) return NextResponse.json({ error: "소셜 접근키가 필요합니다." }, { status: 401 });
   const body = await request.json().catch(() => ({}));
   const action = String(body?.action || "import-ready");
 
@@ -77,6 +80,7 @@ async function verifyPublicUrl(url: string) {
 }
 
 export async function PATCH(request: Request) {
+  if (!isSocialAuthorized(request)) return NextResponse.json({ error: "소셜 접근키가 필요합니다." }, { status: 401 });
   const body = await request.json().catch(() => ({}));
   const id = String(body?.id || "");
   const action = String(body?.action || "");

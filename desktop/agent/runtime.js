@@ -89,7 +89,7 @@ async function captureAllFrames(view) {
 async function callApi(controlUrl, path, method, body) {
   const res = await fetch(`${controlUrl}${path}`, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(process.env.SOCIAL_CONTROL_KEY ? { "x-social-control-key": process.env.SOCIAL_CONTROL_KEY } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
@@ -290,7 +290,10 @@ async function tick(controlUrl, partition, log, getStartUrl) {
   try {
     // READY 관리자가 저장한 하루 3회 슬롯을 워커가 결정론적으로 claim한다.
     // 슬롯이 아니면 서버는 빈 결과를 돌려주며, 글이 체크되지 않았으면 임의 선택하지 않는다.
-    await callApi(controlUrl, "/api/blog/naver", "POST", { action: "run-due-slots" });
+    if (process.env.SOCIAL_CONTROL_KEY) {
+      await callApi(controlUrl, "/api/blog/naver", "POST", { action: "run-due-slots" });
+      await callApi(controlUrl, "/api/social/threads", "POST", { action: "run-due" });
+    }
     const { ok, data } = await callApi(controlUrl, "/api/agent/claim", "POST");
     if (!ok || !data.task) return;
     // 지시에 주소가 없으면 담당자가 지금 보고 있는 화면에서 이어서 한다.

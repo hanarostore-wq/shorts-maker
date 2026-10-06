@@ -165,9 +165,9 @@ export async function enqueueTask(input: {
 }
 
 /** 데스크톱 앱의 워커가 다음에 실행할 일을 하나 꺼내간다. */
-export async function claimNextTask(agentId?: string): Promise<AgentTask | null> {
+export async function claimNextTask(agentId?: string, allowSocial = false): Promise<AgentTask | null> {
   const state = await readState();
-  const task = state.tasks.find((t) => t.status === "queued" && (!agentId || t.agentId === agentId));
+  const task = state.tasks.find((t) => t.status === "queued" && (!agentId || t.agentId === agentId) && (allowSocial || t.agentId !== "b_naver"));
   if (!task) return null;
   task.status = "running";
   task.updatedAt = nowIso();

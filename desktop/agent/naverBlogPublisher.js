@@ -1,4 +1,11 @@
-const WRITE_URL = "https://blog.naver.com/GoBlogWrite.naver";
+const writeUrl = (blogId) => `https://blog.naver.com/${encodeURIComponent(blogId)}/postwrite`;
+function isExpectedBlog(url, blogId) {
+  try {
+    const u = new URL(url);
+    if (u.hostname !== "blog.naver.com") return false;
+    return u.pathname.split("/")[1]?.toLowerCase() === blogId.toLowerCase() || u.searchParams.get("blogId")?.toLowerCase() === blogId.toLowerCase();
+  } catch { return false; }
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -67,16 +74,18 @@ async function clickPublish(view) {
 
 async function publishNaverBlog({ view, instruction, log }) {
   const id = extract(instruction, "CONTENT_ID");
+  const blogId = extract(instruction, "BLOG_ID");
   const title = extract(instruction, "TITLE");
   const body = extractBody(instruction);
-  if (!id || !title || !body) throw new Error("블로그 작업 데이터가 불완전합니다.");
+  if (!id || !/^[a-zA-Z0-9_-]{2,50}$/.test(blogId) || !title || !body) throw new Error("블로그 작업 데이터가 불완전합니다.");
 
-  await view.webContents.loadURL(WRITE_URL);
+  await view.webContents.loadURL(writeUrl(blogId));
   await sleep(3500);
   const url = view.webContents.getURL();
   if (/nid\.naver\.com|login/i.test(url)) {
     return { status:"needs_human", message:"네이버 로그인이 필요합니다. 운영본부 브라우저에서 로그인한 뒤 다시 실행하세요.", contentId:id };
   }
+  if (!isExpectedBlog(url, blogId)) return { status:"needs_human", message:"현재 글쓰기 화면의 블로그 ID를 확인할 수 없습니다. 다른 계정 발행을 막기 위해 중단했습니다.", contentId:id };
 
   const filled = await fillEditor(view, title, body);
   if (!filled.ok) return { status:"failed", message:filled.reason, contentId:id };
@@ -90,8 +99,8 @@ async function publishNaverBlog({ view, instruction, log }) {
   await sleep(5000);
 
   const publishedUrl = view.webContents.getURL();
-  if (/GoBlogWrite|PostWriteForm/i.test(publishedUrl)) {
-    return { status:"failed", message:"발행 클릭 후 공개 글 화면으로 이동하지 않았습니다.", contentId:id };
+  if (/GoBlogWrite|PostWriteForm|postwrite/i.test(publishedUrl) || !isExpectedBlog(publishedUrl, blogId)) {
+    return { status:"needs_human", message:"발행 클릭 후 공개 글 URL을 확인하지 못했습니다. 실제 게시 여부를 직접 확인하고 중복 발행하지 마세요.", contentId:id };
   }
   return { status:"done", message:"네이버 블로그 즉시 발행 후 공개 글 화면 이동 확인", contentId:id, publishedUrl };
 }

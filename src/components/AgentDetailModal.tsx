@@ -1,6 +1,6 @@
 "use client";
 import {TradingAnalyticsPanel} from "./TradingAnalyticsPanel";
-import { NaverBlogPanel } from "./NaverBlogPanel";
+import { SocialControlPanel } from "./SocialControlPanel";
 import { BlogReadyPanel } from "./BlogReadyPanel";
 import { BlogResearchPanel } from "./BlogResearchPanel";
 import { AdsensePanel } from "./AdsensePanel";
@@ -43,7 +43,7 @@ export function AgentDetailModal({
       onClick={onClose}
     >
       <div
-        className={`control-room-modal-card control-room-scroll flex max-h-[96vh] w-[calc(100vw-1rem)] ${["c7", "c13", "t7", "t13"].includes(agent.id) ? "max-w-[1600px]" : ["tradingEvidence","tradingAnalytics"].includes(tool||"") ? "max-w-5xl" : "max-w-lg"} flex-col gap-3 overflow-y-auto border border-[var(--control-line-strong)] bg-[var(--control-bg)] p-3 shadow-2xl sm:p-4`}
+        className={`control-room-modal-card control-room-scroll flex max-h-[96vh] w-[calc(100vw-1rem)] ${["c7", "c13", "t7", "t13"].includes(agent.id) ? "max-w-[1600px]" : ["tradingEvidence","tradingAnalytics"].includes(tool||"") ? "max-w-5xl" : ["naverBlog", "threads"].includes(tool || "") ? "max-w-3xl" : "max-w-lg"} flex-col gap-3 overflow-y-auto border border-[var(--control-line-strong)] bg-[var(--control-bg)] p-3 shadow-2xl sm:p-4`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--control-line)] pb-2">
@@ -73,7 +73,8 @@ export function AgentDetailModal({
         {tool === "liveTrading" && <LiveTradingPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
         {tool === "blogReady" && <BlogReadyPanel />}
         {tool === "blogResearch" && <BlogResearchPanel />}
-        {tool === "naverBlog" && <NaverBlogPanel />}
+        {tool === "naverBlog" && <SocialControlPanel platform="naver" />}
+        {tool === "threads" && <SocialControlPanel platform="threads" />}
         {tool === "adsense" && <AdsensePanel />}
         {tool === "shortsStudio" && (
           <div className="control-room-panel flex flex-col gap-3 p-4">
