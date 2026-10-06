@@ -38,7 +38,7 @@ function makeInstruction(article: Awaited<ReturnType<typeof listBlogArticles>>[n
 }
 
 async function enqueueArticle(article: Awaited<ReturnType<typeof listBlogArticles>>[number]) {
-  const task = await enqueueTask({ departmentId: "ops", agentId: "b_naver", instruction: makeInstruction(article) });
+  const task = await enqueueTask({ departmentId: "blog", agentId: "b_naver", instruction: makeInstruction(article) });
   await patchBlogArticle(article.id, { status: "queued", error: null });
   return task;
 }

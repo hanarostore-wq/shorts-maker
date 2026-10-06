@@ -78,20 +78,28 @@ function healState(state: State): State {
   if (!Array.isArray(state.departments)) state.departments = structuredClone(initialDepartments);
   if (!state.sourcedProducts) state.sourcedProducts = [];
   if (!state.failureByKey) state.failureByKey = {};
-  // UI만 이전한다. 기존 원고·예약·발행 결과 Redis 키는 삭제하지 않는다.
-  state.departments = state.departments.filter((department) => department.id !== "blog");
-  state.projects = (state.projects || []).filter((project) => project.id !== "p4" && project.departmentId !== "blog");
+  // UI 배치만 수정한다. 기존 원고·예약·발행 결과 Redis 키는 삭제하지 않는다.
+  const freshBlog = initialDepartments.find((department) => department.id === "blog");
+  let blog = state.departments.find((department) => department.id === "blog");
+  if (!blog && freshBlog) {
+    blog = { ...structuredClone(freshBlog), agents: [] };
+    state.departments.splice(1, 0, blog);
+  }
   for (const department of state.departments) {
     department.agents = department.agents.filter((agent) => !["b_research", "b_ready", "b_adsense"].includes(agent.id));
   }
-  const ops = state.departments.find((department) => department.id === "ops");
-  if (ops) {
+  if (blog) {
     for (const id of ["b_naver", "o_threads"]) {
       const misplaced = state.departments.flatMap((department) => department.agents).find((agent) => agent.id === id);
-      if (misplaced && !ops.agents.some((agent) => agent.id === id)) ops.agents.push(misplaced);
-      for (const department of state.departments) if (department.id !== "ops") department.agents = department.agents.filter((agent) => agent.id !== id);
+      if (misplaced && !blog.agents.some((agent) => agent.id === id)) blog.agents.push(misplaced);
+      for (const department of state.departments) if (department.id !== "blog") department.agents = department.agents.filter((agent) => agent.id !== id);
     }
   }
+  state.projects = state.projects || [];
+  const freshBlogProject = projects.find((project) => project.id === "p4");
+  const blogProject = state.projects.find((project) => project.id === "p4");
+  if (blogProject) { blogProject.departmentId = "blog"; blogProject.agentCount = 2; blogProject.leadAgent = "네이버블로그"; }
+  else if (freshBlogProject) state.projects.push(structuredClone(freshBlogProject));
   const existingDepartmentIds = new Set(state.departments.map((department) => department.id));
   for (const freshDepartment of initialDepartments) {
     if (!existingDepartmentIds.has(freshDepartment.id)) {

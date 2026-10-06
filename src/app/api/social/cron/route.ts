@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   const blogDue = await claimDueBlogSlots(new Date());
   for (const article of blogDue.slice(0, 5)) {
     try {
-      await enqueueTask({ departmentId: "ops", agentId: "b_naver", instruction: ["[NAVER_BLOG_PUBLISH]", `CONTENT_ID: ${article.id}`, `BLOG_ID: ${article.blogId}`, `TITLE: ${article.title}`, "BODY_START", article.body, "BODY_END", "발행 후 공개 글 URL을 확인하고 결과를 기록하세요."].join("\n") });
+      await enqueueTask({ departmentId: "blog", agentId: "b_naver", instruction: ["[NAVER_BLOG_PUBLISH]", `CONTENT_ID: ${article.id}`, `BLOG_ID: ${article.blogId}`, `TITLE: ${article.title}`, "BODY_START", article.body, "BODY_END", "발행 후 공개 글 URL을 확인하고 결과를 기록하세요."].join("\n") });
       results.push({ platform: "naver", id: article.id, status: "queued_for_browser" });
     } catch {
       await patchBlogArticle(article.id, { status: "failed", error: "브라우저 작업 대기열 등록 실패" });
