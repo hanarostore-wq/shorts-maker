@@ -16,6 +16,14 @@ npm run start:local  # 로컬 관제실(http://localhost:3000)에 접속
 
 `CONTROL_URL` 환경변수로 관제실 주소를 바꿀 수 있습니다.
 
+Windows에서는 저장소에 들어 있는 `start-social.ps1`을 쓰면 내려받은 임시
+Downloads 스크립트의 위치에 의존하지 않습니다. 소셜 접근키를 화면에 표시하지
+않고 받아서 데스크톱 브라우저와 예약 작업자를 함께 실행합니다.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\Main\shorts-maker-social\desktop\start-social.ps1"
+```
+
 ### 제공된 원본 프로그램 전체 설치
 
 블로그부서 카드의 **BlogAuto 전체 실행**·**Threads Auto 전체 실행** 버튼은 별도 창에
