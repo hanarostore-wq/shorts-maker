@@ -39,3 +39,20 @@ test('(오류 경로) 글자가 없으면 아무것도 그리지 않음', { skip
   cap.drawOverlay(ctx, 1080, 1920, null);
   assert.equal(fonts.length, 0);
 });
+
+const off = cap;
+test('작성자 줄: 이름 (@아이디) · 사이트', { skip: off.loadError && `caption.js 를 불러오지 못함: ${off.loadError?.message}` }, () => {
+  assert.equal(off.authorLine({ authorName: '스무살민지', authorHandle: 'minji20', site: '인스타그램' }), '작성자 스무살민지 (@minji20) · 인스타그램');
+  assert.equal(off.authorLine({ authorHandle: '@minji20', site: 'X(트위터)' }), '작성자 @minji20 · X(트위터)');
+  assert.equal(off.authorLine({ authorName: '민지' }), '작성자 민지');
+  // 오류 경로: 작성자를 못 찾으면 줄을 넣지 않음
+  assert.equal(off.authorLine({ site: '틱톡' }), '');
+});
+
+test('작성자 줄은 한 줄, 본문은 그 아래 최대 3줄', { skip: !!cap.loadError }, () => {
+  const drawn = [];
+  const { ctx } = fakeCtx();
+  ctx.fillText = (t) => drawn.push(t);
+  cap.drawOverlay(ctx, 1086, 1448, { text: '작성자 스무살민지 (@minji20) · 인스타그램\n오늘 바다 다녀왔어요' });
+  assert.deepEqual(drawn, ['작성자 스무살민지 (@minji20) · 인스타그램', '오늘 바다 다녀왔어요']);
+});

@@ -1,13 +1,21 @@
-// 팔로우 목록 전부 팔로우 (블루스카이·X, ISOLATED world)
-//  - 블루스카이 /profile/{계정}/follows·followers, X /{계정}/following·followers·verified_followers 화면 오른쪽 아래에 버튼
+// 팔로우 목록 전부 팔로우 (블루스카이·X·인스타그램·스레드·틱톡·더우인·웨이보·빌리빌리·샤오홍슈·핀터레스트·콰이쇼우, ISOLATED world)
+//  - 블루스카이 /profile/{계정}/follows·followers, X /{계정}/following·followers·verified_followers,
+//    그 밖의 사이트는 팔로워·팔로잉 목록 창(팔로우 버튼이 여러 개 있는 창)이 열리면 오른쪽 아래에 버튼
 //  - 이미 팔로우 중인 계정·내 계정·차단 관계 계정은 건너뛴다. 진행 중 언제든 '중지'
+//  - 누르면 확인 창 없이 바로 시작(사용자 요청)
 //  - 짧은 시간에 너무 많이 팔로우하면 사이트가 계정을 제한할 수 있어 한 명씩 간격을 두고 천천히 진행한다
 //    (블루스카이 약 1.2초, X 3~5초 간격 · X 는 하루 400명 제한이 있어 그 전에 멈춤)
 (() => {
   'use strict';
   if (globalThis.__SMD_FOLLOWALL || window.top !== window) return;
   globalThis.__SMD_FOLLOWALL = true;
-  const site = /(^|\.)bsky\.app$/.test(location.hostname) ? 'bsky' : /(^|\.)(x|twitter)\.com$/.test(location.hostname) ? 'x' : '';
+  const H = location.hostname;
+  const SITE_OF = [
+    ['bsky', /(^|\.)bsky\.app$/], ['x', /(^|\.)(x|twitter)\.com$/], ['instagram', /(^|\.)instagram\.com$/], ['threads', /(^|\.)threads\.(net|com)$/],
+    ['tiktok', /(^|\.)tiktok\.com$/], ['douyin', /(^|\.)douyin\.com$/], ['weibo', /(^|\.)weibo\.(com|cn)$/], ['bilibili', /(^|\.)bilibili\.com$/],
+    ['xiaohongshu', /(^|\.)xiaohongshu\.com$/], ['pinterest', /(^|\.)pinterest\./], ['kuaishou', /(^|\.)kuaishou\.com$/],
+  ];
+  const site = SITE_OF.find(([, re]) => re.test(H))?.[0] || '';
   if (!site) return;
 
   let on = true;
@@ -23,7 +31,6 @@
   });
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const X_DAILY = 400; // X 하루 팔로우 한도
   const X_RESERVED = ['home', 'explore', 'notifications', 'messages', 'i', 'settings', 'search', 'compose'];
 
   // 지금 화면이 팔로우 목록인가 → { actor, kind }
@@ -33,6 +40,7 @@
       const m = /^\/profile\/([^/]+)\/(follows|followers)\/?$/.exec(p);
       return m ? { actor: decodeURIComponent(m[1]), kind: m[2] } : null;
     }
+    if (site !== 'x') return null;
     const m = /^\/([A-Za-z0-9_]{1,15})\/(following|followers|verified_followers)\/?$/.exec(p);
     return m && !X_RESERVED.includes(m[1].toLowerCase()) ? { actor: m[1], kind: m[2] } : null;
   }
@@ -65,7 +73,7 @@
     ui.msg.classList.toggle('err', err);
   };
   function tick() {
-    const lp = on && listPage();
+    const lp = on && (site === 'bsky' ? listPage() : cfg.active());
     if (!lp && !run) {
       host?.remove();
       return;
@@ -76,12 +84,12 @@
   }
 
   async function start() {
-    const lp = listPage();
-    if (!lp || run) return;
+    const lp = site === 'bsky' ? listPage() : null;
+    if ((site === 'bsky' ? !lp : !cfg.active()) || run) return;
     run = { stop: false };
     tick();
     try {
-      await (site === 'bsky' ? runBsky(lp) : runX(lp));
+      await (site === 'bsky' ? runBsky(lp) : runClicks());
     } catch (err) {
       say(`전부 팔로우 실패\n단계: ${err.step || '진행'}\n원인: ${err.reason || err.message || err}\n조치: ${err.action || '페이지를 새로고침한 뒤 다시 누르세요.'}`, true);
     } finally {
@@ -89,8 +97,6 @@
       tick();
     }
   }
-  const confirmRun = (n, skipped, eta) =>
-    window.confirm(`${n}명을 팔로우합니다${skipped ? ` (이미 팔로우 중·내 계정·차단 ${skipped}명 제외)` : ''}.\n\n짧은 시간에 너무 많이 팔로우하면 사이트가 계정을 일시 제한할 수 있어 한 명씩 천천히 진행합니다 (예상 ${eta}).\n진행 중에는 이 탭을 닫거나 새로고침하지 마세요. '중지'로 언제든 멈출 수 있습니다.\n\n시작할까요?`);
   const mins = (sec) => (sec < 90 ? `${Math.max(1, Math.round(sec))}초` : `${Math.round(sec / 60)}분`);
 
   // ── 블루스카이: 목록 API 로 전부 읽은 뒤 한 명씩 팔로우 기록 생성 ──
@@ -115,12 +121,14 @@
     } while (cursor && all.length < 20000);
     const targets = all.filter((p) => p.did && p.did !== s.did && !p.viewer?.following && !p.viewer?.blocking && !p.viewer?.blockedBy);
     if (!targets.length) return say(`목록 ${all.length}명을 모두 이미 팔로우 중이거나 팔로우할 수 없는 계정입니다.`);
-    if (!confirmRun(targets.length, all.length - targets.length, mins(targets.length * 1.3))) return say('');
+    // 확인 창 없이 바로 시작(사용자 요청). 인원·예상 시간은 진행 칸에 보여 준다
+    const skipped = all.length - targets.length;
+    const eta = mins(targets.length * 1.3);
     let ok = 0;
     const fails = [];
     for (const [i, p] of targets.entries()) {
       if (run.stop) return say(`중지했습니다. ${ok}명 팔로우 · 실패 ${fails.length}명 · 남은 ${targets.length - i}명`);
-      say(`팔로우 중 ${i + 1}/${targets.length} · 성공 ${ok} · 실패 ${fails.length}\n@${p.handle}`);
+      say(`팔로우 중 ${i + 1}/${targets.length} · 성공 ${ok} · 실패 ${fails.length}${skipped ? ` · 제외 ${skipped}명(이미 팔로우 등)` : ''}\n예상 ${eta} · @${p.handle}`);
       try {
         const j = await B.xrpc(s, 'POST', 'com.atproto.repo.createRecord', { body: { repo: s.did, collection: 'app.bsky.graph.follow', record: { $type: 'app.bsky.graph.follow', subject: p.did, createdAt: new Date().toISOString() } } });
         ok++;
@@ -136,29 +144,91 @@
   }
 
   // ── X: 화면의 팔로우 버튼을 한 명씩 누르며 아래로 스크롤 ──
-  async function xDailyCount() {
-    const today = new Date().toISOString().slice(0, 10);
-    const r = await chrome.storage.local.get('xFollowAllDay').catch(() => ({}));
-    return r.xFollowAllDay?.date === today ? r.xFollowAllDay.count : 0;
-  }
-  async function xAddCount(n) {
-    const today = new Date().toISOString().slice(0, 10);
-    await chrome.storage.local.set({ xFollowAllDay: { date: today, count: (await xDailyCount()) + n } }).catch(() => {});
-  }
-  const col = () => document.querySelector('[data-testid="primaryColumn"]') || document;
-  const xFollowBtns = () => [...col().querySelectorAll('[data-testid="UserCell"] [data-testid$="-follow"], [data-testid="cellInnerDiv"] [data-testid$="-follow"]')].filter((b) => !b.dataset.smdTried && b.offsetParent);
-  const xLimitNotice = () => {
-    const t = [...document.querySelectorAll('[data-testid="toast"], [role="alert"], [data-testid="sheetDialog"], [role="alertdialog"]')].map((e) => e.innerText || '').join(' ');
-    return /unable to follow|limit|제한|팔로우할 수 없|더 이상 팔로우/i.test(t) ? t.replace(/\s+/g, ' ').trim().slice(0, 120) : '';
+  // ── 블루스카이 밖: 화면의 팔로우 버튼을 한 명씩 누르며 목록을 아래로 스크롤 ──
+  //   사이트마다 하루 한도·간격을 다르게 둔다(사이트가 정한 한도보다 낮게, 인스타·스레드는 특히 엄격)
+  const FOLLOW_TXT = /^(팔로우|맞팔로우|맞팔로우하기|follow|follow back|关注|回关|\+ ?关注|关注 ?\+|팔로우하기)$/i;
+  const DONE_TXT = /^(팔로잉|팔로우 중|팔로우중|요청됨|친구|following|requested|friends|unfollow|已关注|互相关注|已互粉|已请求|取消关注)$/i;
+  const LIMIT_TXT = /unable to follow|try again later|limit|we restrict|action blocked|제한|나중에 다시|팔로우할 수 없|더 이상 팔로우|操作频繁|频繁|稍后再试|上限/i;
+  const txt = (el) => (el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim();
+  const visibleEl = (el) => !!el && el.isConnected && (el.offsetParent || el.getClientRects().length) && !el.closest('smd-followall');
+  const textButtons = (root) => [...root.querySelectorAll('button, [role="button"]')].filter((b) => FOLLOW_TXT.test(txt(b)) && visibleEl(b) && !b.dataset.smdTried);
+  // 팔로우 버튼이 2개 이상 든 창(목록 창)
+  const listDialog = () => [...document.querySelectorAll('[role="dialog"], [aria-modal="true"]')].reverse().find((d) => visibleEl(d) && textButtons(d).length + d.querySelectorAll('[data-smd-tried]').length >= 2) || null;
+  const scrollerIn = (root) => {
+    for (const el of [root, ...root.querySelectorAll('div, ul, section')]) {
+      const st = getComputedStyle(el);
+      if (el.scrollHeight > el.clientHeight + 20 && /(auto|scroll)/.test(st.overflowY)) return el;
+    }
+    return null;
   };
-  async function runX() {
-    if (!document.cookie.includes('twid=')) throw { step: '로그인 확인', reason: 'X 에 로그인되어 있지 않습니다', action: 'X 에 로그인한 뒤 새로고침하세요.' };
-    const done0 = await xDailyCount();
-    const room = X_DAILY - done0;
-    if (room <= 0) throw { step: '하루 한도 확인', reason: `오늘 이미 ${done0}명을 팔로우했습니다 (X 하루 한도 ${X_DAILY}명)`, action: '내일 다시 누르면 이어서 팔로우합니다.' };
-    const visible = xFollowBtns().length;
-    if (!visible) return say('화면에 팔로우할 계정이 없습니다 (모두 팔로우 중이거나 목록이 아직 안 불러와짐).\n목록이 보인 뒤 다시 누르세요.', true);
-    if (!window.confirm(`이 목록에서 아직 팔로우하지 않은 계정을 아래로 내려가며 최대 ${room}명까지 팔로우합니다 (오늘 남은 X 한도).\n\nX 는 짧은 시간에 많이 팔로우하면 계정을 일시 제한할 수 있어 3~5초 간격으로 천천히 진행합니다 (${room}명 기준 약 ${mins(room * 4.2)}).\n진행 중에는 이 탭을 닫거나 다른 화면으로 옮기지 마세요. '중지'로 언제든 멈출 수 있습니다.\n\n시작할까요?`)) return say('');
+  // 사이트가 띄운 제한 알림(알림·토스트를 먼저, 목록 창 글자는 버튼 이름과 섞이지 않게 맨 나중에)
+  const limitNotice = () => {
+    for (const sel of ['[data-testid="toast"], [role="alert"], [role="alertdialog"], [data-testid="sheetDialog"]', '[role="dialog"]']) {
+      for (const e of document.querySelectorAll(sel)) {
+        if (e.closest('smd-followall')) continue;
+        const t = txt(e);
+        const m = LIMIT_TXT.exec(t);
+        if (!m) continue;
+        if (sel === '[role="dialog"]' && t.length > 200) {
+          const i = Math.max(0, m.index - 40);
+          return t.slice(i, i + 120).trim();
+        }
+        return t.slice(0, 120);
+      }
+    }
+    return '';
+  };
+  const xCol = () => document.querySelector('[data-testid="primaryColumn"]') || document;
+  const CLICK = {
+    x: {
+      name: 'X', cap: 400, gap: [3000, 5000],
+      active: () => !!listPage(),
+      buttons: () => [...xCol().querySelectorAll('[data-testid="UserCell"] [data-testid$="-follow"], [data-testid="cellInnerDiv"] [data-testid$="-follow"]')].filter((b) => !b.dataset.smdTried && visibleEl(b)),
+      cell: (b) => b.closest('[data-testid="UserCell"], [data-testid="cellInnerDiv"]'),
+      done: (b, cell) => !!cell?.querySelector('[data-testid$="-unfollow"], [data-testid$="-cancel"]'),
+      scroll: () => scrollBy(0, innerHeight * 0.85),
+      login: () => document.cookie.includes('twid='),
+      pathLock: true,
+    },
+  };
+  const DIALOG_SITE = { instagram: ['인스타그램', 150, [8000, 12000]], threads: ['스레드', 150, [8000, 12000]], tiktok: ['틱톡', 200, [5000, 8000]], douyin: ['더우인', 200, [5000, 8000]], weibo: ['웨이보', 200, [5000, 8000]], bilibili: ['빌리빌리', 200, [4000, 7000]], xiaohongshu: ['샤오홍슈', 150, [6000, 10000]], pinterest: ['핀터레스트', 200, [4000, 7000]], kuaishou: ['콰이쇼우', 200, [5000, 8000]] };
+  for (const [id, [name, cap, gap]] of Object.entries(DIALOG_SITE)) {
+    CLICK[id] = {
+      name, cap, gap,
+      active: () => !!listDialog(),
+      buttons: () => {
+        const d = listDialog();
+        return d ? textButtons(d) : [];
+      },
+      cell: (b) => b.parentElement,
+      done: (b) => !b.isConnected || DONE_TXT.test(txt(b)) || !FOLLOW_TXT.test(txt(b)),
+      scroll: () => {
+        const d = listDialog();
+        const sc = d && scrollerIn(d);
+        if (sc) sc.scrollTop += sc.clientHeight * 0.85;
+      },
+      login: () => true,
+    };
+  }
+  const cfg = CLICK[site];
+
+  const dayKey = `followAllDay_${site}`;
+  async function dailyCount() {
+    const today = new Date().toISOString().slice(0, 10);
+    const r = await chrome.storage.local.get(dayKey).catch(() => ({}));
+    return r[dayKey]?.date === today ? r[dayKey].count : 0;
+  }
+  async function addCount(n) {
+    const today = new Date().toISOString().slice(0, 10);
+    await chrome.storage.local.set({ [dayKey]: { date: today, count: (await dailyCount()) + n } }).catch(() => {});
+  }
+  async function runClicks() {
+    if (!cfg.login()) throw { step: '로그인 확인', reason: `${cfg.name} 에 로그인되어 있지 않습니다`, action: `${cfg.name} 에 로그인한 뒤 새로고침하세요.` };
+    const done0 = await dailyCount();
+    const room = cfg.cap - done0;
+    if (room <= 0) throw { step: '하루 한도 확인', reason: `오늘 이미 ${done0}명을 팔로우했습니다 (${cfg.name} 하루 한도 ${cfg.cap}명)`, action: '내일 다시 누르면 이어서 팔로우합니다.' };
+    if (!cfg.buttons().length) return say('화면에 팔로우할 계정이 없습니다 (모두 팔로우 중이거나 목록이 아직 안 불러와짐).\n목록이 보인 뒤 다시 누르세요.', true);
+    // 확인 창 없이 바로 시작(사용자 요청)
     const startPath = location.pathname;
     let ok = 0;
     let fail = 0;
@@ -166,53 +236,55 @@
     try {
       while (ok < room) {
         if (run.stop) return say(`중지했습니다. ${ok}명 팔로우 · 실패 ${fail}명`);
-        if (location.pathname !== startPath) return say(`화면을 옮겨서 멈췄습니다. ${ok}명 팔로우 · 실패 ${fail}명\n목록 화면에서 다시 누르면 이어서 합니다.`, true);
-        const b = xFollowBtns()[0];
+        if (cfg.pathLock && location.pathname !== startPath) return say(`화면을 옮겨서 멈췄습니다. ${ok}명 팔로우 · 실패 ${fail}명\n목록 화면에서 다시 누르면 이어서 합니다.`, true);
+        if (!cfg.active()) return say(`목록 창이 닫혀서 멈췄습니다. ${ok}명 팔로우 · 실패 ${fail}명\n목록을 다시 열고 누르면 이어서 합니다.`, true);
+        const b = cfg.buttons()[0];
         if (!b) {
           if (idleScrolls >= 4) break;
           idleScrolls++;
           say(`다음 계정 불러오는 중… (성공 ${ok})`);
-          scrollBy(0, innerHeight * 0.85);
+          cfg.scroll();
           await sleep(1800);
           continue;
         }
         idleScrolls = 0;
         b.dataset.smdTried = '1';
-        const cell = b.closest('[data-testid="UserCell"], [data-testid="cellInnerDiv"]');
-        const name = (cell?.querySelector('a[href^="/"][role="link"] span')?.textContent || '').trim();
+        const cell = cfg.cell(b);
+        const name = (cell?.querySelector('a[href] span, a[href]')?.textContent || '').trim().slice(0, 40);
         b.scrollIntoView({ block: 'center' });
         await sleep(300);
         say(`팔로우 중 · 성공 ${ok} · 실패 ${fail} · 오늘 남은 한도 ${room - ok}\n${name}`);
         b.click();
-        // 버튼이 '팔로잉'(-unfollow) 또는 비공개 계정 '요청됨'(-cancel)으로 바뀌면 성공
+        // 버튼이 '팔로잉'·'요청됨' 등으로 바뀌면 성공
         let changed = false;
         for (let t = 0; t < 25; t++) {
           await sleep(200);
-          if (cell?.querySelector('[data-testid$="-unfollow"], [data-testid$="-cancel"]')) {
+          if (cfg.done(b, cell)) {
             changed = true;
             break;
           }
-          if (xLimitNotice()) break;
+          if (limitNotice()) break;
         }
-        const notice = xLimitNotice();
-        if (notice) throw { step: `팔로우 (${ok}명 성공 후)`, reason: `X 가 팔로우를 막았습니다: "${notice}"`, action: 'X 가 정한 제한이 풀릴 때까지(보통 몇 시간~하루) 기다린 뒤 다시 누르세요.' };
+        const notice = limitNotice();
+        if (notice) throw { step: `팔로우 (${ok}명 성공 후)`, reason: `${cfg.name}에서 팔로우를 막았습니다: "${notice}"`, action: `${cfg.name}에서 정한 제한이 풀릴 때까지(보통 몇 시간~하루) 기다린 뒤 다시 누르세요.` };
         if (changed) ok++;
         else fail++;
-        if (fail >= 5 && ok === 0) throw { step: '팔로우', reason: '팔로우 버튼을 눌러도 상태가 바뀌지 않습니다 (X 화면 구조가 바뀌었거나 제한 중)', action: 'X 화면에서 직접 한 명 팔로우가 되는지 확인한 뒤 다시 시도하세요.' };
-        await sleep(3000 + Math.random() * 2000);
+        if (fail >= 5 && ok === 0) throw { step: '팔로우', reason: `팔로우 버튼을 눌러도 상태가 바뀌지 않습니다 (${cfg.name} 화면 구조가 바뀌었거나 제한 중)`, action: `${cfg.name} 화면에서 직접 한 명 팔로우가 되는지 확인한 뒤 다시 시도하세요.` };
+        await sleep(cfg.gap[0] + Math.random() * (cfg.gap[1] - cfg.gap[0]));
       }
     } finally {
-      await xAddCount(ok);
+      await addCount(ok);
     }
-    say(ok >= room ? `오늘 한도(${X_DAILY}명)까지 팔로우했습니다: ${ok}명${fail ? ` · 실패 ${fail}명` : ''}\n내일 다시 누르면 이어서 합니다.` : `완료: ${ok}명 팔로우${fail ? ` · 실패 ${fail}명 (버튼이 바뀌지 않음)` : ''}`);
+    say(ok >= room ? `오늘 한도(${cfg.cap}명)까지 팔로우했습니다: ${ok}명${fail ? ` · 실패 ${fail}명` : ''}\n내일 다시 누르면 이어서 합니다.` : `완료: ${ok}명 팔로우${fail ? ` · 실패 ${fail}명 (버튼이 바뀌지 않음)` : ''}`);
   }
 
   // 사이트 안에서 화면이 바뀌어도(주소만 바뀜) 버튼을 띄우고 숨긴다
-  let lastPath = '';
+  let lastState = '';
   setInterval(() => {
-    if (location.pathname !== lastPath) {
-      lastPath = location.pathname;
+    const st = `${location.pathname}|${site === 'bsky' || site === 'x' ? '' : !!listDialog()}`;
+    if (st !== lastState) {
+      lastState = st;
       tick();
     }
-  }, 500);
+  }, 700);
 })();

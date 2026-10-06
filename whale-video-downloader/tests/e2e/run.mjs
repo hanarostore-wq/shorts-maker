@@ -878,7 +878,11 @@ if (!only || only === 'place' || '배치'.includes(only)) {
 // ── 팔로우 목록 전부 팔로우 (블루스카이·X) ──
 {
   const page = await ctx.newPage();
-  page.on('dialog', (d) => d.accept());
+  let dialogs = 0;
+  page.on('dialog', (d) => {
+    dialogs++;
+    d.accept();
+  });
   const msg = () => page.evaluate(() => document.querySelector('smd-followall')?.shadowRoot.querySelector('.msg')?.textContent || '');
   const go = () => page.evaluate(() => document.querySelector('smd-followall').shadowRoot.querySelector('.go').click());
   try {
@@ -922,9 +926,10 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     const lc = await page.evaluate(() => (window.__xClicks || []).length);
     const lm = await msg();
     record('[전부 팔로우] (오류 경로) X 제한 알림이 뜨면 바로 멈추고 원인·조치 안내', lc === 1 && /막았습니다/.test(lm) && /unable to follow/.test(lm) && /기다린/.test(lm), { note: `누른 수 ${lc} · ${lm.replace(/\n/g, ' / ')}` });
+    record('[전부 팔로우] 누르면 확인 창 없이 바로 시작', dialogs === 0, { note: `확인 창 ${dialogs}번` });
     // 오류 경로: 오늘 한도(400명)를 다 쓰면 시작하지 않음
     const ep = await extPage();
-    await ep.evaluate(() => chrome.storage.local.set({ xFollowAllDay: { date: new Date().toISOString().slice(0, 10), count: 400 } }));
+    await ep.evaluate(() => chrome.storage.local.set({ followAllDay_x: { date: new Date().toISOString().slice(0, 10), count: 400 } }));
     await ep.close();
     await page.goto('https://x.com/spacestar/following', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('smd-followall', { timeout: 8000 });
@@ -933,11 +938,37 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     const dm = await msg();
     const dc = await page.evaluate(() => (window.__xClicks || []).length);
     record('[전부 팔로우] (오류 경로) X 하루 한도 400명을 다 쓰면 시작 안 함', dc === 0 && /하루 한도/.test(dm) && /내일/.test(dm), { note: dm.replace(/\n/g, ' / ') });
+    // 인스타그램 팔로워 목록 창: 창 안을 스크롤하며 '팔로우'·'맞팔로우하기'만(이미 팔로잉 제외)
+    await page.goto('https://www.instagram.com/spacestar/followers/', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('smd-followall', { timeout: 8000 });
+    await go();
+    await page.waitForFunction(() => /완료/.test(document.querySelector('smd-followall').shadowRoot.querySelector('.msg').textContent), null, { timeout: 90000 });
+    const ig = await page.evaluate(() => window.__igClicks || []);
+    record('[전부 팔로우] 인스타그램: 목록 창 안을 내려가며 안 한 계정만 팔로우', ig.join(',') === 'ig_a,ig_b,ig_c', { note: `${ig.join(', ')} · ${await msg()}` });
+    // 틱톡: 팔로워 창을 열면 버튼이 뜨고, 창 안 Follow 를 모두 누름
+    await page.goto('https://www.tiktok.com/@spacestar', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const before = await page.evaluate(() => !!document.querySelector('smd-followall'));
+    await page.locator('#openFollowers').click();
+    await page.waitForSelector('smd-followall', { timeout: 8000 });
+    await go();
+    await page.waitForFunction(() => /완료/.test(document.querySelector('smd-followall').shadowRoot.querySelector('.msg').textContent), null, { timeout: 60000 });
+    const tt = await page.evaluate(() => window.__ttClicks || []);
+    record('[전부 팔로우] 틱톡: 팔로워 창이 열렸을 때만 버튼, 창 안 계정 모두 팔로우', !before && tt.join(',') === 'tt_a,tt_b', { note: `창 열기 전 버튼=${before} · ${tt.join(', ')} · ${await msg()}` });
+    // 오류 경로: 틱톡 제한 알림 → 바로 멈춤
+    await page.goto('https://www.tiktok.com/@limited', { waitUntil: 'domcontentloaded' });
+    await page.locator('#openFollowers').click();
+    await page.waitForSelector('smd-followall', { timeout: 8000 });
+    await go();
+    await page.waitForFunction(() => /단계:/.test(document.querySelector('smd-followall').shadowRoot.querySelector('.msg').textContent), null, { timeout: 30000 });
+    const tl = await page.evaluate(() => (window.__ttClicks || []).length);
+    const tm = await msg();
+    record('[전부 팔로우] (오류 경로) 틱톡 제한 알림이 뜨면 바로 멈추고 원인·조치 안내', tl === 1 && /틱톡에서 팔로우를 막았습니다/.test(tm) && !/tt_b/.test(tm) && /Try again later/.test(tm), { note: `누른 수 ${tl} · ${tm.replace(/\n/g, ' / ')}` });
   } catch (err) {
     record('[전부 팔로우]', false, { note: err.message.split('\n')[0] });
   } finally {
     const ep = await extPage();
-    await ep.evaluate(() => chrome.storage.local.remove('xFollowAllDay'));
+    await ep.evaluate(() => chrome.storage.local.remove(['followAllDay_x', 'followAllDay_instagram', 'followAllDay_tiktok']));
     await ep.close();
     await page.close();
   }
@@ -1330,8 +1361,11 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
         bottom = bandDiff(original, capped, 640, 360, 0.76, 0.95, 3);
         execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '3', '-i', capped, '-frames:v', '1', path.join(SHOTS, 'caption-person.png')]);
       }
-      const textOk = /한강에서 자전거/.test(h.captionUsed || '') && !/하리니|\/ X/.test(h.captionUsed || '');
-      record('[요약①] 피드 본문 글자만 왼쪽 위에', /^\[피드 글\] 오늘 한강/.test(h.captionUsed || '') && !/하리니/.test(h.captionUsed || '') && !h.warning, { note: `${h.captionUsed} · 안내: ${h.warning || '없음'}` });
+      // 본문 부분(작성자 줄 '[작성자 …]' 앞)에는 탭 제목·작성자가 섞이지 않고, 작성자 줄은 '이름 (@아이디) · 사이트'
+      const usedBody = String(h.captionUsed || '').replace(/ \[작성자 .*\]$/, '');
+      const textOk = /한강에서 자전거/.test(usedBody) && !/하리니|\/ X/.test(usedBody);
+      record('[요약①] 피드 본문 글자만 왼쪽 위에', /^\[피드 글\] 오늘 한강/.test(usedBody) && !/하리니/.test(usedBody) && !h.warning, { note: `${h.captionUsed} · 안내: ${h.warning || '없음'}` });
+      record('[작성자 줄] 첫 줄에 작성자 이름 (@아이디) · 사이트', /\[작성자 하리니 \(@harin_test\) · \S/.test(h.captionUsed || ''), { note: h.captionUsed || '(없음)' });
       record('[요약] 탭 제목·아이디가 아니라 게시물 본문을 요약', textOk, { note: `넣은 글자: ${h.captionUsed || '(없음)'}` });
       record('[요약①] 캡처는 항상 화면 맨 위에 바짝(아래는 그대로)', top > 3 && bottom < top / 3, { note: `차이 위 ${top.toFixed(1)} / 아래 ${bottom.toFixed(1)}` });
     } catch (err) {
@@ -1358,7 +1392,7 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       const h = await pp.evaluate(async () => (await chrome.storage.local.get('history')).history?.[0] || {});
       await pp.close();
       if (saved) execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '3', '-i', saved, '-frames:v', '1', path.join(SHOTS, 'caption-stacked.png')]);
-      record('[요약①] 본문이 영상 아래에 있어도 본문 글자만', /^\[피드 글\]/.test(h.captionUsed || '') && !/민지/.test(h.captionUsed || '') && /바다/.test(h.captionUsed || '') && !h.warning, { note: `${h.captionUsed || '(없음)'} · 안내: ${h.warning || '없음'}` });
+      record('[요약①] 본문이 영상 아래에 있어도 본문 글자만', /^\[피드 글\]/.test(h.captionUsed || '') && !/민지/.test(String(h.captionUsed || '').replace(/ \[작성자 .*\]$/, '')) && /바다/.test(h.captionUsed || '') && !h.warning, { note: `${h.captionUsed || '(없음)'} · 안내: ${h.warning || '없음'}` });
     } catch (err) {
       record('[요약①] 위·아래 이어 붙인 캡처', false, { note: err.message.split('\n')[0] });
     }
@@ -1437,7 +1471,7 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       await pp.close();
       if (saved) execFileSync('cp', [saved, path.join(SHOTS, `caption-${expectShot ? 'tight' : 'card'}.jpg`)]);
       // 화면 캡처 없이 본문 글자만(작성자·해시태그 없음), 페이지 스크롤 안 함
-      const ok = /^\[피드 글\] 장어 덮밥 먹고 힘내요$/.test(h.captionUsed || '') && red < 20 && green < 5 && pink < 5;
+      const ok = /^\[피드 글\] 장어 덮밥 먹고 힘내요( \[작성자 [^\]]+\])?$/.test(h.captionUsed || '') && red < 20 && green < 5 && pink < 5;
       record(`[요약①] ${label}: 본문 글자만(작성자·해시태그 제외), 페이지 스크롤 안 함`, !!saved && ok && moved === 0, { note: `${h.captionUsed || '(없음)'} · 빨강 ${red} · 초록 ${green} · 프로필 ${pink} · 스크롤 변화 ${moved}` });
     } catch (err) {
       record(`[요약①] ${label}`, false, { note: err.message.split('\n')[0] });

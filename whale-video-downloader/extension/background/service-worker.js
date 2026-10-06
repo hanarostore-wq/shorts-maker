@@ -566,7 +566,7 @@ async function runJob(job) {
   const capText = String(req.captionText ?? '').trim() || (desc.title && desc.title !== req.title ? String(desc.title).trim() : '') || (req.captionText === undefined ? String(req.title || '').trim() : '');
   const isImage = desc.type === 'image';
   const cap = {
-    overlay: settings.captionOnMedia !== false && !!capText,
+    overlay: settings.captionOnMedia !== false && (!!capText || !!(req.authorHandle || req.authorName)),
     // ②·③ 은 영상에만 (사진은 ① 만)
     cover: !isImage && !!settings.captionCover,
     intro: !isImage && !!settings.captionIntro,
@@ -581,6 +581,8 @@ async function runJob(job) {
       shotError: req.shotError || '',
       site: req.siteName || req.site || '',
       author: req.author || desc.author || '',
+      authorName: req.authorName || '',
+      authorHandle: req.authorHandle || '',
       pageUrl: req.pageUrl || '',
     };
     for (const d of [desc, ...(desc.fallbacks || [])]) d.caption = caption;

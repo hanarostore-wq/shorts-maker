@@ -391,6 +391,14 @@ const handlers = {
 
   // ── TikTok ──
   'www.tiktok.com': (req, res, u) => {
+    if (u.pathname === '/@spacestar' || u.pathname === '/@limited') {
+      // 틱톡 프로필: '팔로워'를 누르면 목록 창. limited 는 누르면 'Try again later' 알림
+      const lim = u.pathname === '/@limited';
+      const row = (id) => `<div style="height:60px"><a href="/@${id}"><span>${id}</span></a><button data-e2e="follow-button" onclick="window.__ttClicks = (window.__ttClicks || []).concat('${id}'); ${lim ? `document.body.insertAdjacentHTML('beforeend', '<div role=&quot;alert&quot;>Too many requests. Try again later.</div>')` : `setTimeout(() => (this.textContent = 'Following'), 300)`}">Follow</button></div>`;
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>TikTok</title></head><body>
+        <button id="openFollowers" onclick="document.getElementById('dlg').style.display = 'block'">팔로워</button>
+        <div id="dlg" role="dialog" style="display:none;position:fixed;left:50px;top:50px;width:400px;height:300px;background:#fff;overflow-y:auto">${row('tt_a')}${row('tt_b')}</div></body></html>`);
+    }
     if (/^\/@[^/]+\/video\/\d+/.test(u.pathname)) {
       const id = u.pathname.split('/').pop();
       const item = id.endsWith('9') ? tiktokItem(id, '만료된 영상', 'expired.mp4') : tiktokItem(id, '틱톡 상세 영상 테스트 #shorts', 'progressive_1080x1920.mp4');
@@ -431,6 +439,13 @@ const handlers = {
 
   // ── Instagram ──
   'www.instagram.com': (req, res, u) => {
+    if (u.pathname === '/spacestar/followers/') {
+      // 인스타 팔로워 목록 창: 스크롤되는 창 안에 팔로우 버튼(누르면 0.3초 뒤 '팔로잉'), 이미 팔로잉·맞팔로우하기
+      const row = (id, label) => `<div style="height:70px;display:flex;justify-content:space-between"><a href="/${id}/"><span>${id}</span></a><button onclick="window.__igClicks = (window.__igClicks || []).concat('${id}'); setTimeout(() => (this.textContent = '팔로잉'), 300)">${label}</button></div>`;
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Instagram</title></head><body>
+        <div role="dialog" style="position:fixed;left:50px;top:50px;width:400px;height:300px;background:#fff"><div id="sc" style="height:300px;overflow-y:auto">
+        ${row('ig_a', '팔로우')}<div style="height:70px"><a href="/ig_old/"><span>ig_old</span></a><button>팔로잉</button></div>${row('ig_b', '맞팔로우하기')}<div style="height:400px"></div>${row('ig_c', '팔로우')}</div></div></body></html>`);
+    }
     if (u.pathname.startsWith('/reel/CmockReel01')) {
       const item = {
         code: 'CmockReel01',

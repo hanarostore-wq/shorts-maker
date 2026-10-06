@@ -482,6 +482,63 @@
     return s;
   }
 
+  // 게시물 작성자(이름 + @아이디). 영상·사진 위 글자 첫 줄 '작성자 이름 (@아이디) · 사이트'에 쓴다.
+  //   사이트별 프로필 주소 모양으로 게시물 안의 작성자 링크를 찾고, 못 찾으면 사이트 데이터의 작성자(req.author)를 쓴다.
+  const PROFILE_RE = {
+    x: /^\/([A-Za-z0-9_]{1,15})\/?$/,
+    bluesky: /^\/profile\/([^/?#]+)\/?$/,
+    instagram: /^\/([A-Za-z0-9._]{1,30})\/?$/,
+    threads: /^\/@([A-Za-z0-9._]{1,30})\/?$/,
+    tiktok: /^\/@([A-Za-z0-9._]{1,30})\/?$/,
+    youtube: /^\/@([\w.-]{1,40})\/?$/,
+    pinterest: /^\/([A-Za-z0-9_]{3,30})\/?$/,
+  };
+  const NOT_PROFILE = /^(home|explore|search|notifications|messages|settings|i|reels?|p|stories|direct|accounts|about|privacy|terms|login|signup|tv|feed|following|foryou|live|shorts|watch|hashtag|tags?|compose)$/i;
+  const txtOf = (e) => (e?.innerText || e?.textContent || '').replace(/\s+/g, ' ').trim();
+  function postAuthor(el, req) {
+    const conf = SHOT_SITES[adapter.id];
+    const box = el.closest(POST_SEL) || el.closest('[role="dialog"]') || (conf && shotBox(el, conf));
+    const re = PROFILE_RE[adapter.id];
+    let handle = '';
+    let name = '';
+    if (adapter.id === 'bluesky' && SITES.bskyPost) {
+      const p = SITES.bskyPost(el, '영상');
+      if (p.found) {
+        const it = el.closest('[data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]');
+        handle = it?.dataset.testid.replace(/^(feedItem|postThreadItem)-by-/, '') || '';
+        name = p.author && p.author !== handle ? p.author : '';
+      }
+    } else if (box?.querySelector('[data-testid="User-Name"]')) {
+      // X(또는 같은 모양의 페이지): 작성자 줄 '이름 @아이디 · 날짜'
+      const t = txtOf(box.querySelector('[data-testid="User-Name"]'));
+      handle = /@([A-Za-z0-9_]{1,15})/.exec(t)?.[1] || '';
+      name = t.split('@')[0].replace(/[·\s]+$/, '').trim().slice(0, 40);
+    }
+    if (!handle && box && re) {
+      const links = [...box.querySelectorAll('a[href]')];
+      for (const a of links) {
+        const m = re.exec(a.getAttribute('href') || '');
+        if (!m || NOT_PROFILE.test(m[1])) continue;
+        handle = decodeURIComponent(m[1]);
+        // 같은 프로필로 가는 링크 중 '@' 로 시작하지 않는 글자가 이름
+        for (const b of links) {
+          if (b.getAttribute('href') !== a.getAttribute('href')) continue;
+          const t = (b.innerText || '').split('\n').map((x) => x.trim()).find((x) => x && !x.startsWith('@') && !/^\d+[smhd분시간일]/.test(x) && x.toLowerCase() !== handle.toLowerCase());
+          if (t) {
+            name = t.slice(0, 40);
+            break;
+          }
+        }
+        break;
+      }
+    }
+    if (!handle && adapter.id === 'tiktok') handle = (document.querySelector('[data-e2e="video-author-uniqueid"], [data-e2e="browse-username"]')?.innerText || '').trim().replace(/^@/, '');
+    const fromSite = String(req.author || '').trim().replace(/^@/, '');
+    if (!handle && fromSite && /^[\w.-]{2,40}$/.test(fromSite)) handle = fromSite;
+    else if (!name && fromSite && fromSite !== handle) name = fromSite.slice(0, 40);
+    return { name, handle };
+  }
+
   // 피드 글 부분(프로필 사진·이름·본문) 영역. raw=true 면 화면 밖이어도 그대로 돌려준다(스크롤 판단용).
   // 사이트별 캡처 위치: box = 게시물 묶음, parts = 작성자 줄 + 본문 요소(이것만 캡처)
   const SHOT_SITES = {
@@ -740,6 +797,11 @@
     }
     req.ai = !!entry.ai;
     req.captionText = feedText(video, req.title).slice(0, 1000);
+    try {
+      const au = postAuthor(video, req);
+      req.authorName = au.name;
+      req.authorHandle = au.handle;
+    } catch {}
     req.title = U.cleanTitle(req.title);
     // 클릭한 순간의 화면을 찍어 둔다. 버튼은 잠깐 숨긴다.
     //  ① 피드 본문 글 캡처를 사진·영상 빈 공간에 붙이기

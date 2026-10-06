@@ -613,7 +613,9 @@ export function drawTopLeftText(ctx, w, h, text) {
   ctx.font = `800 ${size}px "Pretendard","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR","Noto Sans CJK KR",sans-serif`;
   ctx.textBaseline = 'top';
   const margin = Math.round(size / 2); // 왼쪽 위 여백도 글자 크기에 맞춰(28px 일 때 14px)
-  const lines = wrap(ctx, text, w - margin * 2, 3);
+  // 줄바꿈으로 나뉜 첫 줄(작성자 줄)은 한 줄, 본문은 최대 3줄
+  const parts = String(text).split('\n').map((x) => x.trim()).filter(Boolean);
+  const lines = parts.length > 1 ? [...wrap(ctx, parts[0], w - margin * 2, 1), ...wrap(ctx, parts.slice(1).join(' '), w - margin * 2, 3)] : wrap(ctx, text, w - margin * 2, 3);
   const lh = Math.round(size * 1.25);
   ctx.lineJoin = 'round';
   ctx.lineWidth = Math.max(3, size * 0.2);
@@ -624,4 +626,13 @@ export function drawTopLeftText(ctx, w, h, text) {
     ctx.fillText(l, margin, margin + i * lh);
   });
   ctx.restore();
+}
+
+// 첫 줄: '작성자 이름 (@아이디) · 사이트'. 이름이 없으면 '작성자 @아이디 · 사이트'
+export function authorLine(cap) {
+  const handle = String(cap.authorHandle || '').trim().replace(/^@/, '');
+  const name = String(cap.authorName || '').replace(/\s+/g, ' ').trim();
+  if (!handle && !name) return '';
+  const who = name && handle ? `${name} (@${handle})` : handle ? `@${handle}` : name;
+  return `작성자 ${who}${cap.site ? ` · ${cap.site}` : ''}`;
 }

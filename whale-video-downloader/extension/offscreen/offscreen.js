@@ -2,7 +2,7 @@
 //   OPFS 임시 파일에 쓴 뒤 blob 주소를 서비스워커에 넘겨 웨일 다운로드 폴더(사용자가 지정한 폴더)로 저장한다.
 //   사진은 원본 그대로, jpg·png·gif 가 아니면 PNG 로 변환한다.
 import { copyFile, mergeStreams, remuxHls, StepError, STEP } from './engine.js';
-import { summarize, captionImage, captionVideo, feedImage, canvasPng, coverVideo, introVideo, cropShot, needsKorean, translateToKorean, withTranslation, postCard } from './caption.js';
+import { summarize, captionImage, captionVideo, feedImage, canvasPng, coverVideo, introVideo, cropShot, needsKorean, translateToKorean, withTranslation, postCard, authorLine } from './caption.js';
 
 // ① 방식: 찍어 둔 피드 글 부분 캡처가 있으면 그것을, 없으면 요약 글자를 붙인다
 async function overlayFor(cap, summary, warns) {
@@ -12,18 +12,20 @@ async function overlayFor(cap, summary, warns) {
     .replace(/(^|\s)[#＃][\p{L}\p{N}_]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  if (!body) return { ov: null, used: '' };
+  const head = authorLine(cap);
+  if (!body && !head) return { ov: null, used: '' };
   let ko = '';
-  if (cap.translate && needsKorean(body)) {
+  if (body && cap.translate && needsKorean(body)) {
     try {
       ko = await translateToKorean(body);
     } catch (err) {
       warns.push(`피드 글 번역 실패(번역 단계): ${err?.message || err} → 원문 그대로 넣었습니다. 인터넷 연결을 확인하거나 설정에서 '피드 글 한국어 번역'을 끄세요.`);
     }
   }
-  const text = ko || body;
-  return { ov: { text }, used: `[피드 글${ko ? '+번역' : ''}] ${text.slice(0, 60)}` };
+  const text = [head, ko || body].filter(Boolean).join('\n');
+  return { ov: { text }, used: `[피드 글${ko ? '+번역' : ''}] ${(ko || body).slice(0, 60)}${head ? ` [${head}]` : ''}` };
 }
+
 
 const running = new Map(); // jobId -> { ac, target }
 const finished = new Map(); // jobId -> { url, cleanup }
