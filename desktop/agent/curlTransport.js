@@ -22,7 +22,9 @@ function requestJsonViaCurl(url, method, body, key, { binary = process.platform 
     "show-error",
   ].join("\n") + "\n";
   return new Promise((resolve, reject) => {
-    const child = spawn(binary, ["--config", "-"], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+    // Some Windows networks close Vercel HTTP/2 POST responses (curl 56).
+    // HTTP/1.1 POST was confirmed reachable on the same machine.
+    const child = spawn(binary, ["--http1.1", "--config", "-"], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8");
@@ -34,7 +36,7 @@ function requestJsonViaCurl(url, method, body, key, { binary = process.platform 
     child.stderr.on("data", (part) => { stderr = (stderr + part).slice(-2000); });
     child.once("error", reject);
     child.once("close", (code) => {
-      if (code !== 0) return reject(new Error(`curl 통신 실패 (${code}): ${stderr.trim().slice(0, 300)}`));
+      if (code !== 0) return reject(new Error(`curl HTTP/1.1 통신 실패 (${code}): ${stderr.replaceAll(key || "\u0000", "[비공개]").trim().slice(0, 300)}`));
       const at = stdout.lastIndexOf(marker);
       if (at < 0) return reject(new Error("curl HTTP 상태를 확인할 수 없습니다."));
       const status = Number(stdout.slice(at + marker.length).trim());
