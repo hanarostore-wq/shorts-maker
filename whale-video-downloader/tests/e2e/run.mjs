@@ -1681,6 +1681,28 @@ if (!only || '팝업'.includes(only) || only === 'popup') {
   await p.close();
 }
 
+// ── (맨 마지막) 확장 업데이트로 열린 페이지와 연결이 끊겼을 때: 전부 팔로우가 영어 오류 대신 새로고침 안내 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ followAllButton: true });
+    await page.goto('https://x.com/spacestar/following', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('smd-followall', { timeout: 8000 });
+    const ep = await extPage();
+    await ep.evaluate(() => setTimeout(() => chrome.runtime.reload(), 50)).catch(() => {});
+    await page.waitForTimeout(2500);
+    await page.evaluate(() => document.querySelector('smd-followall').shadowRoot.querySelector('.go').click()).catch(() => {});
+    await page.waitForTimeout(500);
+    const m = await page.evaluate(() => document.querySelector('smd-followall')?.shadowRoot.querySelector('.msg')?.textContent || '');
+    const clicks = await page.evaluate(() => (window.__xClicks || []).length);
+    record('[전부 팔로우] (오류 경로) 확장 업데이트 후 연결이 끊기면 새로고침 안내(영어 오류 없음)', /연결이 끊겼습니다/.test(m) && /새로고침\(F5\)/.test(m) && !/Extension context/i.test(m) && clicks === 0, { note: `${m.replace(/\n/g, ' / ')} · 누른 수 ${clicks}` });
+  } catch (err) {
+    record('[전부 팔로우] 연결 끊김 안내', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
 const passed = results.filter((r) => r.ok).length;
 console.log(`\n결과: ${passed}/${results.length} 통과`);
 fs.writeFileSync(path.join(OUT, 'e2e-report.json'), JSON.stringify({ when: new Date().toISOString(), chromium: ctx.browser()?.version?.() || 'persistent', results, swLogs: swLogs.slice(-50) }, null, 2));

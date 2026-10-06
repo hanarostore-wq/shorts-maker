@@ -18,6 +18,21 @@
   const site = SITE_OF.find(([, re]) => re.test(H))?.[0] || '';
   if (!site) return;
 
+  // 확장프로그램을 업데이트(다시 시작)하면 이미 열려 있던 페이지의 이 스크립트는 확장과 연결이 끊긴다
+  const alive = () => {
+    try {
+      return !!chrome.runtime?.id;
+    } catch {
+      return false;
+    }
+  };
+  const DEAD = {
+    step: '확장프로그램 연결 확인',
+    reason: '확장프로그램이 업데이트(또는 다시 시작)되어 이 페이지와 연결이 끊겼습니다',
+    action: '이 페이지를 새로고침(F5)한 뒤 다시 누르세요. 업데이트한 뒤에는 열려 있던 페이지를 한 번씩 새로고침해야 합니다.',
+  };
+  const friendly = (err) => (/Extension context invalidated/i.test(String(err?.reason || err?.message || err)) ? { ...DEAD, step: err?.step && err.step !== '진행' ? err.step : DEAD.step } : err);
+
   let on = true;
   chrome.storage.local.get('settings').then((r) => {
     on = r.settings?.followAllButton !== false;
@@ -84,13 +99,18 @@
   }
 
   async function start() {
+    if (!alive()) {
+      ui.go.hidden = true;
+      return say(`전부 팔로우 실패\n단계: ${DEAD.step}\n원인: ${DEAD.reason}\n조치: ${DEAD.action}`, true);
+    }
     const lp = site === 'bsky' ? listPage() : null;
     if ((site === 'bsky' ? !lp : !cfg.active()) || run) return;
     run = { stop: false };
     tick();
     try {
       await (site === 'bsky' ? runBsky(lp) : runClicks());
-    } catch (err) {
+    } catch (e0) {
+      const err = friendly(e0);
       say(`전부 팔로우 실패\n단계: ${err.step || '진행'}\n원인: ${err.reason || err.message || err}\n조치: ${err.action || '페이지를 새로고침한 뒤 다시 누르세요.'}`, true);
     } finally {
       run = null;
@@ -213,14 +233,35 @@
   const cfg = CLICK[site];
 
   const dayKey = `followAllDay_${site}`;
+  // 하루 팔로우 수: 확장 저장소(연결이 끊기면 페이지 저장소)에 기록. 기록 실패가 팔로우를 막지 않게 한다.
+  const lsKey = `smd_${dayKey}`;
+  const readLs = () => {
+    try {
+      return JSON.parse(localStorage.getItem(lsKey) || 'null');
+    } catch {
+      return null;
+    }
+  };
   async function dailyCount() {
     const today = new Date().toISOString().slice(0, 10);
-    const r = await chrome.storage.local.get(dayKey).catch(() => ({}));
-    return r[dayKey]?.date === today ? r[dayKey].count : 0;
+    let v = null;
+    try {
+      v = (await chrome.storage.local.get(dayKey))[dayKey];
+    } catch {}
+    const l = readLs();
+    const c1 = v?.date === today ? v.count : 0;
+    const c2 = l?.date === today ? l.count : 0;
+    return Math.max(c1, c2);
   }
   async function addCount(n) {
     const today = new Date().toISOString().slice(0, 10);
-    await chrome.storage.local.set({ [dayKey]: { date: today, count: (await dailyCount()) + n } }).catch(() => {});
+    const rec = { date: today, count: (await dailyCount()) + n };
+    try {
+      localStorage.setItem(lsKey, JSON.stringify(rec));
+    } catch {}
+    try {
+      await chrome.storage.local.set({ [dayKey]: rec });
+    } catch {}
   }
   async function runClicks() {
     if (!cfg.login()) throw { step: '로그인 확인', reason: `${cfg.name} 에 로그인되어 있지 않습니다`, action: `${cfg.name} 에 로그인한 뒤 새로고침하세요.` };
@@ -281,6 +322,13 @@
   // 사이트 안에서 화면이 바뀌어도(주소만 바뀜) 버튼을 띄우고 숨긴다
   let lastState = '';
   setInterval(() => {
+    if (!alive()) {
+      if (host?.isConnected && !run && !ui.go.hidden) {
+        ui.go.hidden = true;
+        say(`${DEAD.reason}.\n${DEAD.action}`, true);
+      }
+      return;
+    }
     const st = `${location.pathname}|${site === 'bsky' || site === 'x' ? '' : !!listDialog()}`;
     if (st !== lastState) {
       lastState = st;
