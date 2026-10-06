@@ -36,16 +36,20 @@ function requestJsonViaCurl(url, method, body, key, { binary = process.platform 
     child.stderr.on("data", (part) => { stderr = (stderr + part).slice(-2000); });
     child.once("error", reject);
     child.once("close", (code) => {
-      if (code !== 0) return reject(new Error(`curl HTTP/1.1 통신 실패 (${code}): ${stderr.replaceAll(key || "\u0000", "[비공개]").trim().slice(0, 300)}`));
       const at = stdout.lastIndexOf(marker);
-      if (at < 0) return reject(new Error("curl HTTP 상태를 확인할 수 없습니다."));
-      const status = Number(stdout.slice(at + marker.length).trim());
-      if (!Number.isInteger(status) || status < 100 || status > 599) return reject(new Error("curl HTTP 상태가 올바르지 않습니다."));
-      const text = stdout.slice(0, at).replace(/\n$/, "");
+      const status = at < 0 ? 0 : Number(stdout.slice(at + marker.length).trim());
+      const validStatus = Number.isInteger(status) && status >= 100 && status <= 599;
       let data;
-      try { data = JSON.parse(text); }
-      catch { return reject(new Error(`서버 응답을 읽지 못했습니다 (상태 ${status})`)); }
-      resolve({ ok: status >= 200 && status < 300, status, data });
+      if (at >= 0 && validStatus) {
+        try { data = JSON.parse(stdout.slice(0, at)); } catch { /* incomplete response */ }
+      }
+      // Windows Schannel can report curl 56 when the peer omits TLS close_notify
+      // after the *complete* response. Accept only a valid JSON body and HTTP status.
+      if ((code === 0 || code === 56) && validStatus && data !== undefined) {
+        return resolve({ ok: status >= 200 && status < 300, status, data });
+      }
+      const safeError = stderr.replaceAll(key || "\u0000", "[비공개]").trim().slice(0, 200);
+      reject(new Error(`curl HTTP/1.1 통신 실패 (${code}; HTTP ${validStatus ? status : "미수신"}; 본문 ${at < 0 ? 0 : at}자): ${safeError}`));
     });
     child.stdin.on("error", () => null);
     child.stdin.end(config);
