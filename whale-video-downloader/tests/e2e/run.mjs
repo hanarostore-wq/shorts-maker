@@ -891,6 +891,40 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── 팝업 최근 다운로드: 대기 중인 작업이 많아도 전부 표시 ──
+{
+  const pp = await extPage();
+  try {
+    await pp.setViewportSize({ width: 392, height: 600 });
+    await pp.goto(`chrome-extension://${extId}/popup/popup.html`);
+    const now = Date.now();
+    const mk = (i, state, phase) => ({ id: `t${state}${phase}${i}`, title: `${phase || state} 작업 ${i}`, site: 'generic', state, phase, created: now - 100000 + i, percent: null });
+    const saved = await pp.evaluate(async () => (await chrome.storage.session.get('jobs')).jobs || []);
+    const fake = [...Array.from({ length: 3 }, (_, i) => mk(i, 'running', 'download')), ...Array.from({ length: 42 }, (_, i) => mk(i, 'running', 'queue')), ...Array.from({ length: 30 }, (_, i) => mk(i, 'done', ''))];
+    await pp.evaluate(async (jobs) => chrome.storage.session.set({ jobs }), fake);
+    await pp.waitForTimeout(600);
+    const r = await pp.evaluate(() => ({
+      items: document.querySelectorAll('#jobList > li').length,
+      queued: [...document.querySelectorAll('#jobList > li')].filter((li) => /대기 중/.test(li.textContent)).length,
+      sum: document.getElementById('jobSummary').textContent,
+      cancel: getComputedStyle(document.getElementById('cancelQueued')).display !== 'none' ? document.getElementById('cancelQueued').textContent : '',
+      firstQueued: [...document.querySelectorAll('#jobList > li')].find((li) => /대기 중/.test(li.textContent))?.textContent.replace(/\s+/g, ' ') || '',
+    }));
+    await pp.screenshot({ path: path.join(SHOTS, 'popup-queue.png') });
+    record('[팝업] 대기 중 작업이 많아도 전부 표시(받는 중 3 + 대기 42 + 끝난 것 최근 25)', r.items === 70 && r.queued === 42 && r.sum === '받는 중 3개 · 대기 중 42개' && /대기 42개 모두 취소/.test(r.cancel) && /1번째/.test(r.firstQueued), { note: JSON.stringify(r) });
+    // 대기·받는 중이 없으면 개수 줄과 '모두 취소' 버튼을 숨김
+    await pp.evaluate(async (jobs) => chrome.storage.session.set({ jobs }), fake.filter((j) => j.state === 'done'));
+    await pp.waitForTimeout(500);
+    const hidden = await pp.evaluate(() => getComputedStyle(document.getElementById('jobSummary')).display === 'none' && getComputedStyle(document.getElementById('cancelQueued')).display === 'none');
+    record('[팝업] 대기 없으면 개수 줄·모두 취소 숨김', hidden, { note: hidden ? '숨김' : '보임' });
+    await pp.evaluate(async (jobs) => chrome.storage.session.set({ jobs }), saved);
+  } catch (err) {
+    record('[팝업] 대기 목록', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await pp.close();
+  }
+}
+
 // ── 설정 기억: 확장 ID 고정 + 동기화 저장소 백업 ──
 {
   try {

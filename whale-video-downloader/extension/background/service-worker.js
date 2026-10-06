@@ -37,7 +37,9 @@ function persist() {
   if (persistTimer) return;
   persistTimer = setTimeout(async () => {
     persistTimer = 0;
-    const list = [...jobs.values()].sort((a, b) => b.created - a.created).slice(0, 40).map(summary);
+    // 받는 중·대기 중인 작업은 개수와 상관없이 전부, 끝난 작업은 최근 40개까지 팝업에 넘긴다
+    const sorted = [...jobs.values()].sort((a, b) => b.created - a.created);
+    const list = [...sorted.filter((j) => j.state === 'running'), ...sorted.filter((j) => j.state !== 'running').slice(0, 40)].map(summary);
     await chrome.storage.session.set({ jobs: list }).catch(() => {});
     const running = list.filter((j) => j.state === 'running').length;
     chrome.action.setBadgeText({ text: running ? String(running) : '' }).catch(() => {});

@@ -276,10 +276,28 @@ const PHASE = { caption: '피드 내용 넣는 중', shot: '피드 화면 찍는
 async function renderJobs() {
   const [{ jobs = [] }, { history = [] }] = await Promise.all([chrome.storage.session.get('jobs'), chrome.storage.local.get('history')]);
   const seen = new Set();
-  const all = [...jobs, ...history].filter((j) => (seen.has(j.id) ? false : seen.add(j.id))).sort((a, b) => b.created - a.created).slice(0, 25);
+  const uniq = [...jobs, ...history].filter((j) => (seen.has(j.id) ? false : seen.add(j.id)));
+  // 받는 중 → 대기 중(먼저 넣은 순서) 은 전부, 끝난 것은 최근 25개
+  const active = uniq.filter((j) => j.state === 'running' && j.phase !== 'queue').sort((a, b) => a.created - b.created);
+  const queued = uniq.filter((j) => j.state === 'running' && j.phase === 'queue').sort((a, b) => a.created - b.created);
+  const ended = uniq.filter((j) => j.state !== 'running').sort((a, b) => b.created - a.created).slice(0, 25);
+  const all = [...active, ...queued, ...ended];
   const ul = $('#jobList');
   ul.innerHTML = '';
   $('#jobEmpty').style.display = all.length ? 'none' : '';
+  const sum = $('#jobSummary');
+  if (sum) {
+    sum.textContent = active.length || queued.length ? `받는 중 ${active.length}개 · 대기 중 ${queued.length}개` : '';
+    sum.style.display = active.length || queued.length ? '' : 'none';
+  }
+  const cq = $('#cancelQueued');
+  if (cq) {
+    cq.style.display = queued.length ? '' : 'none';
+    cq.textContent = `대기 ${queued.length}개 모두 취소`;
+    cq.onclick = async () => {
+      for (const j of queued) await chrome.runtime.sendMessage({ type: 'smd:cancel', jobId: j.id }).catch(() => {});
+    };
+  }
   const tpl = $('#tplJob');
   for (const j of all) {
     const li = tpl.content.firstElementChild.cloneNode(true);
@@ -297,7 +315,8 @@ async function renderJobs() {
       li.querySelector('.bar i').style.width = `${Math.max(3, j.percent || 0)}%`;
       const pct = j.percent != null ? ` ${Math.floor(j.percent)}%` : '';
       const bytes = fmtBytes(j.bytes);
-      js.innerHTML = `${escapeHtml(meta.name)} · ${PHASE[j.phase] || '진행 중'}${pct}${bytes ? ` · ${bytes}` : ''}${q}`;
+      const order = j.phase === 'queue' ? ` ${queued.indexOf(j) + 1}번째` : '';
+      js.innerHTML = `${escapeHtml(meta.name)} · ${PHASE[j.phase] || '진행 중'}${order}${pct}${bytes ? ` · ${bytes}` : ''}${q}`;
       const c = document.createElement('button');
       c.className = 'link';
       c.textContent = '취소';
