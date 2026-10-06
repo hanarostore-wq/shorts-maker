@@ -1133,5 +1133,5 @@
     };
   }
 
-  globalThis.__SMD_SITES = { sites, generic, pick, U, SiteError, igMediaId, imageRequest, originalImageUrls, xUsers, bskyPost };
+  globalThis.__SMD_SITES = { sites, generic, pick, U, SiteError, igMediaId, imageRequest, originalImageUrls, xUsers, bskyPost, bskyItemOf };
 })();

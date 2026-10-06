@@ -756,7 +756,7 @@ const handlers = {
     if (u.pathname === '/feedphoto') {
       // 블루스카이 피드(SPA) 사진: 탭 제목은 'ㅎㅊㅁㅃ'로 남아 있음. 이름 링크 하나에 이름·@아이디가 같이 들어 있는 실제 구조.
       //   게시물 사진을 누르면 게시물 밖의 크게 보기 창(#lb)이 열린다. #lone 은 어느 게시물에도 속하지 않은 사진(오류 경로).
-      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>ㅎㅊㅁㅃ</title><meta property="og:title" content="ㅎㅊㅁㅃ"></head><body style="background:#111;color:#eee">
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>ㅎㅊㅁㅃ</title><meta property="og:title" content="ㅎㅊㅁㅃ"><script>localStorage.setItem('BSKY_STORAGE', JSON.stringify({ session: { currentAccount: { did: 'did:plc:me', handle: 'me.test', service: 'https://bsky.social/', pdsUrl: 'https://bsky.social', accessJwt: 'TEST-ACCESS-JWT' }, accounts: [] } }));</script></head><body style="background:#111;color:#eee">
         <div data-testid="feedItem-by-erin.test" style="width:560px;padding:12px">
           <div><a href="/profile/erin.test"><span>에린</span>\n<span>@erin.test</span></a> · <a href="/profile/erin.test/post/3kerinpost">2시간</a></div>
           <div data-testid="postText">바다 사진이에요 #여행</div>

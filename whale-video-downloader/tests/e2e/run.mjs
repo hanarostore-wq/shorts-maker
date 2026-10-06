@@ -566,6 +566,10 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.mouse.move(2, 2);
     await page.waitForTimeout(1500);
   };
+  const toast = (page) => page.evaluate(() => {
+    const h = document.querySelector('smd-toast');
+    return h && h.style.display !== 'none' ? h.shadowRoot.querySelector('.t').textContent : '';
+  });
   const page = await ctx.newPage();
   try {
     await setSettings({ captionOnMedia: false, autoFollow: true });
@@ -574,6 +578,8 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.waitForTimeout(1200);
     await clickSave(page, '#pic');
     const xr = log.slice(l).find((e) => e.follow === 'create');
+    const xt = await toast(page);
+    record('[자동 팔로우] X: 결과를 화면 아래에 알림', /자동 팔로우: @auto_user 팔로우했습니다/.test(xt), { note: xt || '알림 없음' });
     record('[자동 팔로우] X: 사진 다운로드 누르면 X ⋯ 메뉴로 작성자 팔로우(X 보안 값 포함 요청)', xr?.screen_name === 'auto_user' && xr.ok && xr.tx === 'PAGE-TX', { note: JSON.stringify(xr || '요청 없음') });
 
     l = log.length;
@@ -581,11 +587,35 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.waitForTimeout(1500);
     await clickSave(page, '#apic');
     const already = log.slice(l).filter((e) => e.bskyFollow);
+    const at = await toast(page);
+    record('[자동 팔로우] 블루스카이: 이미 팔로우 중이면 그렇다고 알림', /이미 팔로우 중/.test(at), { note: at || '알림 없음' });
     record('[자동 팔로우] 블루스카이: 이미 팔로우 중이면 아무 요청도 안 함', already.length === 0, { note: already.length ? JSON.stringify(already) : '요청 없음' });
     l = log.length;
     await clickSave(page, '#pic');
     const br = log.slice(l).find((e) => e.bskyFollow === 'create');
     record('[자동 팔로우] 블루스카이: 다운로드 누르면 작성자 팔로우', br?.subject === 'did:plc:carol' && br.repo === 'did:plc:me', { note: JSON.stringify(br || '요청 없음') });
+    // 블루스카이 사진 크게 보기 창(게시물 밖): 방금 누른 게시물 작성자를 팔로우
+    l = log.length;
+    await page.goto('https://bsky.app/feedphoto', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    await page.locator('#ep').click();
+    await page.waitForTimeout(400);
+    await page.locator('#lbimg').hover();
+    await page.waitForTimeout(500);
+    await page.locator('smd-anchor .btn.show').last().click();
+    await page.waitForTimeout(2000);
+    const lb = log.slice(l).find((e) => e.bskyFollow === 'create');
+    const lt = await toast(page);
+    record('[자동 팔로우] 블루스카이: 사진 크게 보기 창에서 받아도 그 게시물 작성자 팔로우', lb?.subject === 'did:plc:erin' && /@erin\.test 팔로우했습니다/.test(lt), { note: `${JSON.stringify(lb || '요청 없음')} · ${lt}` });
+    // 오류 경로: 어느 게시물에도 속하지 않은 사진 → 작성자 찾기 실패를 단계·원인·조치로 알림
+    await page.goto('https://bsky.app/feedphoto', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    await page.locator('#lone').hover();
+    await page.waitForTimeout(500);
+    await page.locator('smd-anchor .btn.show').last().click();
+    await page.waitForTimeout(1500);
+    const et = await toast(page);
+    record('[자동 팔로우] (오류 경로) 작성자를 못 찾으면 단계·원인·조치 알림', /자동 팔로우 실패/.test(et) && /단계: 작성자 찾기/.test(et) && /조치:/.test(et), { note: et || '알림 없음' });
 
     await page.goto('https://www.example-videos.com/afollow', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1200);

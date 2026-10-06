@@ -118,11 +118,15 @@
   }
   async function toggle(e, onlyFollow = false) {
     const s = session();
-    if (!s) return showErr(e, '팔로우', { reason: '블루스카이 로그인 정보를 찾지 못했습니다', action: '블루스카이에 로그인한 뒤 새로고침하세요.' });
+    if (!s) {
+      const err = { reason: '블루스카이 로그인 정보를 찾지 못했습니다', action: '블루스카이에 로그인한 뒤 새로고침하세요.' };
+      showErr(e, '팔로우', err);
+      return { error: { step: '로그인 확인', ...err } };
+    }
     let u = users.get(e.handle);
-    if (onlyFollow && u?.following) return; // 자동 팔로우: 이미 팔로우 중이면 그대로
+    if (onlyFollow && u?.following) return { already: true }; // 자동 팔로우: 이미 팔로우 중이면 그대로
     const unfollow = !!u?.following;
-    if (unfollow && !window.confirm(`@${e.handle} 님 팔로우를 취소할까요?`)) return;
+    if (unfollow && !window.confirm(`@${e.handle} 님 팔로우를 취소할까요?`)) return { canceled: true };
     e.btn.classList.add('busy');
     try {
       if (!u?.did) {
@@ -134,7 +138,7 @@
         // 자동 팔로우: 확인해 보니 이미 팔로우 중이면 아무것도 하지 않는다
         if (onlyFollow && u.following) {
           renderAll(e.handle);
-          return;
+          return { already: true };
         }
       }
       if (unfollow) {
@@ -146,8 +150,10 @@
         users.set(e.handle, { did: u.did, following: j.uri || 'yes' });
       }
       renderAll(e.handle);
+      return { ok: true };
     } catch (err) {
       showErr(e, unfollow ? '언팔로우' : '팔로우', err);
+      return { error: { step: unfollow ? '언팔로우' : '팔로우', ...err } };
     } finally {
       e.btn.classList.remove('busy');
     }
@@ -161,11 +167,22 @@
     if (!d?.el) return;
     d.handled = true;
     const s = session();
-    const item = d.el.closest('[data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]');
+    // 게시물 안 → 상세 화면 본 게시물 → 방금 누른 게시물 순(사진 크게 보기 창 대비)
+    const item = d.el.closest('[data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]') || globalThis.__SMD_SITES?.bskyItemOf?.(d.el) || null;
     const handle = (item?.dataset.testid.replace(/^(feedItem|postThreadItem)-by-/, '') || /^\/profile\/([^/]+)\/post\//.exec(location.pathname)?.[1] || '').toLowerCase();
-    if (!handle || !s || handle === s.handle || handle === s.did) return;
+    if (!s) return d.report?.({ error: { step: '로그인 확인', reason: '블루스카이 로그인 정보를 찾지 못했습니다', action: '블루스카이에 로그인한 뒤 새로고침하세요.' } });
+    if (!handle) return d.report?.({ error: { step: '작성자 찾기', reason: '누른 사진·영상의 게시물 작성자를 찾지 못했습니다', action: '게시물을 눌러 연 화면에서 다시 다운로드하거나 작성자 프로필에서 직접 팔로우하세요.' } });
+    if (handle === s.handle || handle === s.did) return;
     const e = (item && items.get(item)) || { handle, btn: document.createElement('button') };
-    toggle(e, true);
+    (async () => {
+      let r = await toggle(e, true);
+      // 로그인 토큰이 막 만료된 경우: 블루스카이가 새 토큰으로 바꿀 시간을 주고 한 번 더
+      if (r?.error && /만료/.test(r.error.reason || '')) {
+        await new Promise((ok) => setTimeout(ok, 2500));
+        r = await toggle(e, true);
+      }
+      d.report?.({ ...(r || { ok: true }), who: `@${handle}` });
+    })();
   });
 
   function scanFollow() {

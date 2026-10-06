@@ -732,9 +732,34 @@
     return FOLLOW_TEXT.test(t) || (!t && FOLLOW_TEXT.test(label)) || (t.length < 2 && FOLLOW_TEXT.test(label));
   };
   const NO_DOM_FOLLOW = new Set(['x', 'bluesky']);
+  // 자동 팔로우 결과 알림(화면 아래 가운데). 성공·이미 팔로우·실패(단계·원인·조치)를 모두 보여 준다.
+  let toastHost = null;
+  function followToast(r) {
+    if (!r) return;
+    if (!toastHost?.isConnected) {
+      toastHost = document.createElement('smd-toast');
+      toastHost.setAttribute('style', 'all:initial;position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:2147483646;pointer-events:none');
+      toastHost.attachShadow({ mode: 'open' }).innerHTML = `<style>.t{max-width:420px;padding:9px 14px;border-radius:12px;color:#fff;background:rgba(20,20,30,.92);font:600 12.5px/1.45 "Pretendard","Malgun Gothic",system-ui,sans-serif;white-space:pre-line;box-shadow:0 4px 16px rgba(0,0,0,.35)}.t.err{background:rgba(150,20,40,.95)}</style><div class="t"></div>`;
+      document.documentElement.appendChild(toastHost);
+    }
+    const t = toastHost.shadowRoot.querySelector('.t');
+    const who = r.who ? `${r.who} ` : '';
+    if (r.error) {
+      t.className = 't err';
+      t.textContent = `자동 팔로우 실패 ${who}\n단계: ${r.error.step || '팔로우'}\n원인: ${r.error.reason || r.error}\n조치: ${r.error.action || '페이지를 새로고침한 뒤 다시 시도하세요.'}`;
+    } else {
+      t.className = 't';
+      t.textContent = r.already ? `자동 팔로우: ${who}이미 팔로우 중입니다` : `자동 팔로우: ${who}팔로우했습니다`;
+    }
+    toastHost.style.display = 'block';
+    clearTimeout(followToast.t);
+    followToast.t = setTimeout(() => toastHost && (toastHost.style.display = 'none'), r.error ? 12000 : 4000);
+  }
+  globalThis.__SMD_FOLLOW_TOAST = followToast;
+
   function autoFollow(el) {
     if (settings.autoFollow === false) return;
-    const detail = { el, handled: false };
+    const detail = { el, handled: false, report: followToast };
     document.dispatchEvent(new CustomEvent('smd:auto-follow', { detail }));
     if (detail.handled || NO_DOM_FOLLOW.has(adapter.id)) return;
     const vr = el.getBoundingClientRect();
