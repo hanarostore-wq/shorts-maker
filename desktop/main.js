@@ -44,11 +44,8 @@ function launchFullSourceApp(kind) {
     return;
   }
   const executable = process.platform === "win32" ? "npm.cmd" : "npm";
-  const childEnvironment = { ...process.env };
-  delete childEnvironment.SOCIAL_CONTROL_KEY;
   const child = spawn(executable, ["start"], {
     cwd,
-    env: childEnvironment,
     shell: process.platform === "win32",
     windowsHide: false,
     stdio: "ignore",

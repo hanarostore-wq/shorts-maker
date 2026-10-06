@@ -1,7 +1,6 @@
 "use client";
 import {TradingAnalyticsPanel} from "./TradingAnalyticsPanel";
 import { OriginalAppsPanel } from "./OriginalAppsPanel";
-import { BlogReadyPanel } from "./BlogReadyPanel";
 import { BlogResearchPanel } from "./BlogResearchPanel";
 import { AdsensePanel } from "./AdsensePanel";
 
@@ -71,7 +70,6 @@ export function AgentDetailModal({
         {tool === "assetManagement" && <AssetManagementPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
         {tool === "profitRealization" && <ProfitRealizationPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
         {tool === "liveTrading" && <LiveTradingPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
-        {tool === "blogReady" && <BlogReadyPanel />}
         {tool === "blogResearch" && <BlogResearchPanel />}
         {tool === "naverBlog" && <OriginalAppsPanel platform="naver" />}
         {tool === "threads" && <OriginalAppsPanel platform="threads" />}

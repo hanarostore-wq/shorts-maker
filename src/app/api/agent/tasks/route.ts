@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { enqueueTask, listTasks } from "@/lib/agent/store";
-import { isSocialAuthorized } from "@/lib/socialAuth";
 
-export async function GET(request: Request) {
+export async function GET() {
   const tasks = await listTasks();
-  return NextResponse.json({ tasks: isSocialAuthorized(request) ? tasks : tasks.filter((task) => task.agentId !== "b_naver") });
+  return NextResponse.json({ tasks: tasks.filter((task) => task.agentId !== "b_naver") });
 }
 
 export async function POST(request: Request) {
@@ -17,8 +16,8 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  if (agentId === "b_naver" && !isSocialAuthorized(request)) {
-    return NextResponse.json({ error: "소셜 작업자 접근키가 필요합니다." }, { status: 401 });
+  if (agentId === "b_naver") {
+    return NextResponse.json({ error: "네이버 발행은 MoneyOS 원본 BlogAuto 앱에서 직접 실행합니다." }, { status: 410 });
   }
 
   const task = await enqueueTask({ departmentId, agentId, instruction });

@@ -6,6 +6,11 @@ Set-StrictMode -Version Latest
 $desktop = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not (Test-Path (Join-Path $desktop 'package-lock.json'))) { throw 'Run this script from a complete shorts-maker checkout.' }
 if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw 'Node.js and npm are required.' }
+$legacyKeyFile = Join-Path $env:LOCALAPPDATA 'ShortsMakerControlRoom\social-key.dpapi'
+if (Test-Path $legacyKeyFile) {
+    Remove-Item -Force $legacyKeyFile
+    Write-Host 'Removed the obsolete local social access-key file.'
+}
 $requiredApps = @(
     (Join-Path $desktop 'apps\naverblog-extention\package.json'),
     (Join-Path $desktop 'apps\threads-auto\package.json')
