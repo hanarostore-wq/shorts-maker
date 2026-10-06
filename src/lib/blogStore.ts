@@ -95,6 +95,7 @@ export async function listBlogSchedules() { return readSchedules(); }
 
 export async function getBlogDashboard() {
   const [articles, results, schedules] = await Promise.all([readArticles(), readResults(), readSchedules()]);
+  const workerHeartbeat = await getSharedRedis()?.get<string>("moneyos:social:desktop-heartbeat");
   const byBlog: Record<string, number> = {};
   const byStatus: Record<string, number> = {};
   for (const article of articles) {
@@ -103,6 +104,7 @@ export async function getBlogDashboard() {
   }
   return {
     articles,
+    workerOnline: Boolean(workerHeartbeat),
     counts: {
       total: articles.length,
       ready: articles.filter((a) => a.status === "ready").length,
@@ -159,16 +161,21 @@ export async function claimDueBlogSlots(at = new Date()) {
     const getPart = (type: string) => parts.find((part) => part.type === type)?.value || "00";
     const currentMinute = `${getPart("hour")}:${getPart("minute")}`;
     const day = `${getPart("year")}-${getPart("month")}-${getPart("day")}`;
-    if (!schedule.slots.includes(currentMinute)) continue;
-    const slotKey = `${day}T${currentMinute}`;
-    const already = articles.some((a) => a.blogId === schedule.blogId && a.scheduledFor === slotKey && ["queued", "publishing", "published"].includes(a.status));
-    if (already) continue;
-    const article = articles.find((a) => a.blogId === schedule.blogId && a.status === "ready" && (a.selected || a.autoPublishEligible));
-    if (!article) continue;
-    article.status = "queued";
-    article.scheduledFor = slotKey;
-    article.updatedAt = now();
-    claimed.push(article);
+    for (const slot of schedule.slots.filter((value) => value <= currentMinute)) {
+      const slotKey = `${day}T${slot}`;
+      const already = articles.some((a) => a.blogId === schedule.blogId && a.scheduledFor === slotKey && ["queued", "publishing", "published"].includes(a.status));
+      if (already) continue;
+      const article = articles.find((a) => a.blogId === schedule.blogId && a.status === "ready" && (a.selected || a.autoPublishEligible));
+      if (!article) continue;
+      const redis = getSharedRedis();
+      if (!redis) continue;
+      const locked = await redis.set(`moneyos:blog:slot:${schedule.blogId}:${slotKey}`, article.id, { nx: true, ex: 172800 });
+      if (locked !== "OK") continue;
+      article.status = "queued";
+      article.scheduledFor = slotKey;
+      article.updatedAt = now();
+      claimed.push(article);
+    }
   }
   if (claimed.length) await writeArticles(articles);
   return claimed;

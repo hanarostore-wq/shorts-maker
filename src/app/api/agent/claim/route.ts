@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { claimNextTask, setTaskStatus } from "@/lib/agent/store";
+import { isSocialAuthorized } from "@/lib/socialAuth";
+import { listTasks } from "@/lib/agent/store";
 
 /** 데스크톱 워커가 다음 작업을 하나 꺼내간다. */
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
-  const task = await claimNextTask(body?.agentId);
+  const task = await claimNextTask(body?.agentId, isSocialAuthorized(request));
   return NextResponse.json({ task });
 }
 
@@ -15,6 +17,10 @@ export async function PATCH(request: Request) {
 
   if (!taskId || !status) {
     return NextResponse.json({ error: "taskId와 status는 필수입니다." }, { status: 400 });
+  }
+  const existing = (await listTasks()).find((item) => item.id === taskId);
+  if (existing?.agentId === "b_naver" && !isSocialAuthorized(request)) {
+    return NextResponse.json({ error: "소셜 작업자 접근키가 필요합니다." }, { status: 401 });
   }
 
   const task = await setTaskStatus(taskId, status, error ?? null);

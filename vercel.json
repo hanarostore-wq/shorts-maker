@@ -5,6 +5,10 @@
     {
       "path": "/api/coin/report",
       "schedule": "5 15 * * *"
+    },
+    {
+      "path": "/api/social/cron",
+      "schedule": "0 0 * * *"
     }
   ]
 }
