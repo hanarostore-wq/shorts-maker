@@ -8,6 +8,13 @@ export const departments: Department[] = [
     agents: [
       { id: "o4", name: "Vercel파견직원", task: "Vercel 배포/빌드 전반 관리 - 아직 연동 안 됨", status: "offline" },
       { id: "o5", name: "공유저장소", task: "Upstash Redis 공유 상태 관리", status: "active" },
+    ],
+  },
+  {
+    id: "blog",
+    name: "블로그부서",
+    icon: "✍️",
+    agents: [
       { id: "b_naver", name: "네이버블로그", task: "원고 작성·예약·브라우저 발행 작업 관리", status: "standby" },
       { id: "o_threads", name: "쓰레드", task: "Threads 공식 API 연결·원고·예약 발행 관리", status: "standby" },
     ],
@@ -88,7 +95,7 @@ export const projects: Project[] = [
   { id: "p1", name: "스마트스토어 자동화", departmentId: "store", agentCount: 5, leadAgent: "상품소싱이" },
   { id: "p2", name: "쿠팡 자동화", departmentId: "store", agentCount: 4, leadAgent: "가격감시자" },
   { id: "p3", name: "쇼츠 팩토리", departmentId: "shorts", agentCount: 6, leadAgent: "영상감독" },
-
+  { id: "p4", name: "블로그 자동화", departmentId: "blog", agentCount: 2, leadAgent: "네이버블로그" },
   { id: "p5", name: "업비트 현물 단타", departmentId: "coin", agentCount: 12, leadAgent: "Jev 매수근거" },
 
 ];

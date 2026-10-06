@@ -36,7 +36,7 @@ export async function publishThreadPost(id: string, allowDraft = false) {
     const detail = await graph(`/${encodeURIComponent(remoteId)}?fields=id,permalink,text`, account.token);
     if (String(detail.id || "") !== remoteId || !detail.permalink) throw new Error("게시물 공개 주소 검증 실패");
     const updated = await changeThreadPost(id, { status: "published", remoteId, permalink: String(detail.permalink), error: null });
-    await reportCompletion({ departmentId: "ops", agentId: "o_threads", message: `Threads 게시 완료 · @${account.username} · ${remoteId}` });
+    await reportCompletion({ departmentId: "blog", agentId: "o_threads", message: `Threads 게시 완료 · @${account.username} · ${remoteId}` });
     return updated;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Threads 게시 오류";
@@ -44,7 +44,7 @@ export async function publishThreadPost(id: string, allowDraft = false) {
     const status = publicationStarted ? "needs_review" : "failed";
     await changeThreadPost(id, { status, error: `${message}${publicationStarted ? " · 실제 게시 여부를 계정에서 확인한 뒤 수동으로 처리하세요. 자동 재시도 안 함" : ""}` });
     if (!publicationStarted) await releaseThreadPublishLock(id);
-    await reportFailure({ departmentId: "ops", agentId: "o_threads", message: `Threads ${status === "needs_review" ? "게시 확인 필요" : "게시 실패"}: ${message}`, incidentKey: `threads:${id}` });
+    await reportFailure({ departmentId: "blog", agentId: "o_threads", message: `Threads ${status === "needs_review" ? "게시 확인 필요" : "게시 실패"}: ${message}`, incidentKey: `threads:${id}` });
     throw new Error(message);
   }
 }
