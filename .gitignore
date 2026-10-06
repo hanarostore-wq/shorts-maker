@@ -48,3 +48,6 @@ next-env.d.ts
 *.sqlite-shm
 /TRADING-ANALYTICS/data/
 /TRADING-ANALYTICS/reports/
+
+# Full upstream desktop applications are cloned unchanged on the user's PC.
+/desktop/apps/

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 type Account = { id: string; username: string; updatedAt: string };
 type Thread = { id: string; accountId: string; text: string; status: string; scheduledAt: string | null; permalink: string | null; error: string | null };
@@ -22,6 +22,7 @@ export function SocialControlPanel({ platform }: { platform: Platform }) {
   const [blogs, setBlogs] = useState<Blog[]>([]);
   const [schedules, setSchedules] = useState<BlogSchedule[]>([]);
   const [workerOnline, setWorkerOnline] = useState(false);
+  const desktopBrowser = useSyncExternalStore(() => () => {}, () => navigator.userAgent.includes("Electron/"), () => false);
   const [token, setToken] = useState("");
   const [accountId, setAccountId] = useState("");
   const [text, setText] = useState("");
@@ -78,7 +79,13 @@ export function SocialControlPanel({ platform }: { platform: Platform }) {
   return <div className="flex flex-col gap-4 text-xs">
     <div className="control-room-panel border-l-2 border-l-[var(--control-cyan)] p-3">
       <div className="flex items-center justify-between gap-3"><strong className="text-sm text-[var(--control-cyan)]">{platform === "threads" ? "THREADS AUTO · 운영 콘솔" : "NAVER BLOG · 운영 콘솔"}</strong><span className={`text-[10px] ${workerOnline ? "text-emerald-300" : "text-amber-300"}`}>PC 작업자 {workerOnline ? "연결됨" : "연결 대기"}</span></div>
-      <p className="mt-2 text-[11px] leading-5 text-zinc-400">{platform === "threads" ? "공식 Graph API로 계정을 연결하고 검토한 원고를 즉시 또는 예약 발행합니다" : "네이버 로그인은 로컬 Chrome에서 유지합니다 원고를 저장하고 브라우저 작업 대기열에 전달합니다"}</p>
+      <p className="mt-2 text-[11px] leading-5 text-zinc-400">{platform === "threads" ? "공식 Graph API로 계정을 연결하고 검토한 원고를 즉시 또는 예약 발행합니다" : "웹 큐의 자동 발행은 PC 관제 브라우저의 별도 로그인 세션을 사용합니다 원본 BlogAuto는 자체 Chrome 프로필을 사용합니다"}</p>
+    </div>
+    <div className="control-room-panel flex flex-wrap items-center justify-between gap-2 p-3">
+      <div><strong>원본 전체 기능</strong><p className="mt-1 text-[10px] text-zinc-500">PC 관제 브라우저에서 원본 Electron 앱을 별도 창으로 실행 · 로컬 계정/작업은 웹 큐와 별도로 유지</p></div>
+      {desktopBrowser
+        ? <a className={button} href={`controlroom://launch/${platform}`} target="_blank" rel="noreferrer">{platform === "threads" ? "Threads Auto" : "BlogAuto"} 전체 실행 ↗</a>
+        : <a className={button} href="https://github.com/hanarostore-wq/shorts-maker/blob/main/desktop/README.md" target="_blank" rel="noreferrer">PC 원본 전체 설치 안내 ↗</a>}
     </div>
     {!connected && <form className="control-room-panel p-3" onSubmit={(event) => { event.preventDefault(); const value = keyDraft.trim(); sessionStorage.setItem("social-control-key", value); setKey(value); void load(value); }}>
       <label className={label}>관제실 소셜 접근키</label><div className="flex gap-2"><input className={box} type="password" autoComplete="off" value={keyDraft} onChange={(event) => setKeyDraft(event.target.value)} placeholder="서버에 설정된 접근키" required /><button className={button}>연결</button></div>
