@@ -499,6 +499,15 @@ const handlers = {
 
   // ── X ──
   'x.com': (req, res, u) => {
+    if (u.pathname === '/spacestar/following' || u.pathname === '/limited/following') {
+      // X 팔로잉 목록: 셀마다 팔로우 버튼(누르면 0.3초 뒤 '팔로잉'), 비공개 계정은 '요청됨', 오른쪽 '팔로우 추천'은 목록 밖
+      const limited = u.pathname.startsWith('/limited');
+      const cell = (id, state = 'follow') => `<div data-testid="cellInnerDiv" style="height:260px"><div data-testid="UserCell"><a href="/${id}" role="link"><span>${id}</span></a>
+        <button data-testid="${id}-${state}" onclick="window.__xClicks = (window.__xClicks || []).concat('${id}'); ${limited ? `document.body.insertAdjacentHTML('beforeend', '<div data-testid=&quot;toast&quot; role=&quot;alert&quot;>You are unable to follow more people at this time.</div>')` : `setTimeout(() => this.setAttribute('data-testid', '${id}-' + ('${id}' === 'locked_one' ? 'cancel' : 'unfollow')), 300)`}">팔로우</button></div></div>`;
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>X</title><script>document.cookie = 'twid=u%3D1; path=/';</script></head><body style="background:#000;color:#eee">
+        <div data-testid="primaryColumn" style="width:600px">${cell('already', 'unfollow')}${cell('user_a')}${cell('user_b')}${cell('locked_one')}${cell('user_c')}${cell('user_d')}</div>
+        <aside style="position:fixed;right:0;top:0"><div data-testid="UserCell"><button data-testid="suggest-follow" onclick="window.__suggestClicked = true">팔로우</button></div></aside></body></html>`);
+    }
     if (u.pathname === '/tester/status/1790000000000000001') {
       return html(res, page('X 게시물', `<article data-testid="tweet"><a href="/tester/status/1790000000000000001"><time datetime="2026-09-30">9월 30일</time></a>
           ${vtag('poster="https://pbs.twimg.com/ext_tw_video_thumb/1790000000000000999/pu/img/thumb.jpg"')}</article>`,
@@ -699,6 +708,10 @@ const handlers = {
 
   // ── Bluesky ──
   'bsky.app': (req, res, u) => {
+    if (/^\/profile\/(spacestar|errlist)\.test\/follows$/.test(u.pathname)) {
+      // 블루스카이 팔로잉 목록 화면(로그인 상태)
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Bluesky</title><script>localStorage.setItem('BSKY_STORAGE', JSON.stringify({ session: { currentAccount: { did: 'did:plc:me', handle: 'me.test', service: 'https://bsky.social/', pdsUrl: 'https://bsky.social', accessJwt: 'TEST-ACCESS-JWT' }, accounts: [] } }));</script></head><body style="background:#111;color:#eee"><h1>팔로우 중</h1></body></html>`);
+    }
     if (u.pathname === '/afollow') {
       return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Bluesky</title><script>localStorage.setItem('BSKY_STORAGE', JSON.stringify({ session: { currentAccount: { did: 'did:plc:me', handle: 'me.test', service: 'https://bsky.social/', pdsUrl: 'https://bsky.social', accessJwt: 'TEST-ACCESS-JWT' }, accounts: [] } }));</script></head><body style="background:#111;color:#eee">
         <div data-testid="feedItem-by-alice.test" style="width:560px;padding:12px;margin:8px"><a href="/profile/alice.test">앨리스(이미 팔로우)</a><p>사진</p><img id="apic" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px;height:320px;object-fit:cover"></div>
@@ -776,6 +789,14 @@ const handlers = {
       const fol = { 'alice.test': 'at://did:plc:me/app.bsky.graph.follow/3kalice' };
       const profiles = u.searchParams.getAll('actors').map((h) => ({ did: `did:plc:${h.split('.')[0]}`, handle: h, viewer: fol[h] ? { following: fol[h] } : {} }));
       return json(req, res, { profiles });
+    }
+    if (u.pathname === '/xrpc/app.bsky.graph.getFollows') {
+      if (!bskyAuth()) return json(req, res, { error: 'AuthMissing' }, 401);
+      const P = (h, viewer = {}) => ({ did: `did:plc:${h}`, handle: `${h}.test`, viewer });
+      const actor = u.searchParams.get('actor');
+      if (actor === 'errlist.test') return json(req, res, { follows: [P('c1'), { did: 'did:plc:expired', handle: 'expired.test', viewer: {} }, P('c2')] });
+      if (u.searchParams.get('cursor') === 'p2') return json(req, res, { follows: [P('b3'), P('blk', { blocking: 'at://x' })] });
+      return json(req, res, { follows: [P('alice', { following: 'at://did:plc:me/app.bsky.graph.follow/3kalice' }), { did: 'did:plc:me', handle: 'me.test', viewer: {} }, P('b1'), P('b2')], cursor: 'p2' });
     }
     if (u.pathname === '/xrpc/com.atproto.repo.createRecord' || u.pathname === '/xrpc/com.atproto.repo.deleteRecord') {
       let body = '';

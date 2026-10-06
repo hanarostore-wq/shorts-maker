@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS = {
   xPhotoTapClose: true, // X 사진 확대 보기에서 사진 누르면 닫기
   ytShortsStats: true, // 유튜브 쇼츠 오른쪽 위에 조회수·구독자 수
   xFollowButtons: true, // X 피드 작성자 옆 팔로우/팔로잉 버튼
+  followAllButton: true, // 블루스카이·X 팔로우 목록 화면에 '이 목록 전부 팔로우' 버튼
   bskyFollowButtons: true, // 블루스카이 피드 게시물에 팔로우/팔로잉 버튼
   siteFolders: true, // 가장 위에 사이트별 폴더(유튜브/블루스카이/X …)
   sortFolders: true,

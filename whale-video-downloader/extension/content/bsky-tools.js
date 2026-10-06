@@ -49,6 +49,8 @@
     if (!res.ok) {
       const expired = res.status === 401 || /Expired|InvalidToken|AuthMissing/i.test(j.error || '');
       throw {
+        status: res.status,
+        expired,
         reason: expired ? `로그인 정보가 만료됐습니다 (HTTP ${res.status} ${j.error || ''})` : `블루스카이가 HTTP ${res.status} ${j.error || ''} 로 응답했습니다`,
         action: expired ? '페이지를 새로고침(F5)한 뒤 다시 누르세요.' : res.status === 429 ? '너무 자주 눌렀습니다. 잠시 후 다시 시도하세요.' : '잠시 후 다시 시도하세요.',
       };
@@ -150,6 +152,9 @@
       e.btn.classList.remove('busy');
     }
   }
+  // 목록 전부 팔로우(follow-all.js)가 같은 로그인·요청 함수와 팔로우 상태를 쓴다
+  globalThis.__SMD_BSKY = { session, xrpc, setFollowing: (handle, did, uri) => { users.set(String(handle).toLowerCase(), { did, following: uri }); renderAll(String(handle).toLowerCase()); } };
+
   // 다운로드 버튼을 누른 게시물의 작성자 자동 팔로우
   document.addEventListener('smd:auto-follow', (ev) => {
     const d = ev.detail;

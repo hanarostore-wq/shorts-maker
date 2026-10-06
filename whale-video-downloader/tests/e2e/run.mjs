@@ -875,6 +875,74 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── 팔로우 목록 전부 팔로우 (블루스카이·X) ──
+{
+  const page = await ctx.newPage();
+  page.on('dialog', (d) => d.accept());
+  const msg = () => page.evaluate(() => document.querySelector('smd-followall')?.shadowRoot.querySelector('.msg')?.textContent || '');
+  const go = () => page.evaluate(() => document.querySelector('smd-followall').shadowRoot.querySelector('.go').click());
+  try {
+    await setSettings({ followAllButton: true });
+    // 블루스카이: 2쪽짜리 목록 → 이미 팔로우·내 계정·차단은 빼고 b1·b2·b3 만
+    let l = log.length;
+    await page.goto('https://bsky.app/profile/spacestar.test/follows', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('smd-followall', { timeout: 8000 });
+    await go();
+    await page.waitForFunction(() => /완료/.test(document.querySelector('smd-followall').shadowRoot.querySelector('.msg').textContent), null, { timeout: 30000 });
+    const subs = log.slice(l).filter((e) => e.bskyFollow === 'create').map((e) => e.subject);
+    record('[전부 팔로우] 블루스카이: 목록 전체(여러 쪽)에서 안 한 계정만 팔로우', subs.join(',') === 'did:plc:b1,did:plc:b2,did:plc:b3', { note: `${subs.join(', ')} · ${await msg()}` });
+    // 오류 경로: 로그인 만료 → 바로 멈추고 단계·원인·조치
+    l = log.length;
+    await page.goto('https://bsky.app/profile/errlist.test/follows', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('smd-followall', { timeout: 8000 });
+    await go();
+    await page.waitForFunction(() => /단계:/.test(document.querySelector('smd-followall').shadowRoot.querySelector('.msg').textContent), null, { timeout: 30000 });
+    const subs2 = log.slice(l).filter((e) => e.bskyFollow === 'create').map((e) => e.subject);
+    const m2 = await msg();
+    record('[전부 팔로우] (오류 경로) 블루스카이 로그인 만료 시 멈추고 단계·원인·조치 안내', subs2.join(',') === 'did:plc:c1,did:plc:expired' && /단계/.test(m2) && /만료/.test(m2) && /새로고침/.test(m2), { note: `${subs2.join(', ')} · ${m2.replace(/\n/g, ' / ')}` });
+    // 목록 화면이 아니면 버튼 없음
+    await page.goto('https://bsky.app/feedvideo', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1200);
+    const none = await page.evaluate(() => !document.querySelector('smd-followall'));
+    record('[전부 팔로우] 목록 화면이 아니면 버튼 안 띄움', none, { note: none ? '없음' : '떠 있음' });
+
+    // X: 화면의 팔로우 버튼을 내려가며 하나씩(이미 팔로잉·추천 칸 제외), 비공개 계정 '요청됨'도 성공
+    await page.goto('https://x.com/spacestar/following', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('smd-followall', { timeout: 8000 });
+    await go();
+    await page.waitForFunction(() => /완료/.test(document.querySelector('smd-followall').shadowRoot.querySelector('.msg').textContent), null, { timeout: 90000 });
+    const xr = await page.evaluate(() => ({ clicks: window.__xClicks || [], suggest: !!window.__suggestClicked }));
+    const xm = await msg();
+    record('[전부 팔로우] X: 목록 아래로 내려가며 안 한 계정만 팔로우(추천 칸 제외)', xr.clicks.join(',') === 'user_a,user_b,locked_one,user_c,user_d' && !xr.suggest && /5명/.test(xm), { note: `${xr.clicks.join(', ')} · 추천 누름=${xr.suggest} · ${xm}` });
+    // 오류 경로: X 가 제한 알림을 띄우면 바로 멈춤
+    await page.goto('https://x.com/limited/following', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('smd-followall', { timeout: 8000 });
+    await go();
+    await page.waitForFunction(() => /단계:/.test(document.querySelector('smd-followall').shadowRoot.querySelector('.msg').textContent), null, { timeout: 30000 });
+    const lc = await page.evaluate(() => (window.__xClicks || []).length);
+    const lm = await msg();
+    record('[전부 팔로우] (오류 경로) X 제한 알림이 뜨면 바로 멈추고 원인·조치 안내', lc === 1 && /막았습니다/.test(lm) && /unable to follow/.test(lm) && /기다린/.test(lm), { note: `누른 수 ${lc} · ${lm.replace(/\n/g, ' / ')}` });
+    // 오류 경로: 오늘 한도(400명)를 다 쓰면 시작하지 않음
+    const ep = await extPage();
+    await ep.evaluate(() => chrome.storage.local.set({ xFollowAllDay: { date: new Date().toISOString().slice(0, 10), count: 400 } }));
+    await ep.close();
+    await page.goto('https://x.com/spacestar/following', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('smd-followall', { timeout: 8000 });
+    await go();
+    await page.waitForTimeout(800);
+    const dm = await msg();
+    const dc = await page.evaluate(() => (window.__xClicks || []).length);
+    record('[전부 팔로우] (오류 경로) X 하루 한도 400명을 다 쓰면 시작 안 함', dc === 0 && /하루 한도/.test(dm) && /내일/.test(dm), { note: dm.replace(/\n/g, ' / ') });
+  } catch (err) {
+    record('[전부 팔로우]', false, { note: err.message.split('\n')[0] });
+  } finally {
+    const ep = await extPage();
+    await ep.evaluate(() => chrome.storage.local.remove('xFollowAllDay'));
+    await ep.close();
+    await page.close();
+  }
+}
+
 // ── 유튜브: 같은 영상 요소로 다음 영상으로 넘어가도 이전 영상의 '받은 적 있음'·진행 표시가 남지 않음 ──
 {
   const page = await ctx.newPage();
