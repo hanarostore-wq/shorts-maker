@@ -1,0 +1,17 @@
+{
+  "naver": {
+    "repository": "https://github.com/boksajang/naverblog-extention.git",
+    "commit": "fb0ddf1753cd66ea951b1f082fe772bddc5d9124",
+    "localDirectory": "apps/naverblog-extention",
+    "install": "npm ci --no-audit --no-fund",
+    "launch": "npm start"
+  },
+  "threads": {
+    "repository": "https://github.com/boksajang/threads-auto.git",
+    "commit": "f8bf1625a0df3803d3ad6e815c86cd6110eeb91b",
+    "localDirectory": "apps/threads-auto",
+    "install": "npm run setup",
+    "launch": "npm start",
+    "requiredNode": ">=24.15.0 <25 || >=26"
+  }
+}

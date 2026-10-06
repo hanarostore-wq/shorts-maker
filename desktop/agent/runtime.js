@@ -1,4 +1,4 @@
-const { WebContentsView, session } = require("electron");
+const { WebContentsView, session, net } = require("electron");
 const { CAPTURE_SOURCE } = require("./capture");
 const { planTask, siteOf } = require("./planner");
 const { runBrowserAgent } = require("./browserAgent");
@@ -87,7 +87,7 @@ async function captureAllFrames(view) {
 
 /** 관제실 API 호출 도우미. */
 async function callApi(controlUrl, path, method, body) {
-  const res = await fetch(`${controlUrl}${path}`, {
+  const res = await net.fetch(`${controlUrl}${path}`, {
     method,
     headers: { "Content-Type": "application/json", ...(process.env.SOCIAL_CONTROL_KEY ? { "x-social-control-key": process.env.SOCIAL_CONTROL_KEY } : {}) },
     body: body ? JSON.stringify(body) : undefined,

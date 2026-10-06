@@ -1,5 +1,7 @@
 const { app, BrowserWindow, WebContentsView, ipcMain, session, shell } = require("electron");
 const path = require("node:path");
+const fs = require("node:fs");
+const { spawn } = require("node:child_process");
 const { startAgentRuntime, stopAgentRuntime } = require("./agent/runtime");
 
 // 관제실 주소. 배포본을 그대로 쓰되, 로컬 개발 중엔 CONTROL_URL로 바꿔 띄운다.
@@ -22,6 +24,41 @@ let win = null;
 const tabs = [];
 let activeTabId = null;
 let nextTabId = 1;
+const launchedApps = new Map();
+
+function launchFullSourceApp(kind) {
+  const folders = { naver: "naverblog-extention", threads: "threads-auto" };
+  const folder = folders[kind];
+  if (!folder) return;
+  const cwd = path.join(__dirname, "apps", folder);
+  const announce = (message) => {
+    console.log(`[social-app] ${message}`);
+    if (win && !win.isDestroyed()) win.webContents.send("agent:log", message);
+  };
+  if (!fs.existsSync(path.join(cwd, "package.json"))) {
+    announce(`${kind} 전체 원본 프로그램이 설치되지 않았습니다. desktop/install-full-source.ps1을 먼저 실행하세요.`);
+    return;
+  }
+  const previous = launchedApps.get(kind);
+  if (previous && previous.exitCode === null && !previous.killed) {
+    announce(`${kind} 전체 원본 프로그램이 이미 실행 중입니다.`);
+    return;
+  }
+  const executable = process.platform === "win32" ? "npm.cmd" : "npm";
+  const childEnvironment = { ...process.env };
+  delete childEnvironment.SOCIAL_CONTROL_KEY;
+  const child = spawn(executable, ["start"], {
+    cwd,
+    env: childEnvironment,
+    shell: process.platform === "win32",
+    windowsHide: false,
+    stdio: "ignore",
+  });
+  launchedApps.set(kind, child);
+  child.once("error", (error) => { launchedApps.delete(kind); announce(`${kind} 실행 실패: ${error.message}`); });
+  child.once("exit", (code) => { launchedApps.delete(kind); announce(`${kind} 전체 원본 프로그램 종료 (code ${code})`); });
+  announce(`${kind} 전체 원본 프로그램 시작 · 별도 창에서 계정과 확장프로그램을 연결하세요.`);
+}
 
 function isControlUrl(url) {
   try {
@@ -106,6 +143,10 @@ function createTab(url, { pinned = false } = {}) {
   // 새 창을 여는 링크는 창 대신 새 탭으로 연다. 단 외부 앱으로 넘어가는
   // 스킴(mailto: 등)은 OS에 맡긴다.
   wc.setWindowOpenHandler(({ url: target }) => {
+    if (/^controlroom:\/\/launch\/(naver|threads)\/?$/i.test(target)) {
+      if (isControlUrl(wc.getURL())) launchFullSourceApp(new URL(target).pathname.split("/")[1]);
+      return { action: "deny" };
+    }
     if (/^https?:/i.test(target)) {
       createTab(target);
       return { action: "deny" };

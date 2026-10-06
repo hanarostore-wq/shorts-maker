@@ -16,6 +16,26 @@ npm run start:local  # 로컬 관제실(http://localhost:3000)에 접속
 
 `CONTROL_URL` 환경변수로 관제실 주소를 바꿀 수 있습니다.
 
+### 제공된 원본 프로그램 전체 설치
+
+블로그부서 카드의 **BlogAuto 전체 실행**·**Threads Auto 전체 실행** 버튼은 별도 창에
+원본 Electron 앱 전체를 시작합니다. 원본 소스는 공용 웹 빌드에 복사하지 않고
+`source-apps.json`의 고정 커밋을 PC의 `desktop/apps/` 아래로 그대로 내려받습니다.
+원본 코드를 줄여서 이식하거나 기존 기능을 생략하지 않습니다.
+
+Windows에서 Node.js `24.15 이상 25 미만` 또는 `26 이상`, Git, npm을 준비한 뒤:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install-full-source.ps1
+```
+
+설치 후 이 브라우저를 다시 시작하고 블로그부서 직원 카드의 전체 실행 버튼을 누르세요.
+**웹 예약 원고/토큰과 원본 앱의 로컬 데이터는 서로 자동 동기화되지 않습니다.**
+원본 블로그 앱은 별도 Chrome 계정 프로필과 확장프로그램을 직접 연결하며,
+Threads Auto는 자신의 Meta 토큰·소재 수집 확장프로그램을 따로 설정합니다.
+관제실 화면만 열거나 원고를 입력하는 것은 웨일에서도 가능합니다.
+원본 앱의 Chrome 연동을 웨일 로그인 세션으로 대체하는 기능은 검증되지 않았습니다.
+
 ## 구조
 
 | 파일 | 역할 |
