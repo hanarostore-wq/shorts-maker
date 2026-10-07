@@ -75,7 +75,7 @@ export const departments: Department[] = [
       { id: "v6", name: "전략디렉터", task: "04. Select Topic · 구간별 스토리텔링 로드맵 확정", status: "active" },
       { id: "v1", name: "대본작가", task: "05. Script · 1문장 완청 최적화 쇼츠 대본 집필", status: "active" },
       { id: "v3", name: "비주얼디자이너", task: "06. Visual Prompts · 미드저니 v6 & Suno BGM 생성", status: "active" },
-      { id: "v_concat", name: "이어붙이기", task: "PC 로컬 원본 복수 선택 · 앞뒤 1초 정확 컷 · 원본 화질·음성 유지 이어붙이기", status: "standby" },
+      { id: "v_concat", name: "이어붙이기", task: "PC 로컬 원본 MP4 복수 선택 · 키프레임 컷 · 원본 화질·음성 그대로 이어붙이기", status: "standby" },
     ],
   },
 ];

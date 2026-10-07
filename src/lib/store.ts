@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { randomBytes, randomUUID } from "node:crypto";
 import { departments as initialDepartments, projects } from "./mock-data";
 import { getAgentPlatforms } from "./agentIntegrations";
 import { getPolicy, listApprovals, listTasks } from "./agent/store";
@@ -57,6 +58,23 @@ export function getSharedRedis(): Redis | null {
 }
 
 const getRedis = getSharedRedis;
+
+export type LocalConcatJobStatus = "queued" | "working" | "completed" | "failed" | "canceled";
+export type LocalConcatOutputFormat = "mp4";
+export interface LocalConcatJob {
+  id: string;
+  token: string;
+  status: LocalConcatJobStatus;
+  outputFormat: LocalConcatOutputFormat;
+  outputName?: string;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const CONCAT_JOB_PREFIX = "shorts-maker:concat-job:";
+const CONCAT_JOB_TTL_SECONDS = 60 * 60 * 24;
+const memoryConcatJobs = new Map<string, LocalConcatJob>();
 
 // Redis 저장소가 없으면(로컬 개발 등) 메모리로 대체 동작한다.
 let memoryState: State | null = null;
@@ -129,7 +147,8 @@ function healState(state: State): State {
       const current = initialDepartments
         .flatMap((item) => item.agents)
         .find((candidate) => candidate.id === agent.id);
-      return current ? { ...agent, name: current.name, task: current.task } : agent;
+      const isConcatRuntimeStatus = agent.id === "v_concat" && /^(이어붙이기 (대기중|작업중)|제작완료|⚠ 제작실패)/.test(agent.task);
+      return current ? { ...agent, name: current.name, task: isConcatRuntimeStatus ? agent.task : current.task } : agent;
     });
     for (const freshAgent of fresh.agents) {
       if (!knownAgentIds.has(freshAgent.id)) {
@@ -206,6 +225,105 @@ async function writeState(state: State): Promise<void> {
     return;
   }
   await redis.set(STATE_KEY, state);
+}
+
+function publicConcatJob(job: LocalConcatJob): Omit<LocalConcatJob, "token"> {
+  return {
+    id: job.id,
+    status: job.status,
+    outputFormat: job.outputFormat,
+    outputName: job.outputName,
+    error: job.error,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
+}
+
+async function readConcatJob(id: string): Promise<LocalConcatJob | null> {
+  const redis = getRedis();
+  if (!redis) return memoryConcatJobs.get(id) ?? null;
+  return (await redis.get<LocalConcatJob>(`${CONCAT_JOB_PREFIX}${id}`)) ?? null;
+}
+
+async function writeConcatJob(job: LocalConcatJob): Promise<void> {
+  const redis = getRedis();
+  if (!redis) {
+    memoryConcatJobs.set(job.id, job);
+    return;
+  }
+  await redis.set(`${CONCAT_JOB_PREFIX}${job.id}`, job, { ex: CONCAT_JOB_TTL_SECONDS });
+}
+
+async function reflectConcatJobOnAgent(job: LocalConcatJob, incrementCompletion: boolean) {
+  const state = await readState();
+  const agent = state.departments.find((department) => department.id === "shorts")?.agents.find((item) => item.id === "v_concat");
+  if (!agent) return;
+  const labels: Record<LocalConcatJobStatus, string> = {
+    queued: "이어붙이기 대기중",
+    working: "이어붙이기 작업중",
+    completed: job.outputName ? `제작완료 · ${job.outputName}` : "제작완료",
+    failed: `⚠ 제작실패${job.error ? ` · ${job.error}` : ""}`,
+    canceled: "이어붙이기 대기중",
+  };
+  agent.status = job.status === "working" ? "active" : job.status === "queued" || job.status === "canceled" ? "standby" : job.status === "failed" ? "offline" : "active";
+  agent.task = labels[job.status];
+  if (incrementCompletion) {
+    const message = labels.completed;
+    const duplicate = state.log.some((entry) => entry.agentId === "v_concat" && entry.message === message);
+    if (!duplicate) {
+      state.log.unshift({
+        id: `concat-${job.id}`,
+        time: new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }),
+        departmentId: "shorts",
+        agentId: "v_concat",
+        agentName: agent.name,
+        message,
+      });
+      state.log = state.log.slice(0, 30);
+      state.completedToday += 1;
+    }
+  }
+  await writeState(state);
+}
+
+export async function createLocalConcatJob(outputFormat: LocalConcatOutputFormat) {
+  const now = new Date().toISOString();
+  const job: LocalConcatJob = {
+    id: randomUUID(),
+    token: randomBytes(24).toString("base64url"),
+    status: "queued",
+    outputFormat,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await writeConcatJob(job);
+  await reflectConcatJobOnAgent(job, false);
+  return job;
+}
+
+export async function getLocalConcatJob(id: string, token: string) {
+  const job = await readConcatJob(id);
+  if (!job || job.token !== token) return null;
+  return publicConcatJob(job);
+}
+
+export async function updateLocalConcatJob(input: {
+  id: string;
+  token: string;
+  status: LocalConcatJobStatus;
+  outputName?: string;
+  error?: string;
+}) {
+  const job = await readConcatJob(input.id);
+  if (!job || job.token !== input.token) return null;
+  const wasCompleted = job.status === "completed";
+  job.status = input.status;
+  job.updatedAt = new Date().toISOString();
+  job.outputName = input.outputName ?? job.outputName;
+  job.error = input.error ? input.error.slice(0, 180) : undefined;
+  await writeConcatJob(job);
+  await reflectConcatJobOnAgent(job, !wasCompleted && job.status === "completed");
+  return publicConcatJob(job);
 }
 
 export async function getState(): Promise<State> {
