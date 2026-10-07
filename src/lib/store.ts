@@ -165,6 +165,11 @@ function healState(state: State): State {
   }
   const coinProject=state.projects.find(p=>p.id==='p5');
   if(coinProject){coinProject.agentCount=state.departments.find(d=>d.id==='coin')?.agents.length ?? 0;coinProject.leadAgent='Jev 매수근거';}
+  const shortsProject = state.projects.find((project) => project.id === "p3");
+  if (shortsProject) {
+    shortsProject.agentCount = state.departments.find((department) => department.id === "shorts")?.agents.length ?? 0;
+    shortsProject.leadAgent = "영상감독";
+  }
   const vercelLogPattern = /Vercel|빌드|배포|대기열|INITIALIZING/;
   const newestVercelLog = state.log.find((item) => item.agentId === "o4" && vercelLogPattern.test(item.message));
   if (newestVercelLog) {
