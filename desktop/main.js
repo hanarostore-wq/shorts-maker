@@ -211,7 +211,7 @@ function getConcatWorkerLaunch() {
     return {
       jobId: parsed.searchParams.get("job"),
       token: parsed.searchParams.get("token"),
-      processingMode: parsed.searchParams.get("mode") === "normalize" ? "normalize" : "copy",
+      processingMode: parsed.searchParams.get("mode") === "copy" ? "copy" : "normalize",
     };
   } catch {
     return {};
