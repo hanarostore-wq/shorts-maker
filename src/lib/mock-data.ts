@@ -86,7 +86,6 @@ export const departments: Department[] = [
       { id: "v6", name: "전략디렉터", task: "04. Select Topic · 구간별 스토리텔링 로드맵 확정", status: "active" },
       { id: "v1", name: "대본작가", task: "05. Script · 1문장 완청 최적화 쇼츠 대본 집필", status: "active" },
       { id: "v3", name: "비주얼디자이너", task: "06. Visual Prompts · 미드저니 v6 & Suno BGM 생성", status: "active" },
-      { id: "v_concat", name: "이어붙이기", task: "로컬 원본 영상 복수 선택 · 앞뒤 1초 키프레임 컷 · 원본 화질·음성 유지 이어붙이기", status: "standby" },
     ],
   },
 ];
@@ -95,7 +94,7 @@ export const projects: Project[] = [
   { id: "p0", name: "배포 관제", departmentId: "ops", agentCount: 1, leadAgent: "Vercel파견직원" },
   { id: "p1", name: "스마트스토어 자동화", departmentId: "store", agentCount: 5, leadAgent: "상품소싱이" },
   { id: "p2", name: "쿠팡 자동화", departmentId: "store", agentCount: 4, leadAgent: "가격감시자" },
-  { id: "p3", name: "쇼츠 팩토리", departmentId: "shorts", agentCount: 7, leadAgent: "영상감독" },
+  { id: "p3", name: "쇼츠 팩토리", departmentId: "shorts", agentCount: 6, leadAgent: "영상감독" },
   { id: "p4", name: "블로그 자동화", departmentId: "blog", agentCount: 2, leadAgent: "네이버블로그" },
   { id: "p5", name: "업비트 현물 단타", departmentId: "coin", agentCount: 12, leadAgent: "Jev 매수근거" },
 

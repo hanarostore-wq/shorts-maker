@@ -25,7 +25,7 @@ try {
     & npm.cmd ci --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw 'MoneyOS desktop shell installation failed.' }
     Write-Host 'Starting the MoneyOS control-room shell. No custom social queue worker is running.'
-    Write-Host 'Open Blog department > Naver Blog or Threads, or Shorts department > Concatenate.'
+    Write-Host 'Open Blog department > Naver Blog or Threads > Original full app launch.'
     & npm.cmd start
     if ($LASTEXITCODE -ne 0) { throw 'MoneyOS desktop shell process failed.' }
 } finally { Pop-Location }
