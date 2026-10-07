@@ -54,6 +54,7 @@ export const AGENT_TOOLS: Record<string, AgentTool> = {
   t_risk: "tradingEvidence",
   c7: "coinTrading",
   c8: "coinTrading",
+  c_yujin: "coinTrading",
   t7: "stockTrading",
   t8: "stockTrading",
   c13: "liveTrading",
