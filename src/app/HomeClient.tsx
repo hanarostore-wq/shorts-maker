@@ -133,9 +133,9 @@ export default function Home() {
     }).catch(() => null);
   };
 
-  const isShortsAgentSelected = Boolean(liveSelectedAgent && liveSelectedAgent.id.startsWith("v"));
+  const isShortsStudioAgent = Boolean(liveSelectedAgent?.id && SHORTS_AGENT_STEP_MAP[liveSelectedAgent.id]);
   const shortsStep = liveSelectedAgent?.id ? (SHORTS_AGENT_STEP_MAP[liveSelectedAgent.id] || "search") : "search";
-  const shortsAgents = allAgents.filter((agent) => agent.id.startsWith("v"));
+  const shortsAgents = allAgents.filter((agent) => Boolean(SHORTS_AGENT_STEP_MAP[agent.id]));
   const handleNextShortsAgent = () => {
     if (!liveSelectedAgent || shortsAgents.length < 2) return;
     const currentIndex = shortsAgents.findIndex((agent) => agent.id === liveSelectedAgent.id);
@@ -193,7 +193,7 @@ export default function Home() {
       
       {/* 쇼츠부서 남다른AI Shorts 분석기 모달 (선택된 직원의 전용 단계로 즉시 오픈) */}
       <ShortsStudioModal
-        isOpen={isShortsAgentSelected}
+        isOpen={isShortsStudioAgent}
         initialStep={shortsStep}
         targetAgentId={liveSelectedAgent?.id}
         targetAgentName={liveSelectedAgent?.name}
@@ -203,7 +203,7 @@ export default function Home() {
       />
 
       {/* 기타 일반 직원 상세 모달 */}
-      {liveSelectedAgent && !["c7", "c13"].includes(liveSelectedAgent.id) && !liveSelectedAgent.id.startsWith("v") && (
+      {liveSelectedAgent && !["c7", "c13"].includes(liveSelectedAgent.id) && !isShortsStudioAgent && (
         <AgentDetailModal
           agent={liveSelectedAgent}
           departments={state.departments}
