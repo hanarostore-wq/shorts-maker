@@ -1,5 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { randomBytes, randomUUID } from "node:crypto";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { departments as initialDepartments, projects } from "./mock-data";
 import { getAgentPlatforms } from "./agentIntegrations";
 import { getPolicy, listApprovals, listTasks } from "./agent/store";
@@ -57,24 +59,39 @@ export function getSharedRedis(): Redis | null {
   return new Redis({ url, token });
 }
 
+export function isConcatPersistentStorageAvailable() {
+  return process.env.NODE_ENV !== "production" || getSharedRedis() !== null;
+}
+
 const getRedis = getSharedRedis;
 
 export type LocalConcatJobStatus = "queued" | "working" | "completed" | "failed" | "canceled";
 export type LocalConcatOutputFormat = "mp4";
+export type LocalConcatProcessingMode = "copy" | "normalize";
 export interface LocalConcatJob {
   id: string;
   token: string;
   status: LocalConcatJobStatus;
   outputFormat: LocalConcatOutputFormat;
+  processingMode: LocalConcatProcessingMode;
   outputName?: string;
+  sourceBytes?: number;
+  outputBytes?: number;
+  progress?: number;
+  etaSeconds?: number;
+  stage?: string;
   error?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 const CONCAT_JOB_PREFIX = "shorts-maker:concat-job:";
+const CONCAT_NOTIFICATION_KEY = "shorts-maker:concat-notification";
+const CONCAT_ACTIVE_JOB_KEY = "shorts-maker:concat-active-job";
 const CONCAT_JOB_TTL_SECONDS = 60 * 60 * 24;
 const memoryConcatJobs = new Map<string, LocalConcatJob>();
+let memoryConcatWebhookUrl: string | null = null;
+let memoryActiveConcatJobId: string | null = null;
 
 // Redis 저장소가 없으면(로컬 개발 등) 메모리로 대체 동작한다.
 let memoryState: State | null = null;
@@ -232,7 +249,13 @@ function publicConcatJob(job: LocalConcatJob): Omit<LocalConcatJob, "token"> {
     id: job.id,
     status: job.status,
     outputFormat: job.outputFormat,
+    processingMode: job.processingMode,
     outputName: job.outputName,
+    sourceBytes: job.sourceBytes,
+    outputBytes: job.outputBytes,
+    progress: job.progress,
+    etaSeconds: job.etaSeconds,
+    stage: job.stage,
     error: job.error,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
@@ -254,14 +277,121 @@ async function writeConcatJob(job: LocalConcatJob): Promise<void> {
   await redis.set(`${CONCAT_JOB_PREFIX}${job.id}`, job, { ex: CONCAT_JOB_TTL_SECONDS });
 }
 
+async function acquireConcatJobLock(jobId: string) {
+  const redis = getRedis();
+  if (!redis) {
+    if (memoryActiveConcatJobId) return false;
+    memoryActiveConcatJobId = jobId;
+    return true;
+  }
+  return Boolean(await redis.set(CONCAT_ACTIVE_JOB_KEY, jobId, { nx: true, ex: CONCAT_JOB_TTL_SECONDS }));
+}
+
+async function releaseConcatJobLock(jobId: string) {
+  const redis = getRedis();
+  if (!redis) {
+    if (memoryActiveConcatJobId === jobId) memoryActiveConcatJobId = null;
+    return;
+  }
+  if (await redis.get<string>(CONCAT_ACTIVE_JOB_KEY) === jobId) await redis.del(CONCAT_ACTIVE_JOB_KEY);
+}
+
+function formatConcatBytes(bytes?: number) {
+  if (!Number.isFinite(bytes) || !bytes || bytes <= 0) return null;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+function formatConcatEta(seconds?: number) {
+  if (!Number.isFinite(seconds) || seconds === undefined || seconds < 1) return null;
+  const value = Math.round(seconds);
+  const minute = Math.floor(value / 60);
+  const second = value % 60;
+  return minute > 0 ? `약 ${minute}:${String(second).padStart(2, "0")} 남음` : `약 ${second}초 남음`;
+}
+
+async function readConcatWebhookUrl(): Promise<string | null> {
+  const redis = getRedis();
+  if (!redis) return memoryConcatWebhookUrl;
+  return (await redis.get<string>(CONCAT_NOTIFICATION_KEY)) ?? null;
+}
+
+async function writeConcatWebhookUrl(url: string | null): Promise<void> {
+  const redis = getRedis();
+  if (!redis) {
+    memoryConcatWebhookUrl = url;
+    return;
+  }
+  if (url) await redis.set(CONCAT_NOTIFICATION_KEY, url);
+  else await redis.del(CONCAT_NOTIFICATION_KEY);
+}
+
+function isPrivateWebhookAddress(address: string) {
+  const family = isIP(address);
+  if (family === 4) {
+    const [a, b] = address.split(".").map(Number);
+    return a === 0 || a === 10 || a === 127 || a === 169 && b === 254 || a === 172 && b >= 16 && b <= 31 || a === 192 && b === 168 || a === 100 && b >= 64 && b <= 127;
+  }
+  if (family === 6) {
+    const normalized = address.toLowerCase();
+    return normalized === "::1" || normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb") || normalized.includes("::ffff:127.") || normalized.includes("::ffff:10.") || normalized.includes("::ffff:192.168.");
+  }
+  return true;
+}
+
+async function normalizeWebhookUrl(value: string) {
+  const parsed = new URL(value.trim());
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.toString().length > 2048 || parsed.port) throw new Error("공개 HTTPS 웹훅 주소만 저장할 수 있습니다.");
+  const host = parsed.hostname.toLowerCase();
+  if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) throw new Error("내부 네트워크 웹훅 주소는 사용할 수 없습니다.");
+  const addresses = await lookup(host, { all: true, verbatim: true });
+  if (addresses.length === 0 || addresses.some((item) => isPrivateWebhookAddress(item.address))) throw new Error("공개 인터넷 웹훅 주소만 사용할 수 있습니다.");
+  return parsed.toString();
+}
+
+export async function getLocalConcatNotificationConfig() {
+  const url = await readConcatWebhookUrl();
+  return { configured: Boolean(url), host: url ? new URL(url).host : null };
+}
+
+export async function setLocalConcatNotificationWebhook(webhookUrl: string | null) {
+  const normalized = webhookUrl?.trim() ? await normalizeWebhookUrl(webhookUrl) : null;
+  await writeConcatWebhookUrl(normalized);
+  return getLocalConcatNotificationConfig();
+}
+
+async function dispatchLocalConcatWebhook(job: LocalConcatJob) {
+  const url = await readConcatWebhookUrl();
+  if (!url) return;
+  const message = `이어붙이기 제작완료${job.outputName ? ` · ${job.outputName}` : ""}`;
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event: "concat.completed", message, content: message, job: publicConcatJob(job) }),
+      redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
+    }).then((response) => {
+      if (!response.ok) throw new Error(`웹훅 HTTP ${response.status}`);
+    });
+  } catch (error) {
+    console.error("[concat-webhook] delivery failed", error);
+  }
+}
+
 async function reflectConcatJobOnAgent(job: LocalConcatJob, incrementCompletion: boolean) {
   const state = await readState();
   const agent = state.departments.find((department) => department.id === "shorts")?.agents.find((item) => item.id === "v_concat");
   if (!agent) return;
   const labels: Record<LocalConcatJobStatus, string> = {
     queued: "이어붙이기 대기중",
-    working: "이어붙이기 작업중",
-    completed: job.outputName ? `제작완료 · ${job.outputName}` : "제작완료",
+    working: [
+      "이어붙이기 작업중",
+      Number.isFinite(job.progress) ? `${Math.round((job.progress ?? 0) * 100)}%` : null,
+      formatConcatEta(job.etaSeconds),
+      formatConcatBytes(job.sourceBytes) ? `원본 ${formatConcatBytes(job.sourceBytes)}` : null,
+    ].filter(Boolean).join(" · "),
+    completed: ["제작완료", job.outputName, formatConcatBytes(job.outputBytes)].filter(Boolean).join(" · "),
     failed: `⚠ 제작실패${job.error ? ` · ${job.error}` : ""}`,
     canceled: "이어붙이기 대기중",
   };
@@ -286,16 +416,19 @@ async function reflectConcatJobOnAgent(job: LocalConcatJob, incrementCompletion:
   await writeState(state);
 }
 
-export async function createLocalConcatJob(outputFormat: LocalConcatOutputFormat) {
+export async function createLocalConcatJob(outputFormat: LocalConcatOutputFormat, processingMode: LocalConcatProcessingMode) {
   const now = new Date().toISOString();
   const job: LocalConcatJob = {
     id: randomUUID(),
     token: randomBytes(24).toString("base64url"),
     status: "queued",
     outputFormat,
+    processingMode,
+    progress: 0,
     createdAt: now,
     updatedAt: now,
   };
+  if (!await acquireConcatJobLock(job.id)) return null;
   await writeConcatJob(job);
   await reflectConcatJobOnAgent(job, false);
   return job;
@@ -312,6 +445,11 @@ export async function updateLocalConcatJob(input: {
   token: string;
   status: LocalConcatJobStatus;
   outputName?: string;
+  sourceBytes?: number;
+  outputBytes?: number;
+  progress?: number;
+  etaSeconds?: number;
+  stage?: string;
   error?: string;
 }) {
   const job = await readConcatJob(input.id);
@@ -320,9 +458,16 @@ export async function updateLocalConcatJob(input: {
   job.status = input.status;
   job.updatedAt = new Date().toISOString();
   job.outputName = input.outputName ?? job.outputName;
+  job.sourceBytes = input.sourceBytes ?? job.sourceBytes;
+  job.outputBytes = input.outputBytes ?? job.outputBytes;
+  job.progress = typeof input.progress === "number" ? Math.max(0, Math.min(1, input.progress)) : job.progress;
+  job.etaSeconds = typeof input.etaSeconds === "number" ? Math.max(0, Math.round(input.etaSeconds)) : job.etaSeconds;
+  job.stage = input.stage ? input.stage.slice(0, 160) : job.stage;
   job.error = input.error ? input.error.slice(0, 180) : undefined;
   await writeConcatJob(job);
   await reflectConcatJobOnAgent(job, !wasCompleted && job.status === "completed");
+  if (!wasCompleted && job.status === "completed") await dispatchLocalConcatWebhook(job);
+  if (["completed", "failed", "canceled"].includes(job.status)) await releaseConcatJobLock(job.id);
   return publicConcatJob(job);
 }
 
