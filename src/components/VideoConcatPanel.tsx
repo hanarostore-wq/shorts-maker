@@ -24,7 +24,7 @@ export function VideoConcatPanel() {
       <section className="control-room-panel flex flex-col gap-3 p-4">
         <div>
           <h4 className="font-bold text-zinc-100">내 PC에서 이어붙이기 시작</h4>
-          <p className="mt-1 text-[10px] leading-5 text-zinc-500">최초 한 번 PC 관제실 시작 스크립트로 로컬 작업자를 등록하면, 이후 이 버튼만 누르면 됩니다. 출력은 첫 번째 원본 폴더에 저장됩니다.</p>
+          <p className="mt-1 text-[10px] leading-5 text-zinc-500">최초 한 번 PC의 install-concat-worker.ps1로 로컬 작업자를 등록하면, 이후 이 버튼만 누르면 됩니다. 출력은 첫 번째 원본 폴더에 저장됩니다.</p>
         </div>
         <a className="control-room-button px-3 py-2 text-center text-xs font-bold" href="clipjoin://run">원본 영상 여러 개 선택 ↗</a>
       </section>
