@@ -1,0 +1,30 @@
+.dialog {
+  position: fixed;
+  inset: 0;
+  width: calc(100vw - 24px);
+  height: calc(100dvh - 24px);
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--control-line-strong);
+  background: #080d15;
+  color: var(--control-text);
+  box-shadow: 0 24px 90px rgba(0, 0, 0, .78);
+}
+.dialog::backdrop { background: rgba(3, 6, 10, .58); }
+.layout { display: flex; width: 100%; height: 100%; min-width: 0; flex-direction: column; }
+.header { display: flex; min-height: 48px; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--control-line); background: #0f151c; }
+.heading { display: flex; min-width: 0; align-items: center; gap: 10px; color: var(--control-muted); font-size: 11px; }
+.heading strong { color: #fff; font-size: 14px; }
+.close { flex: 0 0 auto; min-height: 32px; border: 1px solid var(--control-line-strong); border-radius: 3px; padding: 6px 10px; background: #18222d; color: var(--control-text); cursor: pointer; }
+.close:hover { border-color: var(--control-red); color: #fff; }
+.content { position: relative; min-width: 0; min-height: 0; flex: 1; background: #080d15; }
+.frame { display: block; width: 100%; height: 100%; border: 0; background: #080d15; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--control-cyan); font-size: 13px; pointer-events: none; }
+@media (max-width: 600px) {
+  .dialog { width: calc(100vw - 8px); height: calc(100dvh - 8px); }
+  .header { min-height: 44px; padding: 6px 9px; }
+  .heading span { display: none; }
+}

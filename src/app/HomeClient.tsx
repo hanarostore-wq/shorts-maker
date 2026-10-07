@@ -6,6 +6,7 @@ import { DepartmentFloor } from "@/components/DepartmentFloor";
 import { ActivityLog } from "@/components/ActivityLog";
 import { AutoSync } from "@/components/AutoSync";
 import { UpbitTerminalModal } from "@/components/UpbitTerminalModal";
+import { YuJinTradersModal } from "@/components/YuJinTradersModal";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
 import { ShortsStudioModal } from "@/components/ShortsStudioModal";
 import { SHORTS_AGENT_STEP_MAP } from "@/lib/agentIntegrations";
@@ -190,6 +191,7 @@ export default function Home() {
 
       {/* 업비트 터미널 모달 */}
       <UpbitTerminalModal mode={liveSelectedAgent?.id === "c7" ? "paper" : liveSelectedAgent?.id === "c13" ? "live" : null} onClose={() => setSelectedAgent(null)} />
+      <YuJinTradersModal isOpen={liveSelectedAgent?.id === "c_yujin"} onClose={() => setSelectedAgent(null)} />
       
       {/* 쇼츠부서 남다른AI Shorts 분석기 모달 (선택된 직원의 전용 단계로 즉시 오픈) */}
       <ShortsStudioModal
@@ -203,7 +205,7 @@ export default function Home() {
       />
 
       {/* 기타 일반 직원 상세 모달 */}
-      {liveSelectedAgent && !["c7", "c13"].includes(liveSelectedAgent.id) && !liveSelectedAgent.id.startsWith("v") && (
+      {liveSelectedAgent && !["c7", "c13", "c_yujin"].includes(liveSelectedAgent.id) && !liveSelectedAgent.id.startsWith("v") && (
         <AgentDetailModal
           agent={liveSelectedAgent}
           departments={state.departments}

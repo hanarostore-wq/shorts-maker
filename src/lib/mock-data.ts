@@ -43,6 +43,7 @@ export const departments: Department[] = [
     icon: "₿",
     agents: [
       { id: "c8", name: "업비트파견", task: "업비트 공개 시세·거래 API 연결 대기", status: "offline" },
+      { id: "c_yujin", name: "업비트", task: "YuJin Traders 자동매매 관제 · 클릭하면 전체 화면을 엽니다", status: "active" },
       { id: "c_selection", name: "종목선정", task: "종목선정 근거 추가·삭제 · 모의/실전 공통", status: "active" },
       { id: "c_entry", name: "Jev 매수근거", task: "Jev 매수근거 근거 추가·삭제 · 모의/실전 공통", status: "active" },
       { id: "c_exit", name: "Jev 매도근거", task: "Jev 매도근거 근거 추가·삭제 · 모의/실전 공통", status: "active" },
