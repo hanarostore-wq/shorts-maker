@@ -25,7 +25,7 @@ function eta(value?: number) {
 export function VideoConcatPanel() {
   const [job, setJob] = useState<Job | null>(null);
   const [starting, setStarting] = useState(false);
-  const [processingMode, setProcessingMode] = useState<ProcessingMode>("copy");
+  const [processingMode, setProcessingMode] = useState<ProcessingMode>("normalize");
   const [webhookUrl, setWebhookUrl] = useState("");
   const [notification, setNotification] = useState<NotificationConfig>({ configured: false, host: null });
   const [notifyBrowser, setNotifyBrowser] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(BROWSER_NOTIFY_KEY) === "true");

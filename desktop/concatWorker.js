@@ -44,7 +44,7 @@ async function openProgressWindow() {
   return workerWindow;
 }
 
-async function runLocalConcatWorker({ jobId = null, token = null, processingMode = "copy" } = {}) {
+async function runLocalConcatWorker({ jobId = null, token = null, processingMode = "normalize" } = {}) {
   const job = jobId && token ? { id: jobId, token } : null;
   const selection = await dialog.showOpenDialog({ title: "이어붙일 원본 MP4 선택", properties: ["openFile", "multiSelections"], filters: [{ name: "MP4 파일", extensions: ["mp4"] }] });
   if (selection.canceled || selection.filePaths.length < 2) {
