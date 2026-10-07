@@ -9,12 +9,13 @@
   if (!SITES || !chrome?.runtime?.id) return;
 
   let settings = { xFollowButtons: true };
+  const effOf = (s, site) => ({ ...(s || {}), ...(((s || {}).siteSettings || {})[site] || {}) }); // 사이트별로 바꾼 값이 우선
   chrome.storage.local.get('settings').then((r) => {
-    settings = { ...settings, ...(r.settings || {}) };
+    settings = effOf({ ...settings, ...(r.settings || {}) }, 'x');
   }, () => {});
   chrome.storage.onChanged.addListener((c, area) => {
     if (area === 'local' && c.settings) {
-      settings = { ...settings, ...(c.settings.newValue || {}) };
+      settings = effOf({ ...settings, ...(c.settings.newValue || {}) }, 'x');
       if (settings.xFollowButtons === false) document.querySelectorAll('smd-follow').forEach((e) => e.remove());
     }
   });
@@ -160,7 +161,7 @@
     } catch {}
     entry.btn.classList.remove('busy');
     if (via === 'done' || via === 'already') {
-      SITES.xUsers.set(key, { ...(SITES.xUsers.get(key) || {}), screenName: entry.sn, following: !unfollow, t: Date.now() });
+      SITES.xUsers.set(key, { ...(SITES.xUsers.get(key) || {}), screenName: entry.sn, following: !unfollow, t: Date.now(), manualAt: Date.now() });
       renderAll(entry.sn);
       return via === 'already' ? { already: true } : { ok: true };
     }
@@ -198,7 +199,7 @@
       if (!j.id_str && !j.screen_name) {
         return fail(entry, `${unfollow ? '언팔로우' : '팔로우'} 확인 실패: X 가 결과를 돌려주지 않았습니다 → 프로필에서 실제로 팔로우됐는지 확인하세요.`);
       }
-      SITES.xUsers.set(key, { id: String(j.id_str || u.id || ''), screenName: entry.sn, following: !unfollow, t: Date.now() });
+      SITES.xUsers.set(key, { id: String(j.id_str || u.id || ''), screenName: entry.sn, following: !unfollow, t: Date.now(), manualAt: Date.now() });
       renderAll(entry.sn);
       return { ok: true };
     } catch (err) {

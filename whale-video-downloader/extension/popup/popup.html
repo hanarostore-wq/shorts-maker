@@ -23,6 +23,7 @@
 
   <nav class="tabs" role="tablist">
     <button class="tab on" data-tab="home" role="tab">다운로드</button>
+    <button class="tab" data-tab="site" role="tab">이 사이트</button>
     <button class="tab" data-tab="settings" role="tab">저장 설정</button>
     <button class="tab" data-tab="sites" role="tab">지원 사이트</button>
     <span class="tab-ink"></span>
@@ -59,6 +60,15 @@
     </section>
 
     <!-- 저장 설정 -->
+    <!-- 이 사이트: 지금 보고 있는 사이트(또는 지원 사이트에서 고른 사이트)의 기능만 켜고 끄기 -->
+    <section class="pane" data-pane="site">
+      <div class="card">
+        <div class="card-head"><div class="grow"><strong id="spTitle">이 사이트 기능</strong><small>이 사이트에만 적용됩니다. 다른 사이트는 '저장 설정'의 전체 기본값을 따릅니다</small></div></div>
+        <div class="sp-pick"><span class="sdot" id="spDot"></span><select id="spSelect" aria-label="사이트 고르기"></select><button class="link" id="spReset">기본값으로</button></div>
+        <div id="spList"></div>
+      </div>
+    </section>
+
     <section class="pane" data-pane="settings">
       <div class="card">
         <div class="card-head"><div class="grow"><strong>저장 위치</strong><small>다운로드한 영상이 저장될 곳</small></div></div>
@@ -168,8 +178,24 @@
         </div>
         <p class="note" id="placeNote" style="margin-top:4px">영상이 있는 탭에서 <b>직접 배치하기</b>를 누르면, 영상·사진 버튼을 각각 끌어 원하는 곳에 놓고 <b>저장</b>할 수 있어요. 사이트마다 따로 기억합니다.</p>
         <label class="row-toggle">
+          <div><b>저장 버튼 항상 표시</b><small>사진·영상에 마우스를 올리거나 재생하지 않아도 저장 버튼이 떠 있습니다 (끄면 사진은 마우스를 올렸을 때만)</small></div>
+          <input type="checkbox" id="alwaysShowButtons" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
           <div><b>사진에도 버튼 표시</b><small>사진에 마우스를 올리면 원본 저장 버튼이 나타납니다 (jpg·png·gif 외 형식은 PNG 로 변환)</small></div>
           <input type="checkbox" id="imageButtons" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>X·블루스카이 재생 버튼 → 팟플레이어로 재생</b><small>재생 버튼을 누르면 웨일 대신 팟플레이어(C:\Program Files\DAUM\PotPlayer)로 원본 영상을 엽니다. 업데이트 bat 을 한 번 실행해야 동작하고, 처음에 웨일이 "외부 프로그램 열기"를 물으면 허용하세요 (바꾼 뒤 페이지 새로고침)</small></div>
+          <input type="checkbox" id="potPlayer" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>X·블루스카이 자동재생 끄기</b><small>스크롤할 때 영상이 저절로 재생되지 않습니다. 재생 버튼을 직접 누른 영상만 재생됩니다 (바꾼 뒤 페이지 새로고침)</small></div>
+          <input type="checkbox" id="noAutoplay" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>영상·사진 글자에 작성자 줄 넣기</b><small>본문 글자 첫 줄에 '작성자 이름 (@아이디) · 사이트'를 넣습니다</small></div>
+          <input type="checkbox" id="captionAuthor" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
           <div><b>화면 밖 영상 정지</b><small>재생 중인 영상이 스크롤로 화면에서 완전히 벗어나면 멈춥니다 (화면 속 화면·전체 화면은 제외, 다시 보여도 저절로 재생하지 않음)</small></div>
@@ -227,7 +253,7 @@
     <!-- 지원 사이트 -->
     <section class="pane" data-pane="sites">
       <div class="card">
-        <div class="card-head"><div class="grow"><strong>지원 사이트</strong><small>끄면 해당 사이트에서 버튼을 숨깁니다</small></div></div>
+        <div class="card-head"><div class="grow"><strong>지원 사이트</strong><small>끄면 해당 사이트에서 버튼을 숨깁니다. '따로 폴더'를 끄면 기본 다운로드 폴더(1분30초 이하·초과·사진 → 국적)에, 켜면 다운로드 폴더 안 사이트 폴더에 같은 순서로 저장합니다. 폴더 이름이 같은 사이트끼리는 한 폴더로 합쳐집니다 (예: X·블루스카이 = SNS)</small></div></div>
         <ul class="sites" id="siteList"></ul>
       </div>
     </section>

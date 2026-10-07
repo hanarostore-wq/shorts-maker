@@ -27,6 +27,40 @@ if (-not (Test-Path (Join-Path $Root 'manifest.json'))) {
   if (Test-Path (Join-Path $inner 'manifest.json')) { $Ext = $inner }
 }
 
+# 0) 팟플레이어 연결 등록(확장 설정 'X·블루스카이 재생 버튼 → 팟플레이어로 재생'용)
+#    smdplay: 주소를 열면 아래 스크립트가 http(s) 영상 주소만 꺼내 팟플레이어로 넘긴다. 현재 사용자 설정(HKCU)에만 쓰고 자동 실행은 없다.
+try {
+  $PotDir = Join-Path $env:LOCALAPPDATA 'WhaleVideoDownloader'
+  New-Item -ItemType Directory -Force -Path $PotDir | Out-Null
+  $PotPs1 = Join-Path $PotDir 'smdplay.ps1'
+  $PotScript = @'
+param([string]$u)
+Add-Type -AssemblyName PresentationFramework
+function Show($step, $reason, $action) {
+  [System.Windows.MessageBox]::Show("팟플레이어로 재생 실패`n`n단계: $step`n원인: $reason`n조치: $action", '웨일 영상 다운로더') | Out-Null
+  exit 1
+}
+$raw = [string]$u
+if (-not $raw.StartsWith('smdplay:')) { Show '주소 확인' 'smdplay: 주소가 아닙니다' '웨일에서 영상 재생 버튼을 다시 누르세요.' }
+try { $url = [Uri]::UnescapeDataString($raw.Substring(8)) } catch { Show '주소 확인' '영상 주소를 읽지 못했습니다' '웨일에서 영상 재생 버튼을 다시 누르세요.' }
+if ($url -notmatch '^https?://[^\s"''`<>|]+$') { Show '주소 확인' 'http(s) 영상 주소가 아니어서 열지 않았습니다' '웨일에서 영상 재생 버튼을 다시 누르세요.' }
+$exe = @('C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe', 'C:\Program Files\DAUM\PotPlayer\PotPlayerMini.exe', 'C:\Program Files (x86)\DAUM\PotPlayer\PotPlayerMini.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $exe) { Show '팟플레이어 찾기' 'C:\Program Files\DAUM\PotPlayer 에 팟플레이어(PotPlayerMini64.exe)가 없습니다' '팟플레이어를 설치하거나 설치 경로를 제작자에게 알려 주세요.' }
+try { Start-Process -FilePath $exe -ArgumentList ('"' + $url + '"') } catch { Show '팟플레이어 실행' $_.Exception.Message '팟플레이어를 직접 한 번 실행해 본 뒤 다시 시도하세요.' }
+'@
+  [IO.File]::WriteAllText($PotPs1, $PotScript, (New-Object Text.UTF8Encoding $true))
+  $Key = 'HKCU:\Software\Classes\smdplay'
+  New-Item -Path "$Key\shell\open\command" -Force | Out-Null
+  Set-Item -Path $Key -Value 'URL:웨일 영상 다운로더 팟플레이어 재생'
+  New-ItemProperty -Path $Key -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
+  Set-Item -Path "$Key\shell\open\command" -Value ('powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $PotPs1 + '" "%1"')
+  if (-not (Test-Path 'C:\Program Files\DAUM\PotPlayer')) {
+    Write-Host '[안내] 팟플레이어 연결은 등록했지만 C:\Program Files\DAUM\PotPlayer 폴더가 없습니다. 팟플레이어로 재생을 쓰려면 팟플레이어를 설치하세요.' -ForegroundColor Yellow
+  } else { Write-Host '팟플레이어 연결 등록 완료' -ForegroundColor Green }
+} catch {
+  Write-Host "[안내] 팟플레이어 연결 등록 실패(업데이트는 계속): 단계 레지스트리 등록 / 원인 $($_.Exception.Message) / 조치 이 파일을 다시 실행하세요." -ForegroundColor Yellow
+}
+
 Write-Host "웨일 영상 다운로더 업데이트를 시작합니다 ($Ext)"
 $before = VerOf $Ext
 

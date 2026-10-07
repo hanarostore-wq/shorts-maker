@@ -466,6 +466,8 @@
     const f = xFollowState(o);
     const key = sn.toLowerCase();
     const prev = xUsers.get(key);
+    // 방금 직접 팔로우·언팔로우한 계정은 2분 동안 그 상태를 지킨다(먼저 받아 둔 피드 데이터가 '팔로우 안 함'으로 되돌리지 않게)
+    if (prev?.manualAt && Date.now() - prev.manualAt < 120000) return;
     xUsers.set(key, { id: String(o.rest_id), screenName: sn, following: f ?? prev?.following, t: Date.now() });
   };
   const ingestX = (json) =>

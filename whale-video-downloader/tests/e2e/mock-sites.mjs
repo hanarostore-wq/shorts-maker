@@ -143,6 +143,14 @@ const ytPlayer = (id, vertical) => ({
   },
 });
 
+// 틱톡·샤오홍슈처럼 페이지가 window 에서 클릭을 먼저 가로채고 사진·영상 위에 막을 덮은 화면
+const GUARD_PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>TikTok</title><script>
+        for (const t of ['pointerdown', 'click']) addEventListener(t, (e) => { window.__ttSite = (window.__ttSite || 0) + 1; e.stopImmediatePropagation(); }, true);
+        </script></head><body style="margin:0">
+        <div style="position:relative;width:420px;margin:20px"><div style="position:relative;z-index:0"><img id="ttpic" src="https://cdn.example-videos.com/img/photo.jpg" style="width:420px;height:420px;object-fit:cover;display:block"></div><div style="position:absolute;inset:0;z-index:1"></div></div>
+        <div style="position:relative;width:420px;margin:20px"><div style="position:relative;z-index:0"><video id="ttvid" src="https://cdn.example-videos.com/preview.webm" muted loop style="width:420px;height:420px;display:block;background:#000"></video></div><div style="position:absolute;inset:0;z-index:1"></div></div>
+        </body></html>`;
+
 const ytPage = (id, shorts) => page(
   shorts ? '유튜브 쇼츠 테스트 - YouTube' : '유튜브 일반 영상 테스트 - YouTube',
   `<div id="${shorts ? 'shorts-player' : 'movie_player'}" class="html5-video-player" style="position:relative;width:${shorts ? 360 : 854}px;height:${shorts ? 640 : 480}px">
@@ -311,6 +319,10 @@ const handlers = {
     if (u.pathname === '/long') {
       return html(res, page('긴 영상', `<div class="card"><video src="https://cdn.example-videos.com/long_95s.webm" muted preload="metadata" style="width:640px;height:360px;background:#000"></video></div>`));
     }
+    if (u.pathname === '/clipcard') {
+      // 틱톡 사진 목록처럼 카드(overflow:hidden)보다 사진이 넓어 오른쪽이 잘려 보이는 경우
+      return html(res, page('잘린 카드', `<div id="card" style="width:260px;height:340px;overflow:hidden;border-radius:12px;position:relative"><img id="wide" src="https://cdn.example-videos.com/img/photo.jpg" style="width:520px;height:340px;object-fit:cover;display:block"></div>`));
+    }
     if (u.pathname === '/photos') {
       return html(res, page('사진 페이지', `<div class="card"><img class="photo" src="https://cdn.example-videos.com/img/photo.webp" style="width:480px"></div>
         <div class="card"><a href="/somewhere"><img class="photo" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px"></a></div>
@@ -391,6 +403,7 @@ const handlers = {
 
   // ── TikTok ──
   'www.tiktok.com': (req, res, u) => {
+    if (u.pathname === '/ttguard') return html(res, GUARD_PAGE);
     if (u.pathname === '/@spacestar' || u.pathname === '/@limited') {
       // 틱톡 프로필: '팔로워'를 누르면 목록 창. limited 는 누르면 'Try again later' 알림
       const lim = u.pathname === '/@limited';
@@ -439,6 +452,18 @@ const handlers = {
 
   // ── Instagram ──
   'www.instagram.com': (req, res, u) => {
+    if (u.pathname === '/igoverlay') {
+      // 인스타그램처럼 사진·영상 위에 투명 막이 덮여 있음(누르면 게시물 열기·영상 확대)
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Instagram</title></head><body style="margin:0">
+        <article style="position:relative;width:480px;margin:20px">
+          <div style="position:relative;z-index:0"><img id="igpic" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px;height:480px;object-fit:cover;display:block"></div>
+          <div id="ov1" style="position:absolute;inset:0;z-index:1" onclick="window.__igOpened = (window.__igOpened || 0) + 1"></div>
+        </article>
+        <article style="position:relative;width:480px;margin:20px">
+          <div style="position:relative;z-index:0"><video id="igvid" src="https://cdn.example-videos.com/preview.webm" muted loop style="width:480px;height:480px;display:block;background:#000"></video></div>
+          <div id="ov2" style="position:absolute;inset:0;z-index:1" onpointerdown="window.__igExpanded = (window.__igExpanded || 0) + 1" onclick="window.__igExpanded = (window.__igExpanded || 0) + 1"></div>
+        </article></body></html>`);
+    }
     if (u.pathname === '/spacestar/followers/') {
       // 인스타 팔로워 목록 창: 스크롤되는 창 안에 팔로우 버튼(누르면 0.3초 뒤 '팔로잉'), 이미 팔로잉·맞팔로우하기
       const row = (id, label) => `<div style="height:70px;display:flex;justify-content:space-between"><a href="/${id}/"><span>${id}</span></a><button onclick="window.__igClicks = (window.__igClicks || []).concat('${id}'); setTimeout(() => (this.textContent = '팔로잉'), 300)">${label}</button></div>`;
@@ -514,6 +539,12 @@ const handlers = {
 
   // ── X ──
   'x.com': (req, res, u) => {
+    if (u.pathname === '/autoplaytest') {
+      // 사이트가 0.6초 뒤 스스로 play() (스크롤 자동재생 흉내), 영상 위 막을 누르면 play()
+      return html(res, page('X 자동재생', `<div style="position:relative;width:480px;height:270px"><video id="av" src="https://cdn.example-videos.com/preview.webm" muted loop playsinline style="width:100%;height:100%;background:#000"></video>
+        <div id="cover" style="position:absolute;inset:0" onclick="document.getElementById('av').play()"></div></div>`,
+        `setTimeout(() => document.getElementById('av').play().catch((e) => (window.__apErr = e.name)), 600);`));
+    }
     if (u.pathname === '/spacestar/following' || u.pathname === '/limited/following') {
       // X 팔로잉 목록: 셀마다 팔로우 버튼(누르면 0.3초 뒤 '팔로잉'), 비공개 계정은 '요청됨', 오른쪽 '팔로우 추천'은 목록 밖
       const limited = u.pathname.startsWith('/limited');
@@ -723,6 +754,13 @@ const handlers = {
 
   // ── Bluesky ──
   'bsky.app': (req, res, u) => {
+    if (u.pathname === '/staleauth') {
+      // localStorage 토큰은 만료된 값, 블루스카이 앱은 최신 토큰으로 요청을 보냄
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Bluesky</title><script>localStorage.setItem('BSKY_STORAGE', JSON.stringify({ session: { currentAccount: { did: 'did:plc:me', handle: 'me.test', service: 'https://bsky.social/', pdsUrl: 'https://bsky.social', accessJwt: 'OLD-EXPIRED-JWT' }, accounts: [] } }));
+        setTimeout(() => fetch('https://bsky.social/xrpc/app.bsky.actor.getPreferences', { headers: { authorization: 'Bearer TEST-ACCESS-JWT' } }).catch(() => {}), 200);</script></head><body style="background:#111;color:#eee">
+        <div data-testid="feedItem-by-stale2.test" style="width:560px;padding:12px"><a href="/profile/stale2.test">스테일</a><div data-testid="postText">사진 글</div>
+        <img id="sp" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px;height:320px;object-fit:cover"></div></body></html>`);
+    }
     if (/^\/profile\/(spacestar|errlist)\.test\/follows$/.test(u.pathname)) {
       // 블루스카이 팔로잉 목록 화면(로그인 상태)
       return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Bluesky</title><script>localStorage.setItem('BSKY_STORAGE', JSON.stringify({ session: { currentAccount: { did: 'did:plc:me', handle: 'me.test', service: 'https://bsky.social/', pdsUrl: 'https://bsky.social', accessJwt: 'TEST-ACCESS-JWT' }, accounts: [] } }));</script></head><body style="background:#111;color:#eee"><h1>팔로우 중</h1></body></html>`);
@@ -805,6 +843,7 @@ const handlers = {
       const profiles = u.searchParams.getAll('actors').map((h) => ({ did: `did:plc:${h.split('.')[0]}`, handle: h, viewer: fol[h] ? { following: fol[h] } : {} }));
       return json(req, res, { profiles });
     }
+    if (u.pathname === '/xrpc/app.bsky.actor.getPreferences') return json(req, res, { preferences: [] });
     if (u.pathname === '/xrpc/app.bsky.graph.getFollows') {
       if (!bskyAuth()) return json(req, res, { error: 'AuthMissing' }, 401);
       const P = (h, viewer = {}) => ({ did: `did:plc:${h}`, handle: `${h}.test`, viewer });
@@ -849,6 +888,7 @@ const handlers = {
 
   // ── Xiaohongshu ──
   'www.xiaohongshu.com': (req, res, u) => {
+    if (u.pathname === '/ttguard') return html(res, GUARD_PAGE);
     const m = /^\/explore\/([0-9a-f]{24})/.exec(u.pathname);
     if (m) {
       const state = { note: { noteDetailMap: { [m[1]]: { note: { noteId: m[1], title: '샤오홍슈 영상 노트', type: 'video', user: { nickname: '레드노트' }, video: { capa: { duration: 6 }, consumer: { originVideoKey: 'pre_post/1040g2t0mockorigin' }, media: { stream: { h264: [{ masterUrl: 'http://sns-video-bd.xhscdn.com/stream/110/258/720.mp4', backupUrls: [], width: 720, height: 1280, videoBitrate: 900000 }], h265: [], av1: [] } } } } } } } };

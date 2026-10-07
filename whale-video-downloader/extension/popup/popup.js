@@ -1,4 +1,4 @@
-import { getSettings, saveSettings, SITE_LIST } from '../shared/settings.js';
+import { getSettings, saveSettings, SITE_LIST, SITE_FEATURES, effectiveSettings } from '../shared/settings.js';
 import { buildFilename, sanitizeFolder } from '../shared/filename.js';
 
 const $ = (s) => document.querySelector(s);
@@ -88,7 +88,7 @@ tplSel.addEventListener('change', () => save({ filenameTemplate: tplSel.value })
 function renderPreview() {
   const name = buildFilename(settings.filenameTemplate, { title: '여름 바다 브이로그', site: 'youtube', siteName: '유튜브', id: 'dQw4w9WgXcQ', author: '하나로', quality: '1080p', flag: settings.flagPrefix === false ? false : settings.flagStyle === 'emoji' ? 'emoji' : 'name' }, 'mp4');
   const sub = sanitizeFolder(settings.subfolder);
-  const where = `${shownFolder}/${sub ? `${sub}/` : ''}${settings.siteFolders !== false ? '유튜브/' : ''}${settings.sortFolders !== false ? '영상 1분30초 이하/' : ''}${settings.countryFolders !== false ? '한국/' : ''}`;
+  const where = `${shownFolder}/${sub ? `${sub}/` : ''}${settings.siteFolders === true ? '유튜브/' : ''}${settings.sortFolders !== false ? '영상 1분30초 이하/' : ''}${settings.countryFolders !== false ? '한국/' : ''}`;
   $('#filenamePreview').innerHTML = `예시: ${escapeHtml(where)}<b>${escapeHtml(name)}</b>`;
 }
 
@@ -149,13 +149,15 @@ async function renderFolder() {
   renderPreview();
 }
 renderFolder();
-for (const id of ['captionOnMedia', 'captionCover', 'captionIntro', 'captionKeepOriginal', 'translateCaption', 'ytShortsStats', 'xFollowButtons', 'pauseOffscreen', 'preventDuplicates', 'autoFollow', 'aiLabel', 'downloadedMark', 'xPhotoTapClose', 'bskyFollowButtons', 'followAllButton']) {
+for (const id of ['captionOnMedia', 'captionCover', 'captionIntro', 'captionKeepOriginal', 'translateCaption', 'ytShortsStats', 'xFollowButtons', 'pauseOffscreen', 'preventDuplicates', 'autoFollow', 'aiLabel', 'downloadedMark', 'xPhotoTapClose', 'bskyFollowButtons', 'followAllButton', 'noAutoplay', 'captionAuthor', 'alwaysShowButtons']) {
   $(`#${id}`).checked = settings[id] !== false;
   $(`#${id}`).addEventListener('change', (e) => save({ [id]: e.target.checked }));
 }
+$('#potPlayer').checked = settings.potPlayer === true;
+$('#potPlayer').addEventListener('change', (e) => save({ potPlayer: e.target.checked }));
 $('#sortFolders').checked = settings.sortFolders !== false;
 $('#sortFolders').addEventListener('change', (e) => save({ sortFolders: e.target.checked }));
-$('#siteFolders').checked = settings.siteFolders !== false;
+$('#siteFolders').checked = settings.siteFolders === true;
 $('#siteFolders').addEventListener('change', (e) => save({ siteFolders: e.target.checked }));
 $('#countryFolders').checked = settings.countryFolders !== false;
 $('#countryFolders').addEventListener('change', (e) => save({ countryFolders: e.target.checked }));
@@ -171,8 +173,33 @@ function renderSites() {
   ul.innerHTML = '';
   for (const s of SITE_LIST) {
     const li = document.createElement('li');
-    li.innerHTML = `<label class="site"><span class="sdot" style="background:${s.color}"></span><span class="n">${escapeHtml(s.name)}</span><input type="checkbox" ${settings.disabledSites?.includes(s.id) ? '' : 'checked'}><span class="sw"><i></i></span></label>`;
-    li.querySelector('input').addEventListener('change', (e) => {
+    const fname = (settings.siteFolderMap || {})[s.id] || '';
+    li.innerHTML = `<label class="site"><span class="sdot" style="background:${s.color}"></span><span class="n">${escapeHtml(s.name)}</span><input type="checkbox" ${settings.disabledSites?.includes(s.id) ? '' : 'checked'}><span class="sw"><i></i></span></label>
+      <button type="button" class="link sfeat">이 사이트 기능 설정 ›</button>
+      <label class="sfold" title="끄면 기본 다운로드 폴더(영상 1분30초 이하 / 초과 / 사진 / 국적)에 저장합니다. 켜면 다운로드 폴더 안에 이 사이트 폴더를 따로 만들고 그 안에 같은 순서로 나눕니다. 여러 사이트에 같은 폴더 이름을 넣으면 한 폴더로 합쳐집니다."><span class="sfl">따로 폴더</span><input type="checkbox" class="sfon" ${fname ? 'checked' : ''}><span class="sw"><i></i></span></label>
+      <div class="sfname" ${fname ? '' : 'hidden'}><span>폴더 이름</span><input type="text" class="sfin" maxlength="40" value="${escapeHtml(fname || s.name)}"></div>`;
+    const clean = (v) => String(v || '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+    const setName = (v) => {
+      const map = { ...(settings.siteFolderMap || {}) };
+      if (v) map[s.id] = v;
+      else delete map[s.id];
+      save({ siteFolderMap: map });
+    };
+    li.querySelector('.sfeat').addEventListener('click', () => {
+      renderSitePanel(s.id);
+      showTab('site');
+    });
+    li.querySelector('.sfon').addEventListener('change', (e) => {
+      const box = li.querySelector('.sfname');
+      box.hidden = !e.target.checked;
+      setName(e.target.checked ? clean(li.querySelector('.sfin').value) || s.name : '');
+    });
+    li.querySelector('.sfin').addEventListener('change', (e) => {
+      const v = clean(e.target.value) || s.name;
+      e.target.value = v;
+      if (li.querySelector('.sfon').checked) setName(v);
+    });
+    li.querySelector('.site input').addEventListener('change', (e) => {
       const set = new Set(settings.disabledSites || []);
       if (e.target.checked) set.delete(s.id);
       else set.add(s.id);
@@ -182,6 +209,76 @@ function renderSites() {
   }
 }
 renderSites();
+
+// ───────────── 이 사이트: 사이트마다 기능 켜고 끄기 ─────────────
+let spSite = 'generic';
+function renderSitePanel(id) {
+  spSite = id;
+  const meta = siteMeta[id] || siteMeta.generic;
+  $('#spTitle').textContent = `${meta.name} 기능`;
+  $('#spDot').style.background = meta.color;
+  const sel = $('#spSelect');
+  if (!sel.options.length) {
+    for (const s of SITE_LIST) sel.add(new Option(s.name, s.id));
+    sel.addEventListener('change', () => renderSitePanel(sel.value));
+  }
+  sel.value = id;
+  const eff = effectiveSettings(settings, id);
+  const own = (settings.siteSettings || {})[id] || {};
+  const box = $('#spList');
+  box.innerHTML = '';
+  const row = (name, desc, checked, changed, onChange, extra = '') => {
+    const l = document.createElement('label');
+    l.className = 'row-toggle';
+    l.innerHTML = `<div><b>${escapeHtml(name)}${changed ? ' <em class="mine">이 사이트만</em>' : ''}</b><small>${escapeHtml(desc)}</small>${extra}</div><input type="checkbox" ${checked ? 'checked' : ''} /><span class="sw"><i></i></span>`;
+    l.querySelector('input').addEventListener('change', (e) => onChange(e.target.checked));
+    return l;
+  };
+  const head = (t) => {
+    const h = document.createElement('div');
+    h.className = 'sp-group';
+    h.textContent = t;
+    return h;
+  };
+  // 버튼 표시·저장 폴더(사이트 고유 설정)
+  box.appendChild(head('이 사이트'));
+  box.appendChild(row('이 사이트에서 저장 버튼 표시', '끄면 이 사이트에서는 버튼을 띄우지 않습니다', !(settings.disabledSites || []).includes(id), false, async (on) => {
+    const set = new Set(settings.disabledSites || []);
+    if (on) set.delete(id);
+    else set.add(id);
+    await save({ disabledSites: [...set] });
+    renderSites();
+  }));
+  const fname = (settings.siteFolderMap || {})[id] || '';
+  box.appendChild(row('따로 폴더에 저장', fname ? `다운로드/${fname}/(1분30초 이하·초과·사진)/(국적)` : '끄면 기본 다운로드 폴더(1분30초 이하·초과·사진 → 국적)', !!fname, false, async (on) => {
+    const map = { ...(settings.siteFolderMap || {}) };
+    if (on) map[id] = map[id] || meta.name;
+    else delete map[id];
+    await save({ siteFolderMap: map });
+    renderSites();
+    renderSitePanel(id);
+  }));
+  let group = '';
+  for (const f of SITE_FEATURES) {
+    if (f.sites && !f.sites.includes(id)) continue;
+    if (f.group !== group) {
+      group = f.group;
+      box.appendChild(head(group));
+    }
+    box.appendChild(row(f.name, f.desc, eff[f.key] === true, f.key in own, async (on) => {
+      const ss = { ...(settings.siteSettings || {}) };
+      ss[id] = { ...(ss[id] || {}), [f.key]: on };
+      await save({ siteSettings: ss });
+      renderSitePanel(id);
+    }));
+  }
+}
+$('#spReset').addEventListener('click', async () => {
+  const ss = { ...(settings.siteSettings || {}) };
+  delete ss[spSite];
+  await save({ siteSettings: ss });
+  renderSitePanel(spSite);
+});
 
 // ───────────── 현재 탭 ─────────────
 const SITE_HOSTS = [
@@ -206,12 +303,14 @@ async function renderPage() {
   const list = $('#videoList');
   list.innerHTML = '';
   if (!tab || !/^https?:/.test(tab.url || '')) {
+    renderSitePanel('generic');
     $('#pageSite').textContent = '이 페이지에서는 사용할 수 없어요';
     hint.textContent = '웹사이트 탭에서 확장프로그램 아이콘을 눌러 주세요';
     return;
   }
   const host = new URL(tab.url).hostname;
   const siteId = SITE_HOSTS.find(([re]) => re.test(host))?.[1] || 'generic';
+  renderSitePanel(siteId);
   const meta = siteMeta[siteId];
   $('#pageSite').textContent = siteId === 'generic' ? host : meta.name;
   $('#pageDot').style.background = meta.color;

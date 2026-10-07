@@ -6,13 +6,14 @@
   globalThis.__SMD_BSKYTOOLS = true;
 
   let followOn = true;
+  const effOf = (s, site) => ({ ...(s || {}), ...(((s || {}).siteSettings || {})[site] || {}) }); // 사이트별로 바꾼 값이 우선
   chrome.storage.local.get('settings').then((r) => {
-    followOn = r.settings?.bskyFollowButtons !== false;
+    followOn = effOf(r.settings, 'bluesky').bskyFollowButtons !== false;
     scanFollow();
   }, () => {});
   chrome.storage.onChanged.addListener((c, area) => {
     if (area === 'local' && c.settings) {
-      followOn = c.settings.newValue?.bskyFollowButtons !== false;
+      followOn = effOf(c.settings.newValue, 'bluesky').bskyFollowButtons !== false;
       if (!followOn) {
         document.querySelectorAll('smd-bfollow').forEach((e) => e.remove());
         items.clear();
@@ -22,16 +23,36 @@
 
   // ───────────── 팔로우 버튼 ─────────────
   // 로그인 정보: 블루스카이가 localStorage(BSKY_STORAGE)에 두는 현재 계정. 토큰은 요청 헤더에만 쓰고 어디에도 남기지 않는다.
+  // 블루스카이 앱이 방금 보낸 요청의 로그인 토큰(앱이 스스로 새로 고친 최신 값). bsky-hook.js(페이지 쪽)가 알려 준다.
+  //   localStorage 의 토큰은 만료된 채 남아 있을 수 있어, 있으면 이것을 먼저 쓴다. 토큰은 메모리에만 두고 어디에도 남기지 않는다.
+  let live = null; // { jwt, pds }
+  document.addEventListener('__smd_bsky_auth', (ev) => {
+    try {
+      const d = JSON.parse(ev.detail);
+      if (/^Bearer\s+\S+/.test(d.auth || '') && /^https:\/\//.test(d.base || '')) live = { jwt: d.auth.replace(/^Bearer\s+/, ''), pds: d.base };
+    } catch {}
+  });
+  const didOf = (jwt) => {
+    try {
+      return JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).sub || '';
+    } catch {
+      return '';
+    }
+  };
   function session() {
+    let base = null;
     try {
       const st = JSON.parse(localStorage.getItem('BSKY_STORAGE') || '{}');
       const a = st.session?.currentAccount;
       const full = (st.session?.accounts || []).find((x) => x.did === a?.did) || a;
-      if (!full?.did || !full.accessJwt) return null;
-      return { did: full.did, handle: String(full.handle || '').toLowerCase(), jwt: full.accessJwt, pds: String(full.pdsUrl || full.service || 'https://bsky.social').replace(/\/+$/, '') };
-    } catch {
-      return null;
+      if (full?.did) base = { did: full.did, handle: String(full.handle || '').toLowerCase(), jwt: full.accessJwt || '', pds: String(full.pdsUrl || full.service || 'https://bsky.social').replace(/\/+$/, '') };
+    } catch {}
+    if (live && (!base || didOf(live.jwt) === base.did || !didOf(live.jwt))) {
+      // 앱 요청이 앱뷰(api.bsky.app)로 간 경우에는 주소는 저장된 PDS 를 쓴다
+      const pds = /api\.bsky\.app|public\.api/.test(live.pds) ? base?.pds || 'https://bsky.social' : live.pds;
+      return { did: base?.did || didOf(live.jwt), handle: base?.handle || '', jwt: live.jwt, pds };
     }
+    return base?.jwt ? base : null;
   }
   const APPVIEW = 'did:web:api.bsky.app#bsky_appview';
   async function xrpc(s, method, nsid, { params, body, proxy } = {}) {

@@ -4,11 +4,14 @@ const RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/i;
 export function sanitizePart(s, max = 120) {
   let t = String(s ?? '')
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
-    .replace(/[<>:"/\\|?*‮​]/g, ' ')
+    .replace(/[<>:"/\\|?*]/g, ' ')
+    // 브라우저가 파일 이름에 허용하지 않는 보이지 않는 글자(방향 표시·폭 없는 공백·변형 선택자 등)
+    .replace(/[\u00ad\u061c\u180e\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufe00-\ufe0f\ufeff\ufff0-\uffff]/g, ' ')
+    .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, ' ')
     .replace(/[#%]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/^[.\s]+|[.\s]+$/g, '');
+    .replace(/^[.\s~]+|[.\s]+$/g, '');
   if ([...t].length > max) t = [...t].slice(0, max).join('').trim();
   if (RESERVED.test(t)) t = `_${t}`;
   return t;
@@ -163,4 +166,11 @@ export function buildFilename(template, data, ext = 'mp4') {
   if (tag) name = `${tag} ${name}`;
   const e = String(ext || 'mp4').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'mp4';
   return `${name}.${e}`;
+}
+
+// 브라우저가 이름을 거부했을 때 다시 시도할 더 엄격한 한글 이름: 이모지·기호를 빼고 글자·숫자·기본 문장부호만, 60자까지
+export function strictName(name) {
+  const m = /^(.*?)(\.[A-Za-z0-9]{1,5})?$/.exec(String(name || ''));
+  const base = sanitizePart(String(m[1] || '').replace(/[^\p{L}\p{N}\s()[\]\-_,.!'&+=@]/gu, ' '), 60) || '영상';
+  return `${base}${m[2] || ''}`;
 }

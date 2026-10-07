@@ -10,17 +10,47 @@
 
   const DEFAULTS = { showButtons: true, imageButtons: true, buttonPosition: 'mid-right', placements: {}, imagePlacements: {}, disabledSites: [], genericButtons: true };
   let settings = { ...DEFAULTS };
+  const effOf = (s, site) => ({ ...(s || {}), ...(((s || {}).siteSettings || {})[site] || {}) }); // 사이트별로 바꾼 값이 우선
   const enabled = () =>
     settings.showButtons !== false &&
     !(settings.disabledSites || []).includes(adapter.id) &&
     (adapter.id !== 'generic' || settings.genericButtons !== false);
 
+  // 자동재생 끄기·팟플레이어(no-autoplay.js, 페이지 쪽)에 이 사이트 설정 전달
+  const syncAutoplay = () => {
+    if (window.top !== window && adapter.id === 'generic') return;
+    document.documentElement.dataset.smdNoautoplay = settings.noAutoplay === true ? '1' : '0';
+    document.documentElement.dataset.smdPotplayer = settings.potPlayer === true ? '1' : '0';
+  };
+  // 재생 버튼을 누른 영상 → 원본 주소를 찾아 팟플레이어로(결과·실패는 화면 아래 알림)
+  document.addEventListener('__smd_potplay', async (ev) => {
+    // 표시 값은 no-autoplay.js 가 붙인 'p숫자' 뿐(이 파일의 CSS 는 버튼 스타일 글자라 CSS.escape 를 쓰지 않는다)
+    const tok = String(ev.detail || '');
+    if (!/^p\d+$/.test(tok)) return;
+    const v = document.querySelector(`video[data-smd-pot="${tok}"]`);
+    if (!v || !alive()) return;
+    const note = (r) => globalThis.__SMD_FOLLOW_TOAST?.(r);
+    const toast = (text, err) => note(err ? { error: err } : { custom: text });
+    toast('팟플레이어로 여는 중…');
+    let req;
+    try {
+      req = await adapter.resolve(v, ctx);
+    } catch (err) {
+      return toast('', { step: '영상 정보 찾기', reason: err.reason || err.message || String(err), action: err.action || '페이지를 새로고침한 뒤 다시 누르세요.' });
+    }
+    Object.assign(req, { site: adapter.id, siteName: adapter.name, pageUrl: location.href, kind: 'video', duration: Number.isFinite(v.duration) ? v.duration : 0 });
+    const r = await chrome.runtime.sendMessage({ type: 'smd:play-external', request: req }).catch((err) => ({ error: { step: '확장프로그램 연결', reason: String(err?.message || err), action: '페이지를 새로고침(F5)한 뒤 다시 누르세요.' } }));
+    if (r?.error) return toast('', r.error);
+    toast('팟플레이어로 보냈습니다. 웨일이 "외부 프로그램 열기"를 물으면 허용하세요.');
+  });
   chrome.storage.local.get('settings').then((r) => {
-    settings = { ...DEFAULTS, ...(r.settings || {}) };
+    settings = effOf({ ...DEFAULTS, ...(r.settings || {}) }, adapter.id);
+    syncAutoplay();
   }, () => {});
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.settings) {
-      settings = { ...DEFAULTS, ...(changes.settings.newValue || {}) };
+      settings = effOf({ ...DEFAULTS, ...(changes.settings.newValue || {}) }, adapter.id);
+      syncAutoplay();
       }
   });
 
@@ -251,6 +281,7 @@
       if (entry.state === 'error' && entry.lastError) return showPanel(entry, 'e', entry.lastError);
       start(entry);
     };
+    entry.activate = activate;
     b.addEventListener('click', (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
@@ -296,6 +327,34 @@
     });
     entry.layer.appendChild(b);
     return b;
+  }
+
+  // 사이트가 사진·영상 위에 투명 막을 덮어 두면(인스타그램 등) 버튼을 눌러도 그 막이 눌려
+  //   아무 반응이 없거나 사이트 동작(영상 확대·게시물 열기·두 번 눌러 좋아요)이 먼저 일어난다.
+  //   → 페이지 맨 바깥(window)에서 먼저 받아, 누른 자리가 저장 버튼이면 사이트로 넘기지 않고 다운로드를 시작한다.
+  const hitButton = (x, y) => {
+    for (const e of tracked.values()) {
+      if (!e.visible || !e.btn) continue;
+      const r = e.btn.getBoundingClientRect();
+      if (r.width && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return e;
+    }
+    return null;
+  };
+  //   사이트(틱톡 등)가 페이지 맨 바깥에 먼저 걸어 둔 처리보다도 앞서야 해서, 받는 자리는 문서 시작 때 button-guard.js 가 미리 걸어 두고
+  //   여기서는 판단 함수만 넘겨준다.
+  globalThis.__SMD_HIT = (ev, t) => {
+    if (!ev.isTrusted || editMode || !alive()) return;
+    const pt = ev.touches?.[0] || ev.changedTouches?.[0] || ev;
+    const e = hitButton(pt.clientX, pt.clientY);
+    if (!e) return;
+    ev.stopImmediatePropagation();
+    if (ev.cancelable) ev.preventDefault();
+    if (t === 'click' && Date.now() - (e.activatedAt || 0) > 600) e.activate?.();
+  };
+  if (!globalThis.__SMD_GUARD) {
+    // button-guard.js 가 없으면(예전 페이지 등) 여기서라도 건다
+    globalThis.__SMD_GUARD = true;
+    for (const t of ['pointerdown', 'mousedown', 'touchstart', 'pointerup', 'mouseup', 'touchend', 'click', 'dblclick', 'auxclick']) window.addEventListener(t, (ev) => globalThis.__SMD_HIT?.(ev, t), true);
   }
 
   function setLook(entry, state, text, percent) {
@@ -744,7 +803,13 @@
     }
     const t = toastHost.shadowRoot.querySelector('.t');
     const who = r.who ? `${r.who} ` : '';
-    if (r.error) {
+    if (r.custom) {
+      t.className = 't';
+      t.textContent = r.custom;
+    } else if (r.error && r.error.step && !/팔로우|작성자|로그인/.test(r.error.step) && !r.who) {
+      t.className = 't err';
+      t.textContent = `실패\n단계: ${r.error.step}\n원인: ${r.error.reason}\n조치: ${r.error.action || '페이지를 새로고침한 뒤 다시 시도하세요.'}`;
+    } else if (r.error) {
       t.className = 't err';
       t.textContent = `자동 팔로우 실패 ${who}\n단계: ${r.error.step || '팔로우'}\n원인: ${r.error.reason || r.error}\n조치: ${r.error.action || '페이지를 새로고침한 뒤 다시 시도하세요.'}`;
     } else {
@@ -1117,6 +1182,10 @@
     // 같은 플레이어 안의 이미지(영상 재생 전 썸네일) — 가까운 조상에 영상이 있으면 제외
     let p = img.parentElement;
     for (let i = 0; p && i < 6; i++, p = p.parentElement) {
+      // 페이지 전체나 사진보다 훨씬 큰 묶음까지 올라가면 다른 게시물의 영상이므로 멈춘다
+      if (p === document.body || p === document.documentElement) break;
+      const pr = p.getBoundingClientRect();
+      if (pr.width * pr.height > area * 3) break;
       if (p.querySelector('video')) return true;
       if (p.querySelectorAll('img').length > 1) break;
     }
@@ -1215,16 +1284,45 @@
 
   function hasSource(v) {
     if (adapter.id !== 'generic') return true;
-    const src = v.currentSrc || v.src || '';
+    const src = v.currentSrc || v.src || v.querySelector('source')?.src || '';
+    // 저장 버튼 항상 표시: 재생 전이라도 영상 주소나 미리보기 그림이 있으면 버튼을 띄운다
+    if (settings.alwaysShowButtons !== false && (/^https?:/.test(src) || v.getAttribute('poster'))) return true;
     return /^https?:/.test(src) || sniffCount > 0;
   }
 
-  // 사진 버튼은 마우스가 사진 위에 있을 때만 보인다.
+  // 사진 버튼은 '저장 버튼 항상 표시'를 끄면 마우스가 사진 위에 있을 때만 보인다.
   let pointer = { x: -1, y: -1 };
   document.addEventListener('pointermove', (e) => (pointer = { x: e.clientX, y: e.clientY }), { capture: true, passive: true });
   const pointerIn = (r) => pointer.x >= r.left && pointer.x <= r.right && pointer.y >= r.top && pointer.y <= r.bottom;
 
   // 버튼 위치: 직접 배치한 위치(사이트별) > 설정한 위치(기본: 오른쪽 가운데). 사진은 오른쪽 아래.
+  // 화면에 실제로 보이는 사각형: overflow 로 잘라내는 조상(카드 등)과 겹치는 부분. 조상 찾기는 0.6초마다만.
+  function clipRect(v, entry, now) {
+    const r = v.getBoundingClientRect();
+    if (!entry.clipAt || now - entry.clipAt > 600) {
+      entry.clipAt = now;
+      entry.clippers = [];
+      for (let p = v.parentElement, i = 0; p && p !== document.body && p !== document.documentElement && i < 10; p = p.parentElement, i++) {
+        const cs = getComputedStyle(p);
+        if (/(hidden|clip|auto|scroll)/.test(cs.overflow + cs.overflowX + cs.overflowY)) entry.clippers.push(p);
+      }
+    }
+    let left = r.left;
+    let top = r.top;
+    let right = r.right;
+    let bottom = r.bottom;
+    for (const p of entry.clippers) {
+      const c = p.getBoundingClientRect();
+      if (c.width < 40 || c.height < 40) continue;
+      left = Math.max(left, c.left);
+      top = Math.max(top, c.top);
+      right = Math.min(right, c.right);
+      bottom = Math.min(bottom, c.bottom);
+    }
+    if (right - left < 40 || bottom - top < 40) return r;
+    return { left, top, right, bottom, width: right - left, height: bottom - top, x: left, y: top };
+  }
+
   function buttonSpot(entry, r, bw, bh) {
     const clamp = (x, y) => ({
       x: Math.max(r.left + 4, Math.min(x, r.right - bw - 4)),
@@ -1258,7 +1356,8 @@
       const v = entry.el;
       const b = entry.btn;
       mountAnchor(entry);
-      const r = v.getBoundingClientRect();
+      // 사진·영상이 카드보다 커서 일부가 잘려 보이는 경우(틱톡 사진 목록 등): 실제로 보이는 영역 안에 버튼을 둔다
+      const r = clipRect(v, entry, now);
       const isImg = entry.kind === 'image';
       let show = on && (isImg ? r.width >= 120 && r.height >= 100 : r.width >= 140 && r.height >= 100 && hasSource(v));
       if (show && now - (entry.styleCheck || 0) > 600) {
@@ -1269,7 +1368,8 @@
       }
       if (entry.hiddenStyle) show = false;
       const busy = entry.state !== 'idle';
-      const visible = show && (busy || editMode || !isImg || pointerIn(r) || pointerIn(b.getBoundingClientRect()));
+      // 사진 버튼: '저장 버튼 항상 표시'를 켜면 마우스를 올리지 않아도 보인다(끄면 마우스를 올렸을 때만)
+      const visible = show && (busy || editMode || !isImg || settings.alwaysShowButtons !== false || pointerIn(r) || pointerIn(b.getBoundingClientRect()));
       b.classList.toggle('edit', editMode);
       if (!visible) {
         if (entry.visible) {

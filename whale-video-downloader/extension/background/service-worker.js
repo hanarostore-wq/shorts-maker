@@ -1,6 +1,6 @@
 // 서비스워커: 다운로드 요청 접수 → 원본 주소 확정 → 저장(브라우저 다운로드 또는 오프스크린 엔진) → 진행 상황 알림
-import { getSettings, DEFAULT_SETTINGS } from '../shared/settings.js';
-import { buildFilename, sanitizeFolder, countryFolder } from '../shared/filename.js';
+import { getSettings, DEFAULT_SETTINGS, effectiveSettings } from '../shared/settings.js';
+import { buildFilename, sanitizeFolder, countryFolder, strictName } from '../shared/filename.js';
 import { buildFromInfo } from './builders.js';
 import { resolveBg } from './resolvers.js';
 
@@ -400,7 +400,10 @@ function siteFolderOf(job) {
 
 function saveFolder(job, settings) {
   const parts = [sanitizeFolder(settings.subfolder)];
-  if (settings.siteFolders !== false) parts.push(sanitizeFolder(siteFolderOf(job)));
+  // 사이트 폴더: '사이트별 폴더' 전체 켜기 > 지원 사이트 탭에서 사이트마다 넣은 폴더 이름(같은 이름이면 한 폴더로 합쳐짐) > 없으면 다운로드 폴더 그대로
+  const own = (settings.siteFolderMap || {})[job.site];
+  if (settings.siteFolders === true) parts.push(sanitizeFolder(siteFolderOf(job)));
+  else if (own) parts.push(sanitizeFolder(own));
   if (settings.sortFolders !== false) parts.push(job.request?.kind === 'image' ? FOLDERS.image : (job.duration || 0) > 90 ? FOLDERS.long : FOLDERS.short);
   // 그 안에 나라별 하위 폴더 (한국 / 미국 / 중국 … / 기타). 파일 이름 앞 [국가] 표시와 같은 판단을 쓴다.
   if (settings.countryFolders !== false) parts.push(job.country || '기타');
@@ -420,21 +423,29 @@ async function startBrowserDownload(job, url, settings, phase) {
         action: '팝업 → 저장 위치의 하위 폴더 이름을 확인하고 다시 시도하세요.',
       };
     }
-    // 일부 시스템(UTF-8 이 아닌 로케일)은 한글 파일 이름을 거부한다 → 영문 이름으로 다시 시도
+    // 브라우저가 파일 이름을 거부함(이모지·보이지 않는 글자·너무 긴 이름 등).
+    //   폴더는 한글 그대로 두고 ① 이모지·기호를 뺀 짧은 한글 이름 → ② 영문 이름 순으로 다시 시도한다(영문 폴더는 만들지 않음).
+    const folder = saveFolder(job, settings);
     const ext = job.filename.split('.').pop();
+    const strict = strictName(job.filename);
     const base = asciiOnly(job.filename.replace(/\.[^.]+$/, '')).replace(/^[\s\-_[\]]+|[\s\-_[\]]+$/g, '');
-    const name = `${base || `${job.site}_${asciiOnly(job.request?.id) || Date.now()}`}.${ext}`;
-    try {
-      const ascii = { image: 'photos', short: 'videos-under-90s', long: 'videos-over-90s' };
-      const folder = saveFolder(job, settings).replace(FOLDERS.image, ascii.image).replace(FOLDERS.short, ascii.short).replace(FOLDERS.long, ascii.long);
-      id = await chrome.downloads.download(opts(name, asciiOnly(folder).replace(/^\/+|\/+$/g, '')));
-      job.filename = name;
-      job.warning = '이 시스템이 한글 파일·폴더 이름을 지원하지 않아 영문 이름으로 저장했습니다.';
-    } catch (err2) {
+    const ascii = `${base || `${job.site}_${asciiOnly(job.request?.id) || Date.now()}`}.${ext}`;
+    let lastErr = err;
+    for (const [name, note] of [[strict, '파일 이름에 브라우저가 허용하지 않는 글자(이모지·특수 기호 등)가 있어 그 글자를 빼고 저장했습니다.'], [ascii, '브라우저가 한글 파일 이름을 거부해 파일 이름만 영문으로 저장했습니다(폴더는 그대로).']]) {
+      if (id != null || name === job.filename) continue;
+      try {
+        id = await chrome.downloads.download(opts(name, folder));
+        job.filename = name;
+        job.warning = note;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    if (id == null) {
       throw {
         step: '다운로드 시작',
-        reason: `브라우저가 파일 이름을 거부했습니다 (${err2?.message || err2}).`,
-        action: '팝업 → 저장 설정에서 하위 폴더 이름을 영문으로 바꾸고 다시 시도하세요.',
+        reason: `브라우저가 파일 이름을 거부했습니다 (${lastErr?.message || lastErr}).`,
+        action: '팝업 → 저장 설정에서 하위 폴더 이름·파일 이름 형식을 확인하고 다시 시도하세요.',
       };
     }
   }
@@ -521,8 +532,8 @@ async function attempt(job, d, settings) {
 }
 
 async function runJob(job) {
-  const settings = await getSettings();
   const req = job.request;
+  const settings = effectiveSettings(await getSettings(), req.site);
   let desc;
   try {
     if (req.info?.image) desc = buildImage(req.info.image, req.pageUrl);
@@ -568,7 +579,7 @@ async function runJob(job) {
   const capText = String(req.captionText ?? '').trim() || (desc.title && desc.title !== req.title ? String(desc.title).trim() : '') || (req.captionText === undefined ? String(req.title || '').trim() : '');
   const isImage = desc.type === 'image';
   const cap = {
-    overlay: settings.captionOnMedia !== false && (!!capText || !!(req.authorHandle || req.authorName)),
+    overlay: settings.captionOnMedia !== false && (!!capText || (settings.captionAuthor !== false && !!(req.authorHandle || req.authorName))),
     // ②·③ 은 영상에만 (사진은 ① 만)
     cover: !isImage && !!settings.captionCover,
     intro: !isImage && !!settings.captionIntro,
@@ -583,8 +594,8 @@ async function runJob(job) {
       shotError: req.shotError || '',
       site: req.siteName || req.site || '',
       author: req.author || desc.author || '',
-      authorName: req.authorName || '',
-      authorHandle: req.authorHandle || '',
+      authorName: settings.captionAuthor === false ? '' : req.authorName || '',
+      authorHandle: settings.captionAuthor === false ? '' : req.authorHandle || '',
       pageUrl: req.pageUrl || '',
     };
     for (const d of [desc, ...(desc.fallbacks || [])]) d.caption = caption;
@@ -722,6 +733,37 @@ function cancelJob(id) {
   return true;
 }
 
+// ───────────────────────────── 팟플레이어로 재생 ─────────────────────────────
+// 다운로드와 같은 방법으로 원본 주소를 찾은 뒤 smdplay: 주소로 열면, PC 에 등록된 연결(업데이트 bat 이 등록)이 팟플레이어를 실행한다.
+//   유튜브는 영상·음성이 나뉘어 있어 영상 페이지 주소를 넘긴다(팟플레이어가 유튜브 주소를 직접 재생).
+export function playableUrl(req, desc) {
+  if (req.site === 'youtube' && req.id) return `https://www.youtube.com/watch?v=${req.id}`;
+  if ((desc?.type === 'file' || desc?.type === 'hls') && /^https?:\/\//.test(desc.url || '')) return desc.url;
+  return '';
+}
+async function playExternal(req, sender) {
+  const settings = effectiveSettings(await getSettings(), req.site);
+  let desc = null;
+  try {
+    if (req.site !== 'youtube') {
+      if (req.info) desc = buildFromInfo(req.site, req.info, settings.quality, req.pageUrl);
+      else if (req.bg) desc = await resolveBg(req, { prefer: settings.quality, pageUrl: req.pageUrl, withHeaders, sniffed: () => (sniffs.get(sender.tab?.id) || []).slice().sort((a, b) => b.t - a.t) });
+    }
+  } catch (err) {
+    return { error: toErr(err, '원본 주소 확인') };
+  }
+  const url = playableUrl(req, desc);
+  if (!url) return { error: { step: '재생 주소 확인', reason: '이 영상은 팟플레이어에 넘길 수 있는 하나짜리 주소를 찾지 못했습니다(영상·음성이 나뉜 형식 등).', action: '다운로드 버튼으로 받아서 재생하세요.' } };
+  const target = `smdplay:${encodeURIComponent(url)}`;
+  chrome.storage.session.set({ lastExternalPlay: { url, at: Date.now() } }).catch(() => {});
+  try {
+    await chrome.tabs.update(sender.tab.id, { url: target });
+  } catch (err) {
+    return { error: { step: '팟플레이어 실행', reason: `웨일이 팟플레이어 연결을 열지 못했습니다 (${err?.message || err}).`, action: '업데이트 bat 을 한 번 더 실행해 팟플레이어 연결을 등록한 뒤, 웨일이 "외부 프로그램 열기"를 물으면 허용하세요.' } };
+  }
+  return { ok: true, url };
+}
+
 // ───────────────────────────── 메시지 라우터 ─────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || msg.target === 'offscreen') return;
@@ -742,6 +784,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           const job = createJob(req, sender);
           sendResponse({ jobId: job.id });
         });
+      return true;
+    }
+    case 'smd:play-external': {
+      playExternal(msg.request || {}, sender).then(sendResponse, (err) => sendResponse({ error: toErr(err, '팟플레이어 재생') }));
       return true;
     }
     case 'smd:videos': {
@@ -807,7 +853,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-getSettings().then((s) => chrome.storage.local.set({ settings: s })).catch(() => {});
+// 백업 복원이 끝난 뒤에 기본값·마이그레이션을 저장한다(둘이 동시에 쓰면 마이그레이션 표시가 지워질 수 있음)
+restoreSettings().catch(() => {}).finally(() => getSettings().then((s) => chrome.storage.local.set({ settings: s })).catch(() => {}));
 
 // 광고 차단 기능은 삭제했다(사용자 요청). 예전 버전이 남긴 광고 차단 규칙(9000~9099)은 지운다.
 chrome.declarativeNetRequest.getDynamicRules().then((rules) => {
@@ -832,7 +879,6 @@ async function restoreSettings() {
 chrome.storage.onChanged.addListener((c, area) => {
   if (area === 'local' && c.settings?.newValue) chrome.storage.sync.set({ settingsBackup: c.settings.newValue }).catch((err) => console.warn('[영상 다운로더] 설정 백업 실패(동기화 저장소)', err?.message || err));
 });
-restoreSettings().catch(() => {});
 
 chrome.runtime.onInstalled.addListener(async (details) => {
   await restoreSettings().catch(() => {});

@@ -17,6 +17,8 @@
   ];
   const site = SITE_OF.find(([, re]) => re.test(H))?.[0] || '';
   if (!site) return;
+  const sid = site === 'bsky' ? 'bluesky' : site;
+  const effOf = (s, site) => ({ ...(s || {}), ...(((s || {}).siteSettings || {})[site] || {}) }); // 사이트별로 바꾼 값이 우선
 
   // 확장프로그램을 업데이트(다시 시작)하면 이미 열려 있던 페이지의 이 스크립트는 확장과 연결이 끊긴다
   const alive = () => {
@@ -35,12 +37,12 @@
 
   let on = true;
   chrome.storage.local.get('settings').then((r) => {
-    on = r.settings?.followAllButton !== false;
+    on = effOf(r.settings, sid).followAllButton !== false;
     tick();
   }, () => {});
   chrome.storage.onChanged.addListener((c, area) => {
     if (area === 'local' && c.settings) {
-      on = c.settings.newValue?.followAllButton !== false;
+      on = effOf(c.settings.newValue, sid).followAllButton !== false;
       tick();
     }
   });

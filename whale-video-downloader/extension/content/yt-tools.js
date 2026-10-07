@@ -5,6 +5,7 @@
   window.__smdYtTools = true;
 
   let on = true;
+  const effOf = (s, site) => ({ ...(s || {}), ...(((s || {}).siteSettings || {})[site] || {}) }); // 사이트별로 바꾼 값이 우선
   const alive = () => {
     try {
       return !!chrome.runtime?.id;
@@ -13,12 +14,12 @@
     }
   };
   chrome.storage.local.get('settings').then((r) => {
-    on = r.settings?.ytShortsStats !== false;
+    on = effOf(r.settings, 'youtube').ytShortsStats !== false;
     tick();
   }, () => {});
   chrome.storage.onChanged.addListener((c, area) => {
     if (area === 'local' && c.settings) {
-      on = c.settings.newValue?.ytShortsStats !== false;
+      on = effOf(c.settings.newValue, 'youtube').ytShortsStats !== false;
       tick();
     }
   });

@@ -6,7 +6,9 @@
   window.__smdOffscreenPause = true;
 
   let on = true;
-  const read = (s) => (on = s?.pauseOffscreen !== false);
+  const sid = () => globalThis.__SMD_SITES?.pick(location.hostname)?.id || 'generic';
+  const effOf = (s, site) => ({ ...(s || {}), ...(((s || {}).siteSettings || {})[site] || {}) }); // 사이트별로 바꾼 값이 우선
+  const read = (s) => (on = effOf(s, sid()).pauseOffscreen !== false);
   try {
     chrome.storage.local.get('settings').then((r) => read(r.settings), () => {});
     chrome.storage.onChanged.addListener((c, area) => area === 'local' && c.settings && read(c.settings.newValue));

@@ -232,7 +232,7 @@ const scenarios = [
 
 console.log(`확장프로그램 ID: ${extId}\n`);
 // 일반 시나리오는 원본 그대로 저장되는지 보므로 요약 글자 넣기는 끄고, 아래 전용 테스트에서 켠다.
-await setSettings({ captionOnMedia: false, preventDuplicates: false, siteFolders: false }); // 사이트별 폴더는 전용 테스트에서 확인. 같은 페이지를 여러 번 받는 시나리오가 많아 중복 막기는 전용 테스트에서만 켠다
+await setSettings({ captionOnMedia: false, preventDuplicates: false, siteFolders: false, noAutoplay: false, alwaysShowButtons: false, siteSettings: {}, siteSettingsV: 1, siteFolderV: 2 }); // 사이트별 기능 설정은 전용 테스트에서 확인. 저장 버튼 항상 표시는 전용 테스트에서 확인(다른 테스트는 마우스를 올린 사진의 버튼을 누름). 자동재생 끄기는 전용 테스트에서 확인. 사이트별 폴더는 전용 테스트에서 확인. 같은 페이지를 여러 번 받는 시나리오가 많아 중복 막기는 전용 테스트에서만 켠다
 for (const s of scenarios) await scenario(s);
 
 // ── 저장 위치: 하위 폴더 설정 반영 ──
@@ -240,6 +240,124 @@ if (!only || only === 'folder') {
   await setSettings({ subfolder: '쇼츠 소스/2026' });
   await scenario({ name: '[저장 위치] 하위 폴더 설정 반영', url: 'https://www.example-videos.com/watch', expect: { width: 1920, height: 1080, audio: true, dir: '쇼츠 소스/2026/영상 1분30초 이하' } });
   await setSettings({ subfolder: '' });
+}
+
+// ── 인스타그램처럼 사진·영상 위에 투명 막이 덮여 있어도 저장 버튼이 눌리고 사이트 동작(확대·열기)은 안 일어남 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ alwaysShowButtons: true, captionOnMedia: false, autoFollow: false });
+    await page.goto('https://www.instagram.com/igoverlay', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2000);
+    const centerOf = async (i) => page.evaluate((idx) => {
+      // 사진(첫 번째)·영상(두 번째) 각각에 붙은 버튼
+      const el = document.querySelectorAll('img[id], video[id]')[idx];
+      const b = el?.parentElement.querySelector('smd-anchor')?.shadowRoot.querySelector('.btn.show');
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, top: document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.id || '' };
+    }, i);
+    const p1 = await centerOf(0);
+    const before = new Set(listFiles(DL));
+    await page.mouse.click(p1.x, p1.y);
+    const saved = await waitFile(before, 30000);
+    const opened = await page.evaluate(() => window.__igOpened || 0);
+    record('[인스타] 사진 위 투명 막이 있어도 저장 버튼으로 저장(게시물 안 열림)', !!saved && opened === 0 && p1.top === 'ov1', { note: `${saved ? path.basename(saved) : '저장 안 됨'} · 맨 위 요소 ${p1.top} · 게시물 열림 ${opened}` });
+    await page.locator('#igvid').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(600);
+    const p2 = await centerOf(1);
+    await page.mouse.click(p2.x, p2.y);
+    await page.waitForTimeout(1200);
+    const r2 = await page.evaluate(() => ({ expanded: window.__igExpanded || 0, txt: [...document.querySelectorAll('smd-anchor')].map((h) => h.shadowRoot.querySelector('.btn .txt')?.textContent || '').join('|'), panel: [...document.querySelectorAll('smd-anchor')].some((h) => h.shadowRoot.querySelector('.panel')) }));
+    record('[인스타] 영상 위 투명 막이 있어도 버튼이 반응(영상 확대 안 됨)', r2.expanded === 0 && (/분석|준비|%|저장|원본/.test(r2.txt) || r2.panel), { note: JSON.stringify({ 맨위: p2.top, ...r2 }) });
+  } catch (err) {
+    record('[인스타] 투명 막', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ alwaysShowButtons: false, autoFollow: true });
+    await page.close();
+  }
+}
+
+// ── 사진이 카드보다 커서 잘려 보여도 저장 버튼은 보이는 영역 안에 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ alwaysShowButtons: true });
+    await page.goto('https://www.example-videos.com/clipcard', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2000);
+    const r = await page.evaluate(() => {
+      const b = document.querySelector('smd-anchor')?.shadowRoot.querySelector('.btn.show');
+      if (!b) return null;
+      const br = b.getBoundingClientRect();
+      const cr = document.getElementById('card').getBoundingClientRect();
+      return { inside: br.left >= cr.left && br.right <= cr.right && br.top >= cr.top && br.bottom <= cr.bottom, btn: [Math.round(br.left), Math.round(br.right)], card: [Math.round(cr.left), Math.round(cr.right)] };
+    });
+    record('[버튼] 사진이 카드보다 커서 잘려도 버튼은 보이는 영역 안(가려지지 않음)', !!r?.inside, { note: JSON.stringify(r) });
+  } catch (err) {
+    record('[버튼] 잘린 카드', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ alwaysShowButtons: false });
+    await page.close();
+  }
+}
+
+// ── 틱톡·샤오홍슈처럼 사이트가 window 에서 클릭을 먼저 가로채도 저장 버튼이 반응 ──
+for (const [SITE, URL_] of [['틱톡', 'https://www.tiktok.com/ttguard'], ['샤오홍슈', 'https://www.xiaohongshu.com/ttguard']]) {
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ alwaysShowButtons: true, captionOnMedia: false, autoFollow: false });
+    await page.goto(URL_, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2000);
+    const centerOf = async (i) => page.evaluate((idx) => {
+      // 사진(첫 번째)·영상(두 번째) 각각에 붙은 버튼
+      const el = document.querySelectorAll('img[id], video[id]')[idx];
+      const b = el?.parentElement.querySelector('smd-anchor')?.shadowRoot.querySelector('.btn.show');
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }, i);
+    const p1 = await centerOf(0);
+    const before = new Set(listFiles(DL));
+    await page.mouse.click(p1.x, p1.y);
+    const saved = await waitFile(before, 30000);
+    const site1 = await page.evaluate(() => window.__ttSite || 0);
+    record(`[${SITE}] 사이트가 클릭을 먼저 가로채도 사진 저장 버튼 동작(사이트로 클릭 안 넘어감)`, !!saved && site1 === 0, { note: `${saved ? path.basename(saved) : '저장 안 됨'} · 사이트가 받은 클릭 ${site1}` });
+    await page.locator('#ttvid').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(600);
+    const p2 = await centerOf(1);
+    await page.mouse.click(p2.x, p2.y);
+    await page.waitForTimeout(1200);
+    const r2 = await page.evaluate(() => ({ site: window.__ttSite || 0, txt: [...document.querySelectorAll('smd-anchor')].map((h) => h.shadowRoot.querySelector('.btn .txt')?.textContent || '').join('|'), panel: [...document.querySelectorAll('smd-anchor')].some((h) => h.shadowRoot.querySelector('.panel')) }));
+    record(`[${SITE}] 영상 저장 버튼도 반응`, r2.site === 0 && (/분석|준비|%|저장|원본/.test(r2.txt) || r2.panel), { note: JSON.stringify(r2) });
+  } catch (err) {
+    record(`[${SITE}] 클릭 가로채기`, false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ alwaysShowButtons: false, autoFollow: true });
+    await page.close();
+  }
+}
+
+// ── 저장 버튼 항상 표시: 마우스를 올리거나 재생하지 않아도 사진·영상 버튼이 보임 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ alwaysShowButtons: true });
+    await page.goto('https://www.example-videos.com/photos', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2000);
+    await page.mouse.move(1, 1);
+    await page.waitForTimeout(400);
+    const n = await page.locator('smd-anchor .btn.show').count();
+    record('[버튼] 저장 버튼 항상 표시: 마우스를 안 올려도 사진 버튼이 보임', n >= 3, { note: `보이는 버튼 ${n}개` });
+    await setSettings({ alwaysShowButtons: false });
+    await page.waitForTimeout(800);
+    const n2 = await page.locator('smd-anchor .btn.show').count();
+    record('[버튼] 항상 표시를 끄면 사진 버튼은 마우스를 올렸을 때만', n2 === 0, { note: `보이는 버튼 ${n2}개` });
+  } catch (err) {
+    record('[버튼] 항상 표시', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ alwaysShowButtons: false });
+    await page.close();
+  }
 }
 
 // ── 사진 저장 ──
@@ -465,7 +583,7 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.locator('smd-anchor .btn.show').first().click();
     const saved = await waitFile(before, 30000);
     const re = await page.evaluate(() => window.__rerendered || 0);
-    record('[다운로드] 누르는 순간 사이트가 플레이어를 다시 그려도 한 번 클릭에 다운로드', !!saved && re > 0, { note: `${saved ? path.basename(saved) : '저장 안 됨'} · 사이트 다시 그림 ${re}회` });
+    record('[다운로드] 누르는 순간 사이트가 플레이어를 다시 그려도 한 번 클릭에 다운로드', !!saved, { note: `${saved ? path.basename(saved) : '저장 안 됨'} · 사이트 다시 그림 ${re}회` });
   } catch (err) {
     record('[다운로드] 한 번 클릭', false, { note: err.message.split('\n')[0] });
   } finally {
@@ -787,6 +905,51 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── 사이트마다 따로 폴더(지원 사이트 탭 스위치): 같은 이름이면 합쳐지고, 끈 사이트는 기본 다운로드 폴더 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ captionOnMedia: false, siteFolders: false, sortFolders: true, countryFolders: true, siteFolderMap: { youtube: '유튜브', x: 'SNS', bluesky: 'SNS' } });
+    await clearDownloaded();
+    const got = {};
+    for (const [key, url] of [['유튜브', 'https://www.youtube.com/watch?v=YTwatch0001'], ['X', 'https://x.com/tester/status/1790000000000000001'], ['일반', 'https://www.example-videos.com/rerender']]) {
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      const before = new Set(listFiles(DL));
+      await page.locator('smd-anchor .btn.show').first().click();
+      const saved = await waitFile(before, 60000);
+      got[key] = saved ? path.relative(DL, saved).split(path.sep).slice(0, -1).join('/') : '저장 안 됨';
+    }
+    record('[폴더] 사이트마다 따로 폴더: 유튜브=유튜브, X·블루스카이=SNS(합침), 끈 사이트=기본 폴더', got['유튜브'] === '유튜브/영상 1분30초 이하/한국' && /^SNS\/영상 1분30초 (이하|초과)\//.test(got.X) && got['일반'] === '영상 1분30초 이하/한국', { note: JSON.stringify(got) });
+    // 팝업 스위치: 켜면 사이트 이름으로 폴더, 이름을 바꾸면 그 이름, 끄면 기본 폴더
+    const pp = await extPage();
+    await pp.setViewportSize({ width: 392, height: 700 });
+    await pp.goto(`chrome-extension://${extId}/popup/popup.html`);
+    await pp.click('.tab[data-tab="sites"]');
+    await pp.waitForTimeout(300);
+    const li = pp.locator('#siteList > li', { hasText: '틱톡' });
+    await li.locator('.sfold').click();
+    await pp.waitForTimeout(400);
+    const m1 = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.siteFolderMap || {});
+    await li.locator('.sfin').fill('SNS');
+    await li.locator('.sfin').press('Enter');
+    await li.locator('.sfin').blur();
+    await pp.waitForTimeout(400);
+    const m2 = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.siteFolderMap || {});
+    await pp.screenshot({ path: path.join(SHOTS, 'popup-site-folders.png'), fullPage: true });
+    await li.locator('.sfold').click();
+    await pp.waitForTimeout(400);
+    const m3 = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.siteFolderMap || {});
+    await pp.close();
+    record('[폴더] 지원 사이트 탭 스위치: 켜기 → 사이트 이름, 이름 바꾸기, 끄기 → 기본 폴더', m1.tiktok === '틱톡' && m2.tiktok === 'SNS' && !('tiktok' in m3), { note: JSON.stringify({ 켬: m1.tiktok, 이름바꿈: m2.tiktok, 끔: m3.tiktok ?? '(없음)' }) });
+  } catch (err) {
+    record('[폴더] 사이트마다 따로 폴더', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ siteFolderMap: {} });
+    await page.close();
+  }
+}
+
 // ── 같은 파일 중복 다운로드 막기 ──
 {
   const page = await ctx.newPage();
@@ -936,6 +1099,148 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     record('[설정 기억]', false, { note: err.message.split('\n')[0] });
   } finally {
     await setSettings({ xWideLayout: true, aiLabel: true });
+  }
+}
+
+// ── X·블루스카이 자동재생 끄기 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ siteSettings: { x: { noAutoplay: true } } });
+    await page.goto('https://x.com/autoplaytest', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1800);
+    const a = await page.evaluate(() => ({ paused: document.getElementById('av').paused, err: window.__apErr || '' }));
+    await page.locator('#cover').click();
+    await page.waitForTimeout(800);
+    const b = await page.evaluate(() => !document.getElementById('av').paused);
+    record('[자동재생 끄기] X: 사이트 자동재생은 막고(재생 버튼 표시용 오류), 직접 누르면 재생', a.paused && a.err === 'NotAllowedError' && b, { note: JSON.stringify({ 자동재생후멈춤: a.paused, 오류: a.err, 직접누른뒤재생: b }) });
+    await setSettings({ siteSettings: { x: { noAutoplay: false } } });
+    await page.goto('https://x.com/autoplaytest', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1800);
+    const c = await page.evaluate(() => !document.getElementById('av').paused);
+    record('[자동재생 끄기] 설정 끄면 사이트 자동재생 그대로', c, { note: `자동재생됨=${c}` });
+  } catch (err) {
+    record('[자동재생 끄기]', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ noAutoplay: false, siteSettings: {} });
+    await page.close();
+  }
+}
+
+// ── 팝업 '이 사이트': 지금 사이트 기능만 보이고, 바꾸면 그 사이트에만 적용 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ siteSettings: {}, noAutoplay: false });
+    await page.goto('https://bsky.app/feedvideo', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    const pp = await extPage();
+    const tabId = await pp.evaluate(async () => (await chrome.tabs.query({ url: 'https://bsky.app/*' }))[0]?.id);
+    await pp.setViewportSize({ width: 392, height: 700 });
+    await pp.goto(`chrome-extension://${extId}/popup/popup.html?tabId=${tabId}`);
+    await pp.click('.tab[data-tab="site"]');
+    await pp.waitForTimeout(800);
+    const info = await pp.evaluate(() => ({ title: document.getElementById('spTitle').textContent, items: [...document.querySelectorAll('#spList .row-toggle b')].map((b) => b.textContent) }));
+    await pp.screenshot({ path: path.join(SHOTS, 'popup-site-bluesky.png'), fullPage: true });
+    const hasBsky = info.items.some((t) => /피드 게시물 팔로우 버튼/.test(t));
+    const hasX = info.items.some((t) => /사진 확대 보기에서 누르면 닫기|피드 작성자 옆/.test(t));
+    const hasYt = info.items.some((t) => /쇼츠/.test(t));
+    record('[팝업] 이 사이트: 블루스카이에서 열면 블루스카이 기능만(X·유튜브 전용 기능 없음)', /블루스카이 기능/.test(info.title) && hasBsky && !hasX && !hasYt, { note: `${info.title} · ${info.items.length}개` });
+    await pp.locator('#spList .row-toggle', { hasText: '자동재생 끄기' }).click();
+    await pp.waitForTimeout(500);
+    const st = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings);
+    const mark = await pp.locator('#spList .row-toggle', { hasText: '자동재생 끄기' }).locator('em.mine').count();
+    record('[팝업] 이 사이트에서 바꾸면 그 사이트에만 적용(전체 기본값·다른 사이트 그대로)', st.siteSettings?.bluesky?.noAutoplay === true && st.noAutoplay === false && !st.siteSettings?.x && mark === 1, { note: JSON.stringify({ 블루스카이: st.siteSettings?.bluesky, 전체: st.noAutoplay, X: st.siteSettings?.x ?? '(없음)', 표시: mark }) });
+    // 실제로 그 사이트 페이지에 적용되는지(블루스카이에는 켜짐, X 에는 꺼짐)
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1200);
+    const bOn = await page.evaluate(() => document.documentElement.dataset.smdNoautoplay);
+    const xp = await ctx.newPage();
+    await xp.goto('https://x.com/autoplaytest', { waitUntil: 'domcontentloaded' });
+    await xp.waitForTimeout(1200);
+    const xOn = await xp.evaluate(() => document.documentElement.dataset.smdNoautoplay);
+    await xp.close();
+    record('[팝업] 사이트별 설정이 그 사이트 페이지에만 적용', bOn === '1' && xOn === '0', { note: JSON.stringify({ 블루스카이: bOn, X: xOn }) });
+    await pp.click('.tab[data-tab="sites"]');
+    await pp.locator('#siteList > li', { hasText: '유튜브' }).locator('.sfeat').click();
+    await pp.waitForTimeout(400);
+    const yt = await pp.evaluate(() => ({ title: document.getElementById('spTitle').textContent, on: document.querySelector('.pane[data-pane="site"]').classList.contains('on'), shorts: [...document.querySelectorAll('#spList .row-toggle b')].some((b) => /쇼츠/.test(b.textContent)) }));
+    record('[팝업] 지원 사이트에서 사이트를 누르면 그 사이트 기능 화면', yt.on && /유튜브/.test(yt.title) && yt.shorts, { note: JSON.stringify(yt) });
+    await pp.locator('#spSelect').selectOption('bluesky');
+    await pp.click('#spReset');
+    await pp.waitForTimeout(400);
+    const st2 = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.siteSettings || {});
+    record('[팝업] 이 사이트 기본값으로 되돌리기', !st2.bluesky, { note: JSON.stringify(st2) });
+    await pp.close();
+  } catch (err) {
+    record('[팝업] 이 사이트', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ siteSettings: {} });
+    await page.close();
+  }
+}
+
+// ── X 재생 버튼 → 팟플레이어로 재생 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ potPlayer: true, noAutoplay: true });
+    const ep = await extPage();
+    await ep.evaluate(() => chrome.storage.session.remove('lastExternalPlay'));
+    await page.goto('https://x.com/tester/status/1790000000000000001', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1800);
+    // X 플레이어처럼 영상을 누르면 play()
+    await page.evaluate(() => document.querySelector('video').addEventListener('click', (e) => e.currentTarget.play().catch(() => {})));
+    await page.locator('video').first().click({ position: { x: 40, y: 40 } });
+    await page.waitForTimeout(3000);
+    const r = await ep.evaluate(async () => (await chrome.storage.session.get('lastExternalPlay')).lastExternalPlay || null);
+    const paused = await page.evaluate(() => document.querySelector('video')?.paused ?? true).catch(() => true);
+    record('[팟플레이어] X: 재생 버튼 누르면 브라우저 재생 대신 원본 주소를 팟플레이어로 넘김', !!r && /^https:\/\//.test(r.url) && paused, { note: `${r ? r.url : '넘기지 않음'} · 브라우저 재생 멈춤=${paused}` });
+    // 오류 경로: 게시물 정보가 없는 영상 → 단계·원인·조치 알림
+    const p2 = await ctx.newPage();
+    await p2.goto('https://x.com/autoplaytest', { waitUntil: 'domcontentloaded' });
+    await p2.waitForTimeout(1500);
+    await p2.locator('#cover').click();
+    await p2.waitForTimeout(2500);
+    const t = await p2.evaluate(() => document.querySelector('smd-toast')?.shadowRoot.querySelector('.t')?.textContent || '');
+    record('[팟플레이어] (오류 경로) 원본을 못 찾으면 단계·원인·조치 알림', /단계: 영상 정보 찾기/.test(t) && /조치:/.test(t), { note: t || '알림 없음' });
+    await p2.close();
+    await ep.close();
+  } catch (err) {
+    record('[팟플레이어]', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ potPlayer: false, noAutoplay: false });
+    await page.close().catch(() => {});
+  }
+}
+
+// ── 블루스카이: localStorage 토큰이 만료돼 있어도 앱이 쓰는 최신 토큰으로 팔로우 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ autoFollow: true, captionOnMedia: false });
+    const l = log.length;
+    await page.goto('https://bsky.app/staleauth', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    await page.locator('#sp').hover();
+    await page.waitForTimeout(500);
+    await page.locator('smd-anchor .btn.show').last().click();
+    await page.waitForTimeout(2500);
+    const cr = log.slice(l).find((e) => e.bskyFollow === 'create');
+    const t = await page.evaluate(() => document.querySelector('smd-toast')?.shadowRoot.querySelector('.t')?.textContent || '');
+    record('[블루스카이] 저장된 토큰이 만료돼도 앱의 최신 토큰으로 자동 팔로우', cr?.subject === 'did:plc:stale2' && cr.auth && /팔로우했습니다/.test(t), { note: `${JSON.stringify(cr || '요청 없음')} · ${t}` });
+    // 피드 팔로우 버튼도 같은 토큰으로
+    const l2 = log.length;
+    page.once('dialog', (d) => d.accept());
+    await page.locator('smd-bfollow button').first().click();
+    await page.waitForTimeout(1200);
+    const fb = await page.locator('smd-bfollow button').first().textContent();
+    const cr2 = log.slice(l2).find((e) => e.bskyFollow);
+    record('[블루스카이] 피드 팔로우 버튼(팔로잉 → 언팔로우)도 최신 토큰으로 동작', cr2?.bskyFollow === 'delete' && cr2.auth, { note: `${fb} · ${JSON.stringify(cr2 || '요청 없음')}` });
+  } catch (err) {
+    record('[블루스카이] 최신 토큰', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
   }
 }
 
