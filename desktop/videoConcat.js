@@ -97,6 +97,12 @@ function outputPathFor(firstFile, mode) {
   return path.join(directory, `이어붙임_${stamp}${extension}`);
 }
 
+function losslessOutputPath(requestedOutput, firstFile) {
+  if (!requestedOutput) return outputPathFor(firstFile, "lossless-normalized");
+  const parsed = path.parse(path.resolve(requestedOutput));
+  return path.join(parsed.dir, `${parsed.name}.mkv`);
+}
+
 async function inspectSources(inputPaths, binaries = resolveBinaries()) {
   if (!Array.isArray(inputPaths) || inputPaths.length < 2) throw new Error("이어붙일 원본 영상을 2개 이상 선택하세요.");
   const sources = [];
@@ -172,22 +178,37 @@ async function losslessNormalizeConcat(sources, outputPath, binaries, onProgress
 }
 
 /**
- * 같 은 규격은 원본 비트스트림 복사, 다른 규격은 원본 픽셀·음성을 무손실 H.264/FLAC MKV로 보존한다.
- * 두 경우 모두 앞·뒤 1초만 제거하며, 스트림 복사 모드의 컷은 키프레임 기준이다.
+ * 먼저 원본 비트스트림 복사를 시도한다. 키프레임 때문에 앞·뒤 1초가 정확하지 않으면
+ * 자동으로 무손실 H.264/FLAC MKV로 전환해 정확한 컷과 원본 픽셀·음성을 지킨다.
  */
 async function concatOriginalQuality(inputPaths, outputPath = null, { onProgress = () => {}, binaries = resolveBinaries() } = {}) {
-  const { sources, mode } = await inspectSources(inputPaths, binaries);
-  const absoluteOutput = path.resolve(outputPath || outputPathFor(sources[0].filePath, mode));
+  const { sources, mode: inspectedMode } = await inspectSources(inputPaths, binaries);
+  let mode = inspectedMode;
+  let absoluteOutput = path.resolve(outputPath || outputPathFor(sources[0].filePath, mode));
   const sourcePaths = new Set(sources.map((source) => source.filePath));
   if (sourcePaths.has(absoluteOutput)) throw new Error("출력 파일은 원본과 다른 이름이어야 합니다.");
   if (mode === "stream-copy" && path.extname(absoluteOutput).toLowerCase() !== sources[0].extension) throw new Error(`출력 확장자는 원본과 같은 ${sources[0].extension}이어야 합니다.`);
-  if (mode === "lossless-normalized" && path.extname(absoluteOutput).toLowerCase() !== ".mkv") throw new Error("규격이 다른 원본의 무손실 출력은 MKV로 저장됩니다.");
+  if (mode === "lossless-normalized") absoluteOutput = losslessOutputPath(outputPath, sources[0].filePath);
 
   await fs.mkdir(path.dirname(absoluteOutput), { recursive: true });
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "moneyos-concat-"));
   try {
-    if (mode === "stream-copy") await streamCopyConcat(sources, absoluteOutput, binaries, onProgress, workDir);
-    else await losslessNormalizeConcat(sources, absoluteOutput, binaries, onProgress);
+    const expectedDuration = sources.reduce((total, source) => total + source.duration - 2, 0);
+    if (mode === "stream-copy") {
+      await streamCopyConcat(sources, absoluteOutput, binaries, onProgress, workDir);
+      const copiedMetadata = await probe(absoluteOutput, binaries);
+      const copiedDuration = Number(copiedMetadata.format?.duration);
+      if (!Number.isFinite(copiedDuration) || Math.abs(copiedDuration - expectedDuration) > 0.35) {
+        onProgress({ phase: "fallback", current: sources.length, total: sources.length, message: "키프레임 컷 오차 감지 · 정확한 1초 컷 무손실 MKV로 전환" });
+        await fs.rm(absoluteOutput, { force: true });
+        mode = "lossless-normalized";
+        absoluteOutput = losslessOutputPath(outputPath, sources[0].filePath);
+        if (sourcePaths.has(absoluteOutput)) throw new Error("출력 파일은 원본과 다른 이름이어야 합니다.");
+        await losslessNormalizeConcat(sources, absoluteOutput, binaries, onProgress);
+      }
+    } else {
+      await losslessNormalizeConcat(sources, absoluteOutput, binaries, onProgress);
+    }
 
     const outputMetadata = await probe(absoluteOutput, binaries);
     const outputSignature = streamSignature({ ...outputMetadata, filePath: absoluteOutput });
@@ -196,7 +217,7 @@ async function concatOriginalQuality(inputPaths, outputPath = null, { onProgress
     return {
       outputPath: absoluteOutput,
       sourceCount: sources.length,
-      keptDuration: sources.reduce((total, source) => total + source.duration - 2, 0),
+      keptDuration: expectedDuration,
       mode,
       signature: outputSignature,
     };
