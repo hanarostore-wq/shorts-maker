@@ -1,8 +1,7 @@
-const { app, BrowserWindow, WebContentsView, dialog, ipcMain, session, shell } = require("electron");
+const { app, BrowserWindow, WebContentsView, ipcMain, session, shell } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const { spawn } = require("node:child_process");
-const { concatOriginalQuality } = require("./videoConcat");
 
 // 관제실 주소. 배포본을 그대로 쓰되, 로컬 개발 중엔 CONTROL_URL로 바꿔 띄운다.
 const CONTROL_URL = process.env.CONTROL_URL || "https://shorts-maker-omega.vercel.app";
@@ -25,8 +24,6 @@ const tabs = [];
 let activeTabId = null;
 let nextTabId = 1;
 const launchedApps = new Map();
-let videoConcatWindow = null;
-let videoConcatBusy = false;
 
 function launchFullSourceApp(kind) {
   const folders = { naver: "naverblog-extention", threads: "threads-auto" };
@@ -57,29 +54,6 @@ function launchFullSourceApp(kind) {
   child.once("error", (error) => { launchedApps.delete(kind); announce(`${kind} 실행 실패: ${error.message}`); });
   child.once("exit", (code) => { launchedApps.delete(kind); announce(`${kind} 전체 원본 프로그램 종료 (code ${code})`); });
   announce(`${kind} 전체 원본 프로그램 시작 · 별도 창에서 계정과 확장프로그램을 연결하세요.`);
-}
-
-function openVideoConcatWindow() {
-  if (videoConcatWindow && !videoConcatWindow.isDestroyed()) {
-    videoConcatWindow.focus();
-    return;
-  }
-  videoConcatWindow = new BrowserWindow({
-    width: 920,
-    height: 760,
-    minWidth: 640,
-    minHeight: 560,
-    backgroundColor: "#07090d",
-    title: "이어붙이기 · 원본 화질 보존",
-    webPreferences: {
-      preload: path.join(__dirname, "video-concat-preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
-  });
-  videoConcatWindow.loadFile(path.join(__dirname, "video-concat-window.html"));
-  videoConcatWindow.on("closed", () => { videoConcatWindow = null; });
 }
 
 function isControlUrl(url) {
@@ -165,12 +139,8 @@ function createTab(url, { pinned = false } = {}) {
   // 새 창을 여는 링크는 창 대신 새 탭으로 연다. 단 외부 앱으로 넘어가는
   // 스킴(mailto: 등)은 OS에 맡긴다.
   wc.setWindowOpenHandler(({ url: target }) => {
-    if (/^controlroom:\/\/launch\/(naver|threads|concat)\/?$/i.test(target)) {
-      if (isControlUrl(wc.getURL())) {
-        const kind = new URL(target).pathname.split("/")[1];
-        if (kind === "concat") openVideoConcatWindow();
-        else launchFullSourceApp(kind);
-      }
+    if (/^controlroom:\/\/launch\/(naver|threads)\/?$/i.test(target)) {
+      if (isControlUrl(wc.getURL())) launchFullSourceApp(new URL(target).pathname.split("/")[1]);
       return { action: "deny" };
     }
     if (/^https?:/i.test(target)) {
@@ -285,28 +255,3 @@ ipcMain.handle("app:info", () => ({
   controlUrl: CONTROL_URL,
   isControlTabPinned: tabs.some((t) => t.pinned && isControlUrl(t.view.webContents.getURL())),
 }));
-
-ipcMain.handle("video-concat:select-sources", async () => {
-  const result = await dialog.showOpenDialog(videoConcatWindow || win, {
-    title: "이어붙일 원본 영상 선택",
-    properties: ["openFile", "multiSelections"],
-    filters: [{ name: "영상 파일", extensions: ["mp4", "m4v", "mov", "mkv", "webm"] }],
-  });
-  return { canceled: result.canceled, paths: result.filePaths };
-});
-
-ipcMain.handle("video-concat:run", async (_event, inputPaths) => {
-  if (videoConcatBusy) throw new Error("다른 이어붙이기 작업이 진행 중입니다.");
-  videoConcatBusy = true;
-  try {
-    return await concatOriginalQuality(inputPaths, undefined, {
-      onProgress: (payload) => videoConcatWindow?.webContents.send("video-concat:progress", payload),
-    });
-  } finally {
-    videoConcatBusy = false;
-  }
-});
-
-ipcMain.on("video-concat:show-in-folder", (_event, filePath) => {
-  if (typeof filePath === "string" && fs.existsSync(filePath)) shell.showItemInFolder(filePath);
-});
