@@ -42,19 +42,7 @@ export const departments: Department[] = [
     name: "코인매매부서",
     icon: "₿",
     agents: [
-      { id: "c8", name: "업비트파견", task: "업비트 공개 시세·거래 API 연결 대기", status: "offline" },
       { id: "c_yujin", name: "업비트", task: "YuJin Traders 자동매매 관제 · 클릭하면 전체 화면을 엽니다", status: "active" },
-      { id: "c_selection", name: "종목선정", task: "종목선정 근거 추가·삭제 · 모의/실전 공통", status: "active" },
-      { id: "c_entry", name: "Jev 매수근거", task: "Jev 매수근거 근거 추가·삭제 · 모의/실전 공통", status: "active" },
-      { id: "c_exit", name: "Jev 매도근거", task: "Jev 매도근거 근거 추가·삭제 · 모의/실전 공통", status: "active" },
-      { id: "c_trend", name: "가격흐름", task: "가격흐름 근거 추가·삭제 · 모의/실전 공통", status: "active" },
-      { id: "c_flow", name: "거래량·매수세", task: "거래량·매수세 근거 추가·삭제 · 모의/실전 공통", status: "active" },
-      { id: "c_liquidity", name: "호가·체결", task: "호가·체결 근거 추가·삭제 · 모의/실전 공통", status: "active" },
-      { id: "c_sizing", name: "투자비용", task: "투자비용 근거 추가·삭제 · 모의/실전 공통", status: "active" },
-      { id: "c_risk", name: "위험관리", task: "위험관리 근거 추가·삭제 · 모의/실전 공통", status: "active" },
-      { id: "c_analytics", name: "매매분석", task: "거래 근거·시장 자료·손익 분석 대기", status: "standby" },
-      { id: "c13", name: "실전매매원", task: "승인된 업비트 실거래 실행", status: "offline" },
-      { id: "c7", name: "모의매매원", task: "실제 주문 없는 체결 시뮬레이션 대기", status: "offline" },
     ],
   },
   {
@@ -98,6 +86,6 @@ export const projects: Project[] = [
   { id: "p2", name: "쿠팡 자동화", departmentId: "store", agentCount: 4, leadAgent: "가격감시자" },
   { id: "p3", name: "쇼츠 팩토리", departmentId: "shorts", agentCount: 7, leadAgent: "영상감독" },
   { id: "p4", name: "블로그 자동화", departmentId: "blog", agentCount: 2, leadAgent: "네이버블로그" },
-  { id: "p5", name: "업비트 현물 단타", departmentId: "coin", agentCount: 12, leadAgent: "Jev 매수근거" },
+  { id: "p5", name: "업비트 현물 단타", departmentId: "coin", agentCount: 1, leadAgent: "업비트" },
 
 ];

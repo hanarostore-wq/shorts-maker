@@ -29,6 +29,17 @@ export function SourcingManagementPanel() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (!selected) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setSelected(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [selected]);
+
   const remove = async (id: string) => {
     await fetch(`/api/sourcing/add?id=${encodeURIComponent(id)}`, { method: "DELETE" });
     setSelected(null);

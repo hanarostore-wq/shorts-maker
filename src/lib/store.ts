@@ -95,6 +95,13 @@ function healState(state: State): State {
       for (const department of state.departments) if (department.id !== "blog") department.agents = department.agents.filter((agent) => agent.id !== id);
     }
   }
+  const coin = state.departments.find((department) => department.id === "coin");
+  const freshCoinAgent = initialDepartments.find((department) => department.id === "coin")?.agents.find((agent) => agent.id === "c_yujin");
+  if (coin && freshCoinAgent) {
+    // 코인매매부서는 관제실에서 YuJin Traders 직원 한 명만 남긴다.
+    // 외부 YuJin Traders의 매매 엔진·계좌·거래 기록은 건드리지 않는다.
+    coin.agents = [structuredClone(freshCoinAgent)];
+  }
   state.projects = state.projects || [];
   const freshBlogProject = projects.find((project) => project.id === "p4");
   const blogProject = state.projects.find((project) => project.id === "p4");
@@ -164,7 +171,7 @@ function healState(state: State): State {
     }
   }
   const coinProject=state.projects.find(p=>p.id==='p5');
-  if(coinProject){coinProject.agentCount=state.departments.find(d=>d.id==='coin')?.agents.length ?? 0;coinProject.leadAgent='Jev 매수근거';}
+  if(coinProject){coinProject.agentCount=state.departments.find(d=>d.id==='coin')?.agents.length ?? 0;coinProject.leadAgent='업비트';}
   const shortsProject = state.projects.find((project) => project.id === "p3");
   if (shortsProject) {
     shortsProject.agentCount = state.departments.find((department) => department.id === "shorts")?.agents.length ?? 0;

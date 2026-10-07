@@ -6,6 +6,7 @@ import { DepartmentFloor } from "@/components/DepartmentFloor";
 import { ActivityLog } from "@/components/ActivityLog";
 import { AutoSync } from "@/components/AutoSync";
 import { UpbitTerminalModal } from "@/components/UpbitTerminalModal";
+import { YuJinTradersModal } from "@/components/YuJinTradersModal";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
 import { ShortsStudioModal } from "@/components/ShortsStudioModal";
 import { SHORTS_AGENT_STEP_MAP } from "@/lib/agentIntegrations";
@@ -20,9 +21,19 @@ interface State {
   sharedStorageConfigured?: boolean;
 }
 
+const UPBIT_MODAL_AGENT_IDS = new Set(["c_yujin", "c7", "c13"]);
+const UPBIT_MODAL_STORAGE_KEY = "control-room-upbit-modal-agent";
+const isUpbitModalAgent = (agentId: string | null | undefined) => Boolean(agentId && UPBIT_MODAL_AGENT_IDS.has(agentId));
+function restoredUpbitModalAgent(): Agent | null {
+  if (typeof window === "undefined") return null;
+  const id = window.localStorage.getItem(UPBIT_MODAL_STORAGE_KEY);
+  if (!id || !isUpbitModalAgent(id)) return null;
+  return { id, name: "업비트", task: "관제실 화면 복원 중", status: "active" };
+}
+
 export default function Home() {
   const [state, setState] = useState<State | null>(null);
-  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(restoredUpbitModalAgent);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
 
   useEffect(() => {
@@ -56,6 +67,25 @@ export default function Home() {
     };
   }, []);
 
+  // 일반 직원 상세창·상태 목록·모든 네이티브 모달의 Esc 닫기 흐름을 한 곳에 맞춘다.
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (selectedStatus) {
+        event.preventDefault();
+        setSelectedStatus(null);
+        return;
+      }
+      if (selectedAgent) {
+        event.preventDefault();
+        window.localStorage.removeItem(UPBIT_MODAL_STORAGE_KEY);
+        setSelectedAgent(null);
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [selectedAgent, selectedStatus]);
+
   if (!state) {
     return (
       <div className="flex flex-1 items-center justify-center bg-black font-mono text-zinc-500">
@@ -77,6 +107,15 @@ export default function Home() {
   const liveSelectedAgent = selectedAgent
     ? allAgents.find((a) => a.id === selectedAgent.id) ?? selectedAgent
     : null;
+  const closeAgentModal = () => {
+    window.localStorage.removeItem(UPBIT_MODAL_STORAGE_KEY);
+    setSelectedAgent(null);
+  };
+  const handleAgentClick = (agent: Agent) => {
+    if (isUpbitModalAgent(agent.id)) window.localStorage.setItem(UPBIT_MODAL_STORAGE_KEY, agent.id);
+    else window.localStorage.removeItem(UPBIT_MODAL_STORAGE_KEY);
+    setSelectedAgent(agent);
+  };
   const completedEntries = state.log.filter((entry) => /완료|성공|정상|조회/.test(entry.message)).filter((entry, index, entries) => entries.findIndex((candidate) => candidate.agentId === entry.agentId && candidate.message === entry.message) === index);
   const statusItems = selectedStatus === "오늘 완료"
     ? completedEntries.slice(0, 100).map((entry) => ({ title: entry.agentName, detail: entry.message, meta: entry.time }))
@@ -140,7 +179,7 @@ export default function Home() {
     if (!liveSelectedAgent || shortsAgents.length < 2) return;
     const currentIndex = shortsAgents.findIndex((agent) => agent.id === liveSelectedAgent.id);
     const nextAgent = shortsAgents[(currentIndex + 1) % shortsAgents.length];
-    if (nextAgent) setSelectedAgent(nextAgent);
+    if (nextAgent) handleAgentClick(nextAgent);
   };
 
   return (
@@ -176,7 +215,7 @@ export default function Home() {
             <DepartmentFloor
               key={department.id}
               department={department}
-              onAgentClick={setSelectedAgent}
+              onAgentClick={handleAgentClick}
               onReorder={handleReorder}
               onMoveAgent={handleMoveAgent}
             />
@@ -189,7 +228,8 @@ export default function Home() {
       </section>
 
       {/* 업비트 터미널 모달 */}
-      <UpbitTerminalModal mode={liveSelectedAgent?.id === "c7" ? "paper" : liveSelectedAgent?.id === "c13" ? "live" : null} onClose={() => setSelectedAgent(null)} />
+      <UpbitTerminalModal mode={liveSelectedAgent?.id === "c7" ? "paper" : liveSelectedAgent?.id === "c13" ? "live" : null} onClose={closeAgentModal} />
+      <YuJinTradersModal isOpen={liveSelectedAgent?.id === "c_yujin"} onClose={closeAgentModal} />
       
       {/* 쇼츠부서 남다른AI Shorts 분석기 모달 (선택된 직원의 전용 단계로 즉시 오픈) */}
       <ShortsStudioModal
@@ -199,7 +239,7 @@ export default function Home() {
         targetAgentName={liveSelectedAgent?.name}
         targetAgentTask={liveSelectedAgent?.task}
         onNextAgent={handleNextShortsAgent}
-        onClose={() => setSelectedAgent(null)}
+        onClose={closeAgentModal}
       />
 
       {/* 기타 일반 직원 상세 모달 */}
@@ -207,7 +247,7 @@ export default function Home() {
         <AgentDetailModal
           agent={liveSelectedAgent}
           departments={state.departments}
-          onClose={() => setSelectedAgent(null)}
+          onClose={closeAgentModal}
         />
       )}
 
