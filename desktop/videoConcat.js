@@ -4,7 +4,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
-const SUPPORTED_EXTENSIONS = new Set([".mp4", ".m4v", ".mov", ".mkv", ".webm"]);
+const SUPPORTED_EXTENSIONS = new Set([".mp4"]);
 
 function resolveBinaries() {
   return {
@@ -86,21 +86,10 @@ function concatEscape(filePath) {
   return filePath.replace(/\\/g, "/").replace(/'/g, "'\\''");
 }
 
-function even(value) {
-  return Math.ceil(value / 2) * 2;
-}
-
-function outputPathFor(firstFile, mode) {
+function outputPathFor(firstFile) {
   const directory = path.dirname(firstFile);
-  const extension = mode === "stream-copy" ? path.extname(firstFile).toLowerCase() : ".mkv";
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, 19);
-  return path.join(directory, `이어붙임_${stamp}${extension}`);
-}
-
-function losslessOutputPath(requestedOutput, firstFile) {
-  if (!requestedOutput) return outputPathFor(firstFile, "lossless-normalized");
-  const parsed = path.parse(path.resolve(requestedOutput));
-  return path.join(parsed.dir, `${parsed.name}.mkv`);
+  return path.join(directory, `이어붙임_${stamp}.mp4`);
 }
 
 async function inspectSources(inputPaths, binaries = resolveBinaries()) {
@@ -109,7 +98,7 @@ async function inspectSources(inputPaths, binaries = resolveBinaries()) {
   for (const filePath of inputPaths) {
     const absolutePath = path.resolve(String(filePath));
     const extension = path.extname(absolutePath).toLowerCase();
-    if (!SUPPORTED_EXTENSIONS.has(extension)) throw new Error(`${path.basename(absolutePath)}: MP4, M4V, MOV, MKV, WEBM 원본만 지원합니다.`);
+    if (!SUPPORTED_EXTENSIONS.has(extension)) throw new Error(`${path.basename(absolutePath)}: 원본 그대로 이어붙이기는 MP4만 지원합니다.`);
     if (!fssync.existsSync(absolutePath)) throw new Error(`파일을 찾을 수 없습니다: ${absolutePath}`);
     const metadata = await probe(absolutePath, binaries);
     const duration = safeDuration(metadata.format?.duration);
@@ -118,7 +107,7 @@ async function inspectSources(inputPaths, binaries = resolveBinaries()) {
   }
   const first = sources[0];
   const streamCopyCompatible = sources.every((source) => source.extension === first.extension && sameSignature(source.signature, first.signature));
-  return { sources, mode: streamCopyCompatible ? "stream-copy" : "lossless-normalized" };
+  return { sources, streamCopyCompatible };
 }
 
 async function streamCopyConcat(sources, outputPath, binaries, onProgress, workDir) {
@@ -148,77 +137,40 @@ async function streamCopyConcat(sources, outputPath, binaries, onProgress, workD
   ]);
 }
 
-async function losslessNormalizeConcat(sources, outputPath, binaries, onProgress) {
-  const canvasWidth = even(Math.max(...sources.map((source) => source.signature.video.width)));
-  const canvasHeight = even(Math.max(...sources.map((source) => source.signature.video.height)));
-  const args = ["-hide_banner", "-nostdin", "-y"];
-  sources.forEach((source) => args.push("-i", source.filePath));
-
-  const filters = [];
-  sources.forEach((source, index) => {
-    const end = (source.duration - 1).toFixed(3);
-    filters.push(`[${index}:v]trim=start=1:end=${end},setpts=PTS-STARTPTS,setsar=1,pad=${canvasWidth}:${canvasHeight}:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p[v${index}]`);
-    if (source.signature.audio) {
-      filters.push(`[${index}:a]atrim=start=1:end=${end},asetpts=PTS-STARTPTS[a${index}]`);
-    } else {
-      filters.push(`anullsrc=r=48000:cl=stereo,atrim=duration=${(source.duration - 2).toFixed(3)},asetpts=PTS-STARTPTS[a${index}]`);
-    }
-  });
-  const concatInputs = sources.map((_source, index) => `[v${index}][a${index}]`).join("");
-  filters.push(`${concatInputs}concat=n=${sources.length}:v=1:a=1[v][a]`);
-  onProgress({ phase: "normalize", current: 0, total: sources.length, message: "규격을 맞추되 원본 화질·음성을 무손실로 보존하는 중" });
-  args.push(
-    "-filter_complex", filters.join(";"),
-    "-map", "[v]", "-map", "[a]",
-    "-c:v", "libx264", "-crf", "0", "-preset", "medium", "-pix_fmt", "yuv420p",
-    "-c:a", "flac",
-    outputPath,
-  );
-  await run(binaries.ffmpeg, args);
-}
-
 /**
- * 먼저 원본 비트스트림 복사를 시도한다. 키프레임 때문에 앞·뒤 1초가 정확하지 않으면
- * 자동으로 무손실 H.264/FLAC MKV로 전환해 정확한 컷과 원본 픽셀·음성을 지킨다.
+ * 원본 MP4 스트림을 재인코딩하지 않고 그대로 이어붙인다.
+ * 영상 프레임을 다시 만들지 않으므로 용량과 화질은 원본을 유지한다. 컷은 키프레임 기준이다.
  */
-async function concatOriginalQuality(inputPaths, outputPath = null, { onProgress = () => {}, binaries = resolveBinaries() } = {}) {
-  const { sources, mode: inspectedMode } = await inspectSources(inputPaths, binaries);
-  let mode = inspectedMode;
-  let absoluteOutput = path.resolve(outputPath || outputPathFor(sources[0].filePath, mode));
+async function concatOriginalQuality(inputPaths, outputPath = null, { onProgress = () => {}, binaries = resolveBinaries(), outputFormat = "mp4" } = {}) {
+  const { sources, streamCopyCompatible } = await inspectSources(inputPaths, binaries);
+  if (outputFormat !== "mp4") throw new Error("원본 그대로 모드는 MP4 출력만 지원합니다.");
+  if (!streamCopyCompatible || !sources.every((source) => source.extension === ".mp4")) {
+    throw new Error("원본 그대로 이어붙이기는 해상도·코덱·음성 규격이 같은 MP4 원본끼리만 가능합니다.");
+  }
+  const absoluteOutput = path.resolve(outputPath || outputPathFor(sources[0].filePath));
   const sourcePaths = new Set(sources.map((source) => source.filePath));
   if (sourcePaths.has(absoluteOutput)) throw new Error("출력 파일은 원본과 다른 이름이어야 합니다.");
-  if (mode === "stream-copy" && path.extname(absoluteOutput).toLowerCase() !== sources[0].extension) throw new Error(`출력 확장자는 원본과 같은 ${sources[0].extension}이어야 합니다.`);
-  if (mode === "lossless-normalized") absoluteOutput = losslessOutputPath(outputPath, sources[0].filePath);
+  if (path.extname(absoluteOutput).toLowerCase() !== ".mp4") throw new Error("원본 스트림 복사 출력은 MP4여야 합니다.");
 
   await fs.mkdir(path.dirname(absoluteOutput), { recursive: true });
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "moneyos-concat-"));
   try {
     const expectedDuration = sources.reduce((total, source) => total + source.duration - 2, 0);
-    if (mode === "stream-copy") {
-      await streamCopyConcat(sources, absoluteOutput, binaries, onProgress, workDir);
-      const copiedMetadata = await probe(absoluteOutput, binaries);
-      const copiedDuration = Number(copiedMetadata.format?.duration);
-      if (!Number.isFinite(copiedDuration) || Math.abs(copiedDuration - expectedDuration) > 0.35) {
-        onProgress({ phase: "fallback", current: sources.length, total: sources.length, message: "키프레임 컷 오차 감지 · 정확한 1초 컷 무손실 MKV로 전환" });
-        await fs.rm(absoluteOutput, { force: true });
-        mode = "lossless-normalized";
-        absoluteOutput = losslessOutputPath(outputPath, sources[0].filePath);
-        if (sourcePaths.has(absoluteOutput)) throw new Error("출력 파일은 원본과 다른 이름이어야 합니다.");
-        await losslessNormalizeConcat(sources, absoluteOutput, binaries, onProgress);
-      }
-    } else {
-      await losslessNormalizeConcat(sources, absoluteOutput, binaries, onProgress);
-    }
+    await streamCopyConcat(sources, absoluteOutput, binaries, onProgress, workDir);
 
     const outputMetadata = await probe(absoluteOutput, binaries);
     const outputSignature = streamSignature({ ...outputMetadata, filePath: absoluteOutput });
-    if (mode === "stream-copy" && !sameOutputContent(outputSignature, sources[0].signature)) throw new Error("출력 규격이 원본과 달라져 결과 파일을 보존하지 않았습니다.");
-    onProgress({ phase: "done", current: sources.length, total: sources.length, message: "완료" });
+    if (!sameOutputContent(outputSignature, sources[0].signature)) throw new Error("출력 규격이 원본과 달라져 결과 파일을 보존하지 않았습니다.");
+    const copiedDuration = Number(outputMetadata.format?.duration);
+    const durationNotice = Number.isFinite(copiedDuration) && Math.abs(copiedDuration - expectedDuration) > 0.35
+      ? "키프레임 기준 컷으로 완료"
+      : "완료";
+    onProgress({ phase: "done", current: sources.length, total: sources.length, message: durationNotice });
     return {
       outputPath: absoluteOutput,
       sourceCount: sources.length,
       keptDuration: expectedDuration,
-      mode,
+      mode: "source-stream-copy",
       signature: outputSignature,
     };
   } finally {

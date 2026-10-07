@@ -203,6 +203,21 @@ const launchArgs = process.argv.slice(1);
 const concatWorkerMode = launchArgs.includes("--concat-worker") || launchArgs.some((arg) => /^clipjoin:\/\//i.test(arg));
 const registerConcatMode = launchArgs.includes("--register-concat");
 
+function getConcatWorkerLaunch() {
+  const protocolUrl = launchArgs.find((arg) => /^clipjoin:\/\//i.test(arg));
+  if (!protocolUrl) return {};
+  try {
+    const parsed = new URL(protocolUrl);
+    return {
+      jobId: parsed.searchParams.get("job"),
+      token: parsed.searchParams.get("token"),
+      outputFormat: "mp4",
+    };
+  } catch {
+    return {};
+  }
+}
+
 function registerConcatProtocol() {
   const args = process.defaultApp ? [app.getAppPath(), "--concat-worker"] : ["--concat-worker"];
   return app.setAsDefaultProtocolClient("clipjoin", process.execPath, args);
@@ -216,7 +231,7 @@ app.whenReady().then(async () => {
     return;
   }
   if (concatWorkerMode) {
-    await runLocalConcatWorker();
+    await runLocalConcatWorker(getConcatWorkerLaunch());
     return;
   }
   registerConcatProtocol();
