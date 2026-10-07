@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import styles from "./YuJinTradersModal.module.css";
 
 const YUJIN_TRADERS_ORIGIN = "https://yujintrade-lfpspwta.manus.space";
-const YUJIN_TRADERS_URL = `${YUJIN_TRADERS_ORIGIN}/?embed=control-room&v=1.10.54`;
+const YUJIN_TRADERS_URL = `${YUJIN_TRADERS_ORIGIN}/?embed=control-room&v=1.10.55`;
 
 export function YuJinTradersModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
