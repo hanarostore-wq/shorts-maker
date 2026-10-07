@@ -24,8 +24,10 @@ Push-Location $desktop
 try {
     & npm.cmd ci --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw 'MoneyOS desktop shell installation failed.' }
-    Write-Host 'Starting the MoneyOS control-room shell. No custom social queue worker is running.'
-    Write-Host 'Open Blog department > Naver Blog or Threads > Original full app launch.'
+    & npm.cmd run register:concat
+    if ($LASTEXITCODE -ne 0) { throw 'Local concatenate worker registration failed.' }
+    Write-Host 'Registered the local concatenate worker. Video files stay on this PC and the worker exits after each job.'
+    Write-Host 'Starting the MoneyOS control-room shell. Open Shorts department > Concatenate to start a local job.'
     & npm.cmd start
     if ($LASTEXITCODE -ne 0) { throw 'MoneyOS desktop shell process failed.' }
 } finally { Pop-Location }

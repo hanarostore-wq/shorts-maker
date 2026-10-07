@@ -6,9 +6,15 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "start:local": "CONTROL_URL=http://localhost:3000 electron ."
+    "start:local": "CONTROL_URL=http://localhost:3000 electron .",
+    "register:concat": "electron . --register-concat",
+    "start:concat": "electron . --concat-worker"
   },
   "devDependencies": {
     "electron": "^44.4.3"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0"
   }
 }

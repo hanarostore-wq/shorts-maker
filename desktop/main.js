@@ -2,6 +2,7 @@ const { app, BrowserWindow, WebContentsView, ipcMain, session, shell } = require
 const path = require("node:path");
 const fs = require("node:fs");
 const { spawn } = require("node:child_process");
+const { runLocalConcatWorker } = require("./concatWorker");
 
 // 관제실 주소. 배포본을 그대로 쓰되, 로컬 개발 중엔 CONTROL_URL로 바꿔 띄운다.
 const CONTROL_URL = process.env.CONTROL_URL || "https://shorts-maker-omega.vercel.app";
@@ -140,7 +141,10 @@ function createTab(url, { pinned = false } = {}) {
   // 스킴(mailto: 등)은 OS에 맡긴다.
   wc.setWindowOpenHandler(({ url: target }) => {
     if (/^controlroom:\/\/launch\/(naver|threads)\/?$/i.test(target)) {
-      if (isControlUrl(wc.getURL())) launchFullSourceApp(new URL(target).pathname.split("/")[1]);
+      if (isControlUrl(wc.getURL())) {
+        const kind = new URL(target).pathname.split("/")[1];
+        launchFullSourceApp(kind);
+      }
       return { action: "deny" };
     }
     if (/^https?:/i.test(target)) {
@@ -195,7 +199,27 @@ function toUrl(input) {
   return `https://www.google.com/search?q=${encodeURIComponent(text)}`;
 }
 
-app.whenReady().then(() => {
+const launchArgs = process.argv.slice(1);
+const concatWorkerMode = launchArgs.includes("--concat-worker") || launchArgs.some((arg) => /^clipjoin:\/\//i.test(arg));
+const registerConcatMode = launchArgs.includes("--register-concat");
+
+function registerConcatProtocol() {
+  const args = process.defaultApp ? [app.getAppPath(), "--concat-worker"] : ["--concat-worker"];
+  return app.setAsDefaultProtocolClient("clipjoin", process.execPath, args);
+}
+
+app.whenReady().then(async () => {
+  if (registerConcatMode) {
+    const registered = registerConcatProtocol();
+    console.log(`[concat-worker] clipjoin protocol ${registered ? "registered" : "registration failed"}`);
+    app.exit(registered ? 0 : 1);
+    return;
+  }
+  if (concatWorkerMode) {
+    await runLocalConcatWorker();
+    return;
+  }
+  registerConcatProtocol();
   createWindow();
 
   // 관제실을 첫 번째 고정 탭으로 심는다. 앱을 켜면 항상 여기서 시작한다.
