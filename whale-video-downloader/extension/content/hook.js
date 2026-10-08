@@ -9,7 +9,7 @@
   // 사이트별: 어떤 요청 주소를 볼지(path), 응답 안에 어떤 단어가 있어야 전달할지(marker)
   const RULES = [
     { h: /(^|\.)tiktok\.com$/, path: /\/api\//, marker: /"playAddr"|"bitrateInfo"/ },
-    { h: /(^|\.)instagram\.com$/, path: /\/graphql|\/api\/v1\//, marker: /"video_versions"|"video_dash_manifest"/ },
+    { h: /(^|\.)instagram\.com$/, path: /\/graphql|\/api\/v1\//, marker: /"video_versions"|"video_dash_manifest"|"friendship_status"|"profile_pic_url"/ },
     { h: /(^|\.)facebook\.com$/, path: /\/api\/graphql|\/ajax\/|\/graphql/, marker: /browser_native_(?:hd|sd)_url|playable_url|dash_manifest|progressive_url|base_url/ },
     { h: /(^|\.)(x|twitter)\.com$/, path: /\/graphql\/|\/i\/api\/|\/2\/timeline/, marker: /"video_info"/ },
     { h: /(^|\.)douyin\.com$/, path: /\/aweme\/|\/web\/api\//, marker: /"play_addr"|"bit_rate"/ },

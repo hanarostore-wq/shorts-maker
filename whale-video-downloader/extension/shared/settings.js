@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS = {
   downloadedMark: true, // 받은 적 있는 영상·사진 버튼 초록 표시
   xPhotoTapClose: true, // X 사진 확대 보기에서 사진 누르면 닫기
   ytShortsStats: true, // 유튜브 쇼츠 오른쪽 위에 조회수·구독자 수
+  seekBar: true, // 인스타그램 영상 아래 재생바(재생 위치 이동)
   ytLikeFloat: true, // 유튜브 보기·쇼츠 화면 오른쪽 아래 좋아요 플로팅 버튼
   xFollowButtons: true, // X 피드 작성자 옆 팔로우/팔로잉 버튼
   followAllButton: true, // 블루스카이·X 팔로우 목록 화면에 '이 목록 전부 팔로우' 버튼
@@ -130,5 +131,6 @@ export const SITE_FEATURES = [
   { key: 'bskyFollowButtons', group: '팔로우', name: '피드 게시물 팔로우 버튼', desc: '피드 게시물에 팔로우/팔로잉 상태 버튼', sites: ['bluesky'] },
   { key: 'xPhotoTapClose', group: '보기', name: '사진 확대 보기에서 누르면 닫기', desc: '크게 본 사진을 누르면 닫힙니다', sites: ['x'] },
   { key: 'ytShortsStats', group: '보기', name: '쇼츠 조회수·구독자 표시', desc: '쇼츠 오른쪽 위에 조회수·구독자 수', sites: ['youtube'] },
+  { key: 'seekBar', group: '보기', name: '영상 재생바', desc: '영상 아래에 재생바와 시간을 띄웁니다. 누르거나 끌어서 원하는 위치로 이동', sites: ['instagram'] },
   { key: 'ytLikeFloat', group: '보기', name: '좋아요 플로팅 버튼', desc: '영상·쇼츠 화면 오른쪽 아래에 떠 있는 좋아요 버튼', sites: ['youtube'] },
 ];

@@ -41,6 +41,7 @@
     Object.assign(req, { site: adapter.id, siteName: adapter.name, pageUrl: location.href, kind: 'video', duration: Number.isFinite(v.duration) ? v.duration : 0 });
     const r = await chrome.runtime.sendMessage({ type: 'smd:play-external', request: req }).catch((err) => ({ error: { step: '확장프로그램 연결', reason: String(err?.message || err), action: '페이지를 새로고침(F5)한 뒤 다시 누르세요.' } }));
     if (r?.error) return toast('', r.error);
+    if (r?.downloading) return toast('이 사이트는 재생 주소를 바로 넘길 수 없어(로그인 쿠키 필요) 원본을 먼저 받는 중입니다…\n다 받으면 팟플레이어(기본 재생 프로그램)로 엽니다.');
     toast('팟플레이어로 보냈습니다. 웨일이 "외부 프로그램 열기"를 물으면 허용하세요.');
   });
   chrome.storage.local.get('settings').then((r) => {
@@ -573,6 +574,11 @@
       handle = /@([A-Za-z0-9_]{1,15})/.exec(t)?.[1] || '';
       name = t.split('@')[0].replace(/[·\s]+$/, '').trim().slice(0, 40);
     }
+    // 틱톡 게시물 화면 주소(/@아이디/video|photo/번호)에는 작성자 아이디가 들어 있다 — 추천 계정 링크보다 먼저
+    if (!handle && adapter.id === 'tiktok') {
+      handle = /^\/@([^/]+)\/(?:video|photo)\//.exec(location.pathname)?.[1] || '';
+      if (!handle && box) handle = (box.querySelector('[data-e2e="video-author-uniqueid"], [data-e2e="browse-username"]')?.innerText || '').trim().replace(/^@/, '');
+    }
     if (!handle && box && re) {
       const links = [...box.querySelectorAll('a[href]')];
       for (const a of links) {
@@ -788,6 +794,9 @@
     if (b.closest('a[href]') && !b.matches('[role="button"]')) return false;
     const t = (b.innerText || b.textContent || '').replace(/\s+/g, ' ').trim();
     const label = (b.getAttribute('aria-label') || '').trim();
+    // 글자 없는 아이콘 단추(틱톡 피드 프로필 사진의 '+')는 data-e2e 이름으로 판단
+    const e2e = b.getAttribute('data-e2e') || '';
+    if (!t && /follow/i.test(e2e) && !/following|unfollow|followed/i.test(e2e)) return true;
     return FOLLOW_TEXT.test(t) || (!t && FOLLOW_TEXT.test(label)) || (t.length < 2 && FOLLOW_TEXT.test(label));
   };
   const NO_DOM_FOLLOW = new Set(['x', 'bluesky']);
@@ -817,6 +826,12 @@
       t.textContent = r.already ? `자동 팔로우: ${who}이미 팔로우 중입니다` : `자동 팔로우: ${who}팔로우했습니다`;
     }
     toastHost.style.display = 'block';
+    // 지나간 알림도 확인할 수 있게 최근 5개를 남겨 둔다(문제 확인용)
+    try {
+      const hist = JSON.parse(toastHost.dataset.history || '[]');
+      hist.push(t.textContent);
+      toastHost.dataset.history = JSON.stringify(hist.slice(-5));
+    } catch {}
     clearTimeout(followToast.t);
     followToast.t = setTimeout(() => toastHost && (toastHost.style.display = 'none'), r.error ? 12000 : 4000);
   }
@@ -827,21 +842,30 @@
   const btnText = (b) => (b.innerText || b.textContent || '').replace(/\s+/g, ' ').trim();
 
   // 인스타그램: 화면 단추는 게시물 구조가 깊고 자주 바뀌어 잘 못 찾으므로, 인스타그램 웹이 쓰는 요청으로 작성자를 팔로우한다
-  async function igFollow(el) {
+  async function igFollow(el, lookup) {
     const handle = postAuthor(el, {}).handle;
     if (!handle) return null; // 작성자를 모르면 화면 단추로
     const who = `@${handle}`;
+    const cached = SITES.igUsers?.get(handle.toLowerCase());
+    if (cached?.following === true) return { who, already: true };
+    // 페이지 데이터에 계정 번호가 없으면: 먼저 화면 단추로 하고(lookup=false), 그래도 안 될 때만 따로 물어본다
+    if (!cached?.id && !lookup) return null;
     const csrf = (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/) || [])[1];
     const me = (document.cookie.match(/(?:^|; )ds_user_id=([^;]+)/) || [])[1];
     if (!csrf || !me) return { who, error: { step: '로그인 확인', reason: '인스타그램 로그인 정보를 찾지 못했습니다', action: '인스타그램에 로그인한 뒤 새로고침(F5)하세요.' } };
     const H = { 'X-IG-App-ID': '936619743392459', 'X-Requested-With': 'XMLHttpRequest' };
-    let user;
-    try {
-      const r = await fetch(`/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`, { headers: H, credentials: 'include' });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      user = (await r.json())?.data?.user;
-    } catch (err) {
-      return { who, error: { step: '작성자 정보 확인', reason: `인스타그램이 작성자 정보를 주지 않았습니다 (${err.message || err})`, action: '잠시 후 다시 시도하세요. 계속되면 새로고침(F5)하세요.' } };
+    let user = cached?.id ? { id: cached.id, followed_by_viewer: cached.following === true } : null;
+    if (!user) {
+      let status = 0;
+      try {
+        const r = await fetch(`/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`, { headers: H, credentials: 'include' });
+        status = r.status;
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        user = (await r.json())?.data?.user;
+      } catch (err) {
+        if (status === 429) return { who, error: { step: '작성자 정보 확인', reason: '인스타그램이 짧은 시간에 요청이 많다며 잠시 막았습니다 (HTTP 429)', action: '몇 분 뒤 다시 받거나, 게시물 위쪽의 팔로우 단추를 직접 누르세요.' } };
+        return { who, error: { step: '작성자 정보 확인', reason: `인스타그램이 작성자 정보를 주지 않았습니다 (${err.message || err})`, action: '잠시 후 다시 시도하세요. 계속되면 새로고침(F5)하세요.' } };
+      }
     }
     if (!user?.id) return { who, error: { step: '작성자 정보 확인', reason: '작성자 계정 번호를 찾지 못했습니다', action: '작성자 프로필에서 직접 팔로우하세요.' } };
     if (String(user.id) === String(me)) return null;
@@ -855,7 +879,10 @@
       return { who, error: { step: '팔로우 요청', reason: `인스타그램에 연결하지 못했습니다 (${err.message || err})`, action: '인터넷 연결을 확인한 뒤 다시 시도하세요.' } };
     }
     const fs = j.friendship_status || {};
-    if (r2.ok && j.status === 'ok' && (fs.following || fs.outgoing_request)) return { who, ok: true };
+    if (r2.ok && j.status === 'ok' && (fs.following || fs.outgoing_request)) {
+      SITES.igUsers?.set(handle.toLowerCase(), { id: String(user.id), following: true });
+      return { who, ok: true };
+    }
     const limited = r2.status === 429 || /wait|limit|try again|잠시/i.test(j.message || '');
     return { who, error: { step: '팔로우 요청', reason: `인스타그램이 팔로우를 받아들이지 않았습니다 (HTTP ${r2.status}${j.message ? ` · ${j.message}` : ''})`, action: limited ? '인스타그램이 잠시 팔로우를 막았습니다. 몇 시간 뒤에 다시 시도하세요.' : '작성자 프로필에서 직접 팔로우해 보세요.' } };
   }
@@ -863,62 +890,90 @@
   // 화면의 팔로우 단추를 찾아 누르고, 단추 글자가 바뀌는지로 결과를 확인한다
   function domFollow(el, report) {
     const vr = el.getBoundingClientRect();
-    const who = (() => {
-      try {
-        const a = postAuthor(el, {});
-        return a.handle ? `@${a.handle}` : a.name || '';
-      } catch {
-        return '';
+    let handle = '';
+    let who = '';
+    try {
+      const a = postAuthor(el, {});
+      handle = a.handle || '';
+      who = handle ? `@${handle}` : a.name || '';
+    } catch {}
+    const FOLLOW_SEL = 'button, [role="button"], [data-e2e="follow-button"], [data-e2e="feed-follow"], [data-e2e="browse-follow"]';
+    // 작성자 프로필 링크 근처(6단계 안)에 있는 단추인가 — 추천 계정 등 다른 사람의 팔로우 단추를 누르지 않게
+    const nearAuthor = (b) => {
+      if (!handle) return false;
+      const h = handle.toLowerCase();
+      const isAuthor = (href) => href.includes(`/@${h}`) || href.replace(/\/+$/, '').endsWith(`/${h}`) || href.includes(`/${h}?`);
+      // 단추에서 가장 가까운(처음 만나는) 링크 묶음만 본다 — 위로 많이 올라가면 다른 계정 단추도 작성자 링크를 품게 되므로
+      for (let p = b.parentElement, i = 0; p && i < 6; p = p.parentElement, i++) {
+        const links = [...p.querySelectorAll('a[href]')].map((a) => (a.getAttribute('href') || '').toLowerCase()).filter((x) => x && x !== '#');
+        if (links.length) return links.some(isAuthor);
       }
-    })();
-    let btn = null;
+      return false;
+    };
+    const cands = [];
     let already = false;
     // ① 사진·영상을 감싼 묶음 안(인스타·샤오홍슈처럼 구조가 깊어도 화면 높이 기준으로 25단계까지)
     for (let p = el.parentElement, i = 0; p && p !== document.documentElement && i < 25; p = p.parentElement, i++) {
       if (p.getBoundingClientRect().height > Math.max(innerHeight * 2.5, vr.height * 4)) break;
-      const bs = [...p.querySelectorAll('button, [role="button"], [data-e2e="follow-button"], [data-e2e="feed-follow"]')];
-      // 다른 페이지로 옮기는 링크형 버튼은 누르지 않는다(로그인 화면 이동 등)
-      btn = bs.find(isFollowBtn) || null;
-      if (btn) break;
-      if (bs.some((b) => FOLLOWING_TEXT.test(btnText(b)))) {
+      const bs = [...p.querySelectorAll(FOLLOW_SEL)];
+      const f = bs.filter(isFollowBtn);
+      if (f.length) {
+        cands.push(...f);
+        break;
+      }
+      if (bs.some((x) => FOLLOWING_TEXT.test(btnText(x)))) {
         already = true;
         break;
       }
     }
     // ② 게시물 창(샤오홍슈 노트 창·인스타 게시물 창 등) 안
-    if (!btn && !already) {
+    if (!cands.length && !already) {
       const box = el.closest('#noteContainer, .note-container, [role="dialog"], article, [data-e2e="browse-video"]');
       if (box) {
-        const bs = [...box.querySelectorAll('button, [role="button"]')];
-        btn = bs.find(isFollowBtn) || null;
-        if (!btn && bs.some((b) => FOLLOWING_TEXT.test(btnText(b)))) already = true;
+        const bs = [...box.querySelectorAll(FOLLOW_SEL)];
+        cands.push(...bs.filter(isFollowBtn));
+        if (!cands.length && bs.some((x) => FOLLOWING_TEXT.test(btnText(x)))) already = true;
       }
     }
-    // ③ 사이트별 단추 위치에서 영상과 가장 가까운 것(이미 팔로우·구독 중이면 글자가 달라 고르지 않음)
-    if (!btn && !already) {
-      let bestD = Infinity;
+    // ③ 사이트별 단추 위치(영상과 가까운 순)
+    if (!cands.length && !already) {
+      const near = [];
       for (const sel of SITE_FOLLOW[adapter.id] || []) {
-        for (const b of document.querySelectorAll(sel)) {
-          if (!isFollowBtn(b)) continue;
-          const r = b.getBoundingClientRect();
+        for (const x of document.querySelectorAll(sel)) {
+          if (!isFollowBtn(x)) continue;
+          const r = x.getBoundingClientRect();
           if (r.width < 4 || r.height < 4) continue;
           const d = Math.hypot(Math.max(0, r.left - vr.right, vr.left - r.right), Math.max(0, r.top - vr.bottom, vr.top - r.bottom));
-          if (d < bestD && d < innerHeight * 1.5) {
-            bestD = d;
-            btn = b;
-          }
+          if (d < innerHeight * 1.5) near.push([d, x]);
         }
       }
+      near.sort((x, y) => x[0] - y[0]).forEach(([, x]) => cands.push(x));
     }
     if (already) return report({ who, already: true });
+    // 작성자 프로필 링크 옆 단추를 먼저 고른다
+    let btn = cands.find(nearAuthor) || null;
+    if (!btn && handle) {
+      // 사진 옆 단추가 추천 계정 것이면: 화면 전체에서 작성자 프로필 링크 옆 팔로우 단추를 찾는다
+      btn = [...document.querySelectorAll(FOLLOW_SEL)].find((x) => isFollowBtn(x) && nearAuthor(x)) || null;
+    }
+    // 틱톡은 추천 계정 단추가 많아, 작성자 옆 단추를 못 찾으면 다른 단추는 누르지 않는다
+    if (!btn && !(handle && adapter.id === 'tiktok')) btn = cands[0] || null;
     if (!btn) return report({ who, error: { step: '팔로우 단추 찾기', reason: '이 화면에서 작성자 팔로우 단추를 찾지 못했습니다', action: '게시물을 눌러 연 화면에서 다시 받거나, 작성자 프로필에서 직접 팔로우하세요.' } });
-    const before = btnText(btn);
+    const box = btn.parentElement?.parentElement?.parentElement || btn.parentElement;
     btn.click();
+    // 사이트가 '팔로잉'으로 잠깐 바꿨다가 서버에서 거절되면 되돌리는 경우가 있어(틱톡 등) 4.5초 뒤의 최종 상태로 판단한다
     setTimeout(() => {
-      const now = btn.isConnected ? btnText(btn) : '';
-      if (!btn.isConnected || now !== before) report({ who, ok: true });
-      else report({ who, error: { step: '팔로우', reason: '팔로우 단추를 눌렀지만 상태가 바뀌지 않았습니다(사이트가 막았거나 로그인이 필요)', action: '로그인 상태를 확인하고, 작성자 프로필에서 직접 팔로우해 보세요.' } });
-    }, 1800);
+      const shown = (x) => x.isConnected && x.getBoundingClientRect().width > 0;
+      let ok;
+      if (shown(btn)) ok = FOLLOWING_TEXT.test(btnText(btn)) || FOLLOWING_TEXT.test(btn.getAttribute('aria-label') || '') || !isFollowBtn(btn);
+      else {
+        // 단추가 다시 그려졌으면 같은 자리에 '팔로우' 단추가 다시 생겼는지 본다
+        const again = box?.isConnected ? [...box.querySelectorAll(FOLLOW_SEL)].filter((x) => shown(x) && isFollowBtn(x)) : [];
+        ok = !again.length;
+      }
+      if (ok) report({ who, ok: true });
+      else report({ who, error: { step: '팔로우 확인', reason: '팔로우 단추를 눌렀지만 사이트에서 팔로우가 유지되지 않았습니다(사이트가 자동으로 누른 것을 막았거나 로그인이 필요)', action: '작성자 이름 옆 팔로우 단추를 직접 눌러 주세요. 로그인 상태도 확인하세요.' } });
+    }, 4500);
   }
 
   function autoFollow(el) {
@@ -927,7 +982,12 @@
     document.dispatchEvent(new CustomEvent('smd:auto-follow', { detail }));
     if (detail.handled || NO_DOM_FOLLOW.has(adapter.id)) return;
     if (adapter.id === 'instagram') {
-      igFollow(el).then((r) => (r ? followToast(r) : domFollow(el, followToast)), () => domFollow(el, followToast));
+      // ① 페이지 데이터에 계정 번호가 있으면 인스타 웹 요청 ② 없으면 화면 팔로우 단추 ③ 단추도 못 찾으면 계정 번호를 물어봐서 요청
+      const viaLookup = (res) => igFollow(el, true).then((r2) => followToast(r2 || res), () => followToast(res));
+      igFollow(el, false).then(
+        (r) => (r ? followToast(r) : domFollow(el, (res) => (res.error && res.error.step === '팔로우 단추 찾기' ? viaLookup(res) : followToast(res)))),
+        () => domFollow(el, followToast),
+      );
       return;
     }
     domFollow(el, followToast);
@@ -1065,6 +1125,13 @@
           : '준비 중…';
         setLook(entry, 'busy', label, j.phase === 'resolve' ? null : j.percent);
       }
+      return;
+    }
+    if (msg?.type === 'smd:play-ready') {
+      const note = globalThis.__SMD_FOLLOW_TOAST;
+      if (msg.error) note?.({ error: msg.error });
+      else if (msg.opened) note?.({ custom: '받은 원본을 팟플레이어(기본 재생 프로그램)로 열었습니다.' });
+      else note?.({ custom: `팟플레이어용 파일을 받았습니다: 다운로드/팟플레이어 재생\n웨일 다운로드 목록에서 그 파일을 누르면 열립니다.\n처음 한 번만: 그 파일을 마우스 오른쪽 버튼으로 눌러 '이 형식의 파일 항상 열기'를 켜 두면 다음부터 받자마자 자동으로 열립니다.` });
       return;
     }
     if (msg?.type === 'smd:edit-placement') {
@@ -1269,8 +1336,13 @@
   }
   // 댓글·답글 칸 안의 사진·영상(댓글 이모티콘·첨부 그림 등)에는 버튼을 띄우지 않는다 — 게시물 본문 사진·영상만
   const COMMENT_RE = /comment|reply|replies|댓글|评论|評論/i;
-  function inComment(el) {
-    for (let p = el.parentElement, i = 0; p && p !== document.body && i < 18; p = p.parentElement, i++) {
+  //   게시물 전체를 감싼 큰 묶음(영상이 들어 있거나 화면보다 큰 것)까지 올라가면 멈춘다 — 틱톡처럼 영상·댓글을 함께 감싼
+  //   묶음 이름에 'comment' 가 들어 있어도 본문 영상·사진을 댓글로 잘못 보지 않게
+  function inComment(el, depth = 12) {
+    for (let p = el.parentElement, i = 0; p && p !== document.body && i < depth; p = p.parentElement, i++) {
+      if (p !== el.parentElement && el.tagName !== 'VIDEO' && p.querySelector('video')) return false;
+      const r = p.getBoundingClientRect();
+      if (r.height > innerHeight * 1.2 || r.width > innerWidth * 0.9) return false;
       const tags = `${p.id || ''} ${typeof p.className === 'string' ? p.className : ''} ${p.getAttribute('data-e2e') || ''} ${p.getAttribute('aria-label') || ''}`;
       if (COMMENT_RE.test(tags)) return true;
     }
@@ -1351,7 +1423,7 @@
     const imgs = [];
     collectImages(imgs);
     // 댓글 칸 안의 영상(댓글 첨부 움짤 등)도 제외
-    for (let i = vids.length - 1; i >= 0; i--) if (inComment(vids[i])) vids.splice(i, 1);
+    for (let i = vids.length - 1; i >= 0; i--) if (inComment(vids[i], 5)) vids.splice(i, 1);
     const set = new Set([...vids, ...imgs]);
     for (const v of vids) if (!tracked.has(v)) track(v, 'video');
     for (const e of tracked.values()) refreshIdentity(e);

@@ -311,7 +311,26 @@
     original_width: o.original_width,
     original_height: o.original_height,
   });
-  const ingestInsta = (json) =>
+  // 인스타 사용자(아이디 → 계정 번호·팔로우 여부): 페이지가 받은 데이터에서 모아 두고 자동 팔로우에 쓴다
+  //   (계정 번호를 따로 물어보는 요청은 인스타가 자주 429 로 막음)
+  const igUsers = new Map();
+  const ingestInstaUsers = (json) =>
+    U.walk(json, (o) => {
+      if (typeof o.username === 'string' && (o.pk || o.id || o.pk_id) && ('full_name' in o || 'profile_pic_url' in o || 'is_private' in o || 'friendship_status' in o)) {
+        const key = o.username.toLowerCase();
+        const prev = igUsers.get(key) || {};
+        const f = o.friendship_status?.following ?? o.followed_by_viewer;
+        igUsers.set(key, { id: String(o.pk || o.pk_id || o.id).split('_')[0], following: typeof f === 'boolean' ? f : prev.following });
+      }
+      return false;
+    });
+  const ingestInsta = (json) => {
+    try {
+      ingestInstaUsers(json);
+    } catch {}
+    return ingestInstaMedia(json);
+  };
+  const ingestInstaMedia = (json) =>
     U.walk(json, (o) => {
       if (Array.isArray(o.carousel_media) && (o.code || o.pk)) {
         const children = o.carousel_media.filter((c) => c && c.video_versions).map(igPick);
@@ -342,6 +361,7 @@
     ingest: ingestInsta,
     init() {
       for (const t of U.scripts('script[type="application/json"]', /video_versions/)) U.parseLoose(t).forEach(ingestInsta);
+      for (const t of U.scripts('script[type="application/json"]', /"friendship_status"|"profile_pic_url"/)) U.parseLoose(t).forEach(ingestInstaUsers);
     },
     async resolve(video) {
       const re = /\/(?:p|reel|reels|tv)\/(?!audio\/)([A-Za-z0-9_-]{6,})/;
@@ -1135,5 +1155,5 @@
     };
   }
 
-  globalThis.__SMD_SITES = { sites, generic, pick, U, SiteError, igMediaId, imageRequest, originalImageUrls, xUsers, bskyPost, bskyItemOf };
+  globalThis.__SMD_SITES = { sites, generic, pick, U, SiteError, igMediaId, imageRequest, originalImageUrls, xUsers, bskyPost, bskyItemOf, igUsers };
 })();

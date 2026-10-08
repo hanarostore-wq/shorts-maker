@@ -301,6 +301,42 @@ if (!only || only === 'folder') {
   }
 }
 
+// ── 인스타 재생바: 영상 아래 재생바를 누르면 그 위치로 이동(사이트 투명 막·클릭 처리에 안 가려짐) ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ siteSettings: {} });
+    await page.goto('https://www.instagram.com/igoverlay', { waitUntil: 'domcontentloaded' });
+    await page.locator('#igvid').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(2000);
+    const box = await page.evaluate(() => {
+      const v = document.getElementById('igvid');
+      for (const h of document.querySelectorAll('smd-seek')) {
+        const w = h.shadowRoot.querySelector('.w');
+        if (w.hidden) continue;
+        const b = h.shadowRoot.querySelector('.bar').getBoundingClientRect();
+        const vr = v.getBoundingClientRect();
+        if (b.top >= vr.top && b.bottom <= vr.bottom + 2) return { x: b.left + b.width * 0.75, y: b.top + b.height / 2, dur: v.duration, txt: h.shadowRoot.querySelector('.t').textContent };
+      }
+      return null;
+    });
+    if (!box) throw new Error('재생바가 보이지 않음');
+    await page.mouse.click(box.x, box.y);
+    await page.waitForTimeout(400);
+    const r = await page.evaluate(() => ({ t: document.getElementById('igvid').currentTime, expanded: window.__igExpanded || 0 }));
+    record('[인스타] 재생바: 75% 지점을 누르면 그 위치로 이동(영상 확대 안 됨)', Math.abs(r.t - box.dur * 0.75) < 0.7 && r.expanded === 0 && /\d+:\d\d \/ \d+:\d\d/.test(box.txt), { note: `이동 ${r.t.toFixed(2)}초 / 길이 ${box.dur.toFixed(2)}초 · 확대 ${r.expanded} · 표시 ${box.txt}` });
+    await setSettings({ siteSettings: { instagram: { seekBar: false } } });
+    await page.waitForTimeout(800);
+    const hidden = await page.evaluate(() => [...document.querySelectorAll('smd-seek')].every((h) => h.shadowRoot.querySelector('.w').hidden));
+    record('[인스타] 재생바 끄면 숨김', hidden, { note: hidden ? '숨김' : '보임' });
+  } catch (err) {
+    record('[인스타] 재생바', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ siteSettings: {} });
+    await page.close();
+  }
+}
+
 // ── 틱톡·샤오홍슈처럼 사이트가 window 에서 클릭을 먼저 가로채도 저장 버튼이 반응 ──
 for (const [SITE, URL_] of [['틱톡', 'https://www.tiktok.com/ttguard'], ['샤오홍슈', 'https://www.xiaohongshu.com/ttguard']]) {
   const page = await ctx.newPage();
@@ -361,9 +397,14 @@ for (const [SITE, URL_] of [['틱톡', 'https://www.tiktok.com/ttguard'], ['샤�
 // ── 인스타 자동 팔로우(인스타 웹 요청) · 샤오홍슈 자동 팔로우(깊은 구조의 关注 단추) ──
 {
   const page = await ctx.newPage();
+  // 가장 최근 알림(이미 사라졌어도 기록에서)
   const toast = () => page.evaluate(() => {
     const h = document.querySelector('smd-toast');
-    return h && h.style.display !== 'none' ? h.shadowRoot.querySelector('.t').textContent : '';
+    try {
+      return JSON.parse(h?.dataset.history || '[]').pop() || '';
+    } catch {
+      return '';
+    }
   });
   const save = async (sel) => {
     await page.locator(sel).hover();
@@ -376,7 +417,7 @@ for (const [SITE, URL_] of [['틱톡', 'https://www.tiktok.com/ttguard'], ['샤�
     }, sel);
     await page.mouse.click(p.x, p.y);
     await waitFile(before, 30000);
-    await page.waitForTimeout(2500);
+    await page.waitForTimeout(5500); // 화면 단추 방식은 4.5초 뒤 최종 상태로 확인
   };
   try {
     await setSettings({ autoFollow: true, captionOnMedia: false, preventDuplicates: false });
@@ -393,6 +434,33 @@ for (const [SITE, URL_] of [['틱톡', 'https://www.tiktok.com/ttguard'], ['샤�
     await save('#igf');
     const t2 = await toast();
     record('[자동 팔로우] (오류 경로) 인스타 작성자 정보를 못 받으면 단계·원인·조치 알림', !log.slice(l).some((e) => e.igFollow) && /단계: 작성자 정보 확인/.test(t2) && /HTTP 404/.test(t2), { note: t2 || '알림 없음' });
+    // 인스타가 계정 번호 요청을 429 로 막으면: 원인(HTTP 429)과 조치 안내
+    l = log.length;
+    await page.goto('https://www.instagram.com/igfollow-429', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    await save('#igf');
+    const t4 = await toast();
+    record('[자동 팔로우] (오류 경로) 인스타가 429 로 막으면 원인·조치 안내', /HTTP 429/.test(t4) && /몇 분 뒤/.test(t4) && !log.slice(l).some((e) => e.igFollow), { note: t4 || '알림 없음' });
+    // 페이지 데이터에 계정 번호가 있으면 따로 묻지 않고 바로 팔로우(429 를 피함)
+    l = log.length;
+    await page.goto('https://www.instagram.com/igfollow-cached', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    await save('#igf');
+    const c = log.slice(l);
+    const t5 = await toast();
+    record('[자동 팔로우] 인스타: 페이지 데이터의 계정 번호로 바로 팔로우(작성자 정보 요청 안 함)', c.some((e) => e.igFollow && e.path === '/api/v1/friendships/create/888/') && !c.some((e) => e.igLookup) && /@igcached 팔로우했습니다/.test(t5), { note: `${JSON.stringify(c.filter((e) => e.igFollow || e.igLookup))} · ${t5}` });
+    // 틱톡: 추천 계정 단추가 아니라 작성자 프로필 옆 팔로우를 누르고, 서버가 되돌리면 실패로 알림
+    await page.goto('https://www.tiktok.com/@ttauthor/photo/7300000000000000777', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    await save('#ttp');
+    const tt = await page.evaluate(() => ({ author: window.__ttFollow || 0, rec: window.__recFollow || 0, txt: document.getElementById('tfb').textContent }));
+    const t6 = await toast();
+    record('[자동 팔로우] 틱톡: 추천 계정 말고 작성자 팔로우 단추를 누르고 결과 확인', tt.author === 1 && tt.rec === 0 && /@ttauthor 팔로우했습니다/.test(t6), { note: `${JSON.stringify(tt)} · ${t6}` });
+    await page.goto('https://www.tiktok.com/@ttauthor/photo/7300000000000000778', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    await save('#ttp');
+    const t7 = await toast();
+    record('[자동 팔로우] (오류 경로) 틱톡이 팔로우를 되돌리면 "팔로우했습니다" 대신 실패 안내', /단계: 팔로우 확인/.test(t7) && /직접 눌러/.test(t7) && !/팔로우했습니다/.test(t7), { note: t7 || '알림 없음' });
     await page.goto('https://www.xiaohongshu.com/xhsfollow', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1500);
     await save('#xp');
@@ -1310,6 +1378,36 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   } finally {
     await setSettings({ potPlayer: false, noAutoplay: false });
     await page.close().catch(() => {});
+  }
+}
+
+// ── 팟플레이어: 틱톡처럼 로그인 쿠키·Referer 가 필요한 영상은 먼저 받아서 연다 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ potPlayer: true, captionOnMedia: true });
+    const ep = await extPage();
+    await ep.evaluate(() => chrome.storage.session.remove('lastExternalPlay'));
+    await page.goto('https://www.tiktok.com/@creator/video/7300000000000000001', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2000);
+    await page.evaluate(() => document.querySelector('video').addEventListener('click', (e) => e.currentTarget.play().catch(() => {})));
+    const before = new Set(listFiles(DL));
+    await page.locator('video').first().click({ position: { x: 40, y: 40 }, force: true });
+    await page.waitForTimeout(1200);
+    const t1 = await page.evaluate(() => document.querySelector('smd-toast')?.shadowRoot.querySelector('.t')?.textContent || '');
+    const saved = await waitFile(before, 60000);
+    await page.waitForTimeout(1500);
+    const t2 = await page.evaluate(() => document.querySelector('smd-toast')?.shadowRoot.querySelector('.t')?.textContent || '');
+    const last = await ep.evaluate(async () => (await chrome.storage.session.get('lastExternalPlay')).lastExternalPlay || null);
+    const rel = saved ? path.relative(DL, saved) : '';
+    const hist = await page.evaluate(() => JSON.parse(document.querySelector('smd-toast')?.dataset.history || '[]').join(' | '));
+    record('[팟플레이어] 틱톡(쿠키 필요): 주소를 넘기지 않고 원본을 먼저 받아 재생용 폴더에 저장 후 안내', !last && /팟플레이어 재생[\\/]tiktok-7300000000000000001\.m4v$/.test(rel) && /먼저 받는 중/.test(hist) && /(팟플레이어로 열었습니다|팟플레이어용 파일을 받았습니다)/.test(t2), { note: `${rel || '저장 안 됨'} · 처음: ${t1.split('\n')[0]} · 끝: ${t2.split('\n')[0]}` });
+    await ep.close();
+  } catch (err) {
+    record('[팟플레이어] 틱톡 먼저 받기', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ potPlayer: false, captionOnMedia: false });
+    await page.close();
   }
 }
 

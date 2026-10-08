@@ -66,7 +66,29 @@ function finish(job, state, extra = {}) {
   if (state === 'done') job.percent = 100;
   notify(job);
   addHistory(job).catch(() => {});
-  if (state === 'done' && job.dupKey) rememberDownload(job).catch(() => {});
+  if (state === 'done' && job.dupKey && !job.request?.playMode) rememberDownload(job).catch(() => {});
+  if (job.request?.playMode) playReady(job, state).catch(() => {});
+}
+
+// 팟플레이어 재생용으로 받은 파일: 기본 재생 프로그램으로 열어 보고, 결과를 페이지에 알린다. 재생용 파일은 최근 3개만 남긴다.
+async function playReady(job, state) {
+  const tell = (m) => job.tabId >= 0 && chrome.tabs.sendMessage(job.tabId, { type: 'smd:play-ready', ...m }, { frameId: job.frameId ?? 0 }).catch(() => {});
+  if (state !== 'done') return tell({ error: job.error || { step: '재생용 파일 받기', reason: '받기에 실패했습니다.', action: '다운로드 버튼으로 받아서 재생하세요.' } });
+  let opened = false;
+  try {
+    if (job.downloadId != null && chrome.downloads.open) {
+      await chrome.downloads.open(job.downloadId);
+      opened = true;
+    }
+  } catch {}
+  tell({ opened, where: job.where || '' });
+  const { playFiles = [] } = await chrome.storage.local.get('playFiles').catch(() => ({}));
+  const list = [...playFiles.filter((id) => id !== job.downloadId), job.downloadId].filter((x) => x != null);
+  for (const id of list.slice(0, -3)) {
+    await chrome.downloads.removeFile(id).catch(() => {});
+    await chrome.downloads.erase({ id }).catch(() => {});
+  }
+  await chrome.storage.local.set({ playFiles: list.slice(-3) }).catch(() => {});
 }
 
 // ───────────── 중복 다운로드 막기 ─────────────
@@ -399,6 +421,7 @@ function siteFolderOf(job) {
 }
 
 function saveFolder(job, settings) {
+  if (job.request?.playMode) return '팟플레이어 재생';
   const parts = [sanitizeFolder(settings.subfolder)];
   // 사이트 폴더: '사이트별 폴더' 전체 켜기 > 지원 사이트 탭에서 사이트마다 넣은 폴더 이름(같은 이름이면 한 폴더로 합쳐짐) > 없으면 다운로드 폴더 그대로
   const own = (settings.siteFolderMap || {})[job.site];
@@ -578,11 +601,12 @@ async function runJob(job) {
   // 화면에서 본문을 못 찾았으면 사이트 데이터의 본문(desc.title)을 쓴다. 탭 제목은 쓰지 않는다.
   const capText = String(req.captionText ?? '').trim() || (desc.title && desc.title !== req.title ? String(desc.title).trim() : '') || (req.captionText === undefined ? String(req.title || '').trim() : '');
   const isImage = desc.type === 'image';
+  const play = !!req.playMode; // 팟플레이어 재생용으로 받는 것은 글자 넣기 없이 원본 그대로
   const cap = {
-    overlay: settings.captionOnMedia !== false && (!!capText || (settings.captionAuthor !== false && !!(req.authorHandle || req.authorName))),
+    overlay: !play && settings.captionOnMedia !== false && (!!capText || (settings.captionAuthor !== false && !!(req.authorHandle || req.authorName))),
     // ②·③ 은 영상에만 (사진은 ① 만)
-    cover: !isImage && !!settings.captionCover,
-    intro: !isImage && !!settings.captionIntro,
+    cover: !play && !isImage && !!settings.captionCover,
+    intro: !play && !isImage && !!settings.captionIntro,
   };
   if (cap.overlay || cap.cover || cap.intro) {
     const caption = {
@@ -641,6 +665,11 @@ async function runChain(job, desc, settings, req) {
       countryText,
       flag: settings.flagPrefix === false ? false : settings.flagStyle === 'emoji' ? 'emoji' : 'name',
     }, d.ext || 'mp4');
+    if (req.playMode) {
+      // 재생용 파일: 짧은 영문 이름 · .m4v(일반 다운로드 .mp4 와 구분 → '이 형식 항상 열기'를 재생용 파일에만 켤 수 있음)
+      const ext = !d.ext || d.ext === 'mp4' ? 'm4v' : d.ext;
+      job.filename = `${job.site}-${String(req.id || Date.now()).replace(/[^\w-]/g, '').slice(0, 40) || Date.now()}.${ext}`;
+    }
     try {
       await attempt(job, d, settings);
       return finish(job, 'done');
@@ -739,7 +768,12 @@ function cancelJob(id) {
 //   유튜브는 영상·음성이 나뉘어 있어 영상 페이지 주소를 넘긴다(팟플레이어가 유튜브 주소를 직접 재생).
 export function playableUrl(req, desc) {
   if (req.site === 'youtube' && req.id) return `https://www.youtube.com/watch?v=${req.id}`;
-  if ((desc?.type === 'file' || desc?.type === 'hls') && /^https?:\/\//.test(desc.url || '')) return desc.url;
+  // 최고 화질이 영상·음성 나뉜 형식이면, 함께 받아 둔 예비 후보 중 소리까지 든 하나짜리 파일(인스타 등)을 쓴다
+  // 팟플레이어는 사이트 쿠키·Referer 를 보낼 수 없다 → 그런 것이 필요한 주소(틱톡 등)는 넘기지 않는다(먼저 받아서 연다)
+  const plain = (d) => !(d.headers && Object.values(d.headers).some(Boolean)) && d.credentials !== 'include';
+  for (const d of [desc, ...((desc && desc.fallbacks) || [])]) {
+    if ((d?.type === 'file' || d?.type === 'hls') && /^https?:\/\//.test(d.url || '') && plain(d)) return d.url;
+  }
   return '';
 }
 async function playExternal(req, sender) {
@@ -753,8 +787,13 @@ async function playExternal(req, sender) {
   } catch (err) {
     return { error: toErr(err, '원본 주소 확인') };
   }
+  if (desc) applyCredentials(desc, req);
   const url = playableUrl(req, desc);
-  if (!url) return { error: { step: '재생 주소 확인', reason: '이 영상은 팟플레이어에 넘길 수 있는 하나짜리 주소를 찾지 못했습니다(영상·음성이 나뉜 형식 등).', action: '다운로드 버튼으로 받아서 재생하세요.' } };
+  if (!url) {
+    // 바로 넘길 주소가 없음(쿠키·Referer 가 필요하거나 영상·음성이 나뉨) → 먼저 받아서 팟플레이어(기본 재생 프로그램)로 연다
+    const job = createJob({ ...req, playMode: true, force: true, captionText: '' }, sender);
+    return { downloading: true, jobId: job.id };
+  }
   const target = `potplayer://${url}`;
   chrome.storage.session.set({ lastExternalPlay: { url, at: Date.now() } }).catch(() => {});
   try {

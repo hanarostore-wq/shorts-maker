@@ -404,6 +404,17 @@ const handlers = {
 
   // ── TikTok ──
   'www.tiktok.com': (req, res, u) => {
+    if (u.pathname === '/@ttauthor/photo/7300000000000000777' || u.pathname === '/@ttauthor/photo/7300000000000000778') {
+      // 틱톡 게시물: 사진 바로 옆에 '추천 계정' 팔로우 단추가 먼저 있고, 작성자 팔로우 단추는 작성자 프로필 링크 옆에 있음.
+      //   -revert 는 눌렀을 때 잠깐 '팔로잉'으로 바뀌었다가 1초 뒤 서버 거절로 '팔로우'로 되돌아감
+      const revert = u.pathname.endsWith('778');
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>TikTok</title></head><body style="margin:0">
+        <div data-e2e="browse-video" style="width:900px;display:flex;gap:20px">
+          <div><div class="rec"><a href="/@someoneelse"><span>추천</span></a><button data-e2e="rec-follow" onclick="window.__recFollow = (window.__recFollow || 0) + 1">팔로우</button></div>
+            <div><img id="ttp" src="https://cdn.example-videos.com/img/photo.jpg" style="width:420px;height:420px;object-fit:cover;display:block"></div></div>
+          <div class="author"><a href="/@ttauthor"><span>작성자</span></a><button data-e2e="follow-button" id="tfb" onclick="window.__ttFollow = (window.__ttFollow || 0) + 1; this.textContent = '팔로잉'; ${revert ? "setTimeout(() => (this.textContent = '팔로우'), 1000);" : ''}">팔로우</button></div>
+        </div></body></html>`);
+    }
     if (u.pathname === '/ttmedia') {
       // 본문 사진 1장 + 댓글 칸 그림 + 넘김 사진(옆 장은 카드 밖) + 흐린 배경 사진(같은 그림 겹침)
       const img = (id, st = '') => `<img id="${id}" src="https://cdn.example-videos.com/img/photo.jpg" style="width:300px;height:300px;object-fit:cover;display:block;${st}">`;
@@ -463,15 +474,18 @@ const handlers = {
 
   // ── Instagram ──
   'www.instagram.com': (req, res, u) => {
-    if (u.pathname === '/igfollow' || u.pathname === '/igfollow-err') {
-      // 인스타 피드 게시물(로그인 쿠키 있음). 작성자는 머리글 프로필 링크로만 알 수 있음
-      const who = u.pathname.endsWith('err') ? 'ghostuser' : 'igauthor';
-      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Instagram</title><script>document.cookie = 'csrftoken=TESTCSRF; path=/'; document.cookie = 'ds_user_id=999; path=/';</script></head><body style="margin:0">
+    if (/^\/igfollow(-err|-429|-cached)?$/.test(u.pathname)) {
+      // 인스타 피드 게시물(로그인 쿠키 있음). 작성자는 머리글 프로필 링크로만 알 수 있음. -cached 는 페이지 데이터에 계정 번호가 있음
+      const who = { '/igfollow': 'igauthor', '/igfollow-err': 'ghostuser', '/igfollow-429': 'busyuser', '/igfollow-cached': 'igcached' }[u.pathname];
+      const data = u.pathname.endsWith('cached') ? `<script type="application/json">${JSON.stringify({ user: { username: 'igcached', pk: '888', full_name: '캐시', profile_pic_url: 'x', friendship_status: { following: false } } })}</script>` : '';
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Instagram</title><script>document.cookie = 'csrftoken=TESTCSRF; path=/'; document.cookie = 'ds_user_id=999; path=/';</script>${data}</head><body style="margin:0">
         <article style="width:480px;margin:20px"><div><div><a href="/${who}/" role="link"><span>${who}</span></a></div></div>
           <div><div><div><img id="igf" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px;height:480px;object-fit:cover;display:block"></div></div></div></article></body></html>`);
     }
     if (u.pathname === '/api/v1/users/web_profile_info/') {
       const name = u.searchParams.get('username');
+      log.push({ host: 'www.instagram.com', igLookup: name });
+      if (name === 'busyuser') return json(req, res, { message: 'Please wait a few minutes before you try again.', status: 'fail' }, 429);
       if (name !== 'igauthor' || req.headers['x-ig-app-id'] !== '936619743392459') return json(req, res, { message: 'User not found', status: 'fail' }, 404);
       return json(req, res, { data: { user: { id: '777', username: 'igauthor', followed_by_viewer: false } }, status: 'ok' });
     }
