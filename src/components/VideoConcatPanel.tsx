@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 type JobStatus = "queued" | "working" | "canceling" | "completed" | "failed" | "canceled";
 type ProcessingMode = "copy" | "normalize";
 type OutputQuality = "source" | "720p" | "1080p";
+type Acceleration = "auto" | "cpu" | "nvidia" | "intel" | "amd";
 type Job = { id: string; status: JobStatus; processingMode: ProcessingMode; outputQuality: OutputQuality; outputName?: string; sourceBytes?: number; outputBytes?: number; progress?: number; etaSeconds?: number; stage?: string; error?: string };
 type SavedJob = { id: string; token: string };
 type NotificationConfig = { configured: boolean; host: string | null };
@@ -30,6 +31,7 @@ export function VideoConcatPanel() {
   const [actionError, setActionError] = useState("");
   const [processingMode, setProcessingMode] = useState<ProcessingMode>("normalize");
   const [outputQuality, setOutputQuality] = useState<OutputQuality>("source");
+  const [acceleration, setAcceleration] = useState<Acceleration>("auto");
   const [webhookUrl, setWebhookUrl] = useState("");
   const [notification, setNotification] = useState<NotificationConfig>({ configured: false, host: null });
   const [notifyBrowser, setNotifyBrowser] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(BROWSER_NOTIFY_KEY) === "true");
@@ -74,7 +76,7 @@ export function VideoConcatPanel() {
       const saved = { id: payload.job.id, token: payload.token };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
       setJob(payload.job);
-      window.location.href = `clipjoin://run?job=${encodeURIComponent(saved.id)}&token=${encodeURIComponent(saved.token)}&mode=${processingMode}&quality=${outputQuality}`;
+      window.location.href = `clipjoin://run?job=${encodeURIComponent(saved.id)}&token=${encodeURIComponent(saved.token)}&mode=${processingMode}&quality=${outputQuality}&accelerator=${acceleration}`;
     } catch (error) { setJob({ id: "local-error", status: "failed", processingMode, outputQuality, error: error instanceof Error ? error.message : "작업 등록에 실패했습니다. 새로고침 후 다시 시도하세요." }); }
     finally { setStarting(false); }
   };
@@ -154,7 +156,7 @@ export function VideoConcatPanel() {
         <p className="mt-3 leading-5 text-[var(--control-muted)]">영상 파일은 PC를 벗어나지 않습니다. 원본 유지 또는 자동 규격 맞춤 처리만 로컬 FFmpeg가 수행하고 웹은 작업 상태만 표시합니다.</p>
       </section>
 
-      <section className="control-room-panel flex flex-col gap-2 p-4"><label className="font-mono text-[10px] text-zinc-500">처리 방식</label><select className="border border-[var(--control-line)] bg-[var(--control-bg)] px-3 py-2 text-xs text-zinc-100 outline-none" value={processingMode} disabled={busy} onChange={(event) => { const mode = event.target.value as ProcessingMode; setProcessingMode(mode); if (mode === "copy") setOutputQuality("source"); }}><option value="copy">원본 그대로 MP4 · 같은 규격만 · 용량 유지</option><option value="normalize">자동 규격 맞춤 MP4 · 코덱·해상도 달라도 처리</option></select><label className="mt-2 font-mono text-[10px] text-zinc-500">출력 화질</label><select className="border border-[var(--control-line)] bg-[var(--control-bg)] px-3 py-2 text-xs text-zinc-100 outline-none" value={outputQuality} disabled={busy || processingMode === "copy"} onChange={(event) => setOutputQuality(event.target.value as OutputQuality)}><option value="source">원본 최대 해상도</option><option value="720p">720p · 첫 영상 방향 유지</option><option value="1080p">1080p · 첫 영상 방향 유지</option></select><p className="text-[10px] leading-5 text-zinc-500">720p·1080p는 첫 번째 원본의 가로·세로 방향을 기준으로 만들고, 다른 영상은 자르지 않고 검은 여백으로 맞춥니다.</p></section>
+      <section className="control-room-panel flex flex-col gap-2 p-4"><label className="font-mono text-[10px] text-zinc-500">처리 방식</label><select className="border border-[var(--control-line)] bg-[var(--control-bg)] px-3 py-2 text-xs text-zinc-100 outline-none" value={processingMode} disabled={busy} onChange={(event) => { const mode = event.target.value as ProcessingMode; setProcessingMode(mode); if (mode === "copy") setOutputQuality("source"); }}><option value="copy">원본 그대로 MP4 · 같은 규격만 · 용량 유지</option><option value="normalize">자동 규격 맞춤 MP4 · 코덱·해상도 달라도 처리</option></select><label className="mt-2 font-mono text-[10px] text-zinc-500">출력 화질</label><select className="border border-[var(--control-line)] bg-[var(--control-bg)] px-3 py-2 text-xs text-zinc-100 outline-none" value={outputQuality} disabled={busy || processingMode === "copy"} onChange={(event) => setOutputQuality(event.target.value as OutputQuality)}><option value="source">원본 최대 해상도</option><option value="720p">720p · 첫 영상 방향 유지</option><option value="1080p">1080p · 첫 영상 방향 유지</option></select><label className="mt-2 font-mono text-[10px] text-zinc-500">가속 인코더</label><select className="border border-[var(--control-line)] bg-[var(--control-bg)] px-3 py-2 text-xs text-zinc-100 outline-none" value={acceleration} disabled={busy || processingMode === "copy"} onChange={(event) => setAcceleration(event.target.value as Acceleration)}><option value="auto">그래픽 가속 자동 선택 (기본)</option><option value="nvidia">NVIDIA GPU · NVENC</option><option value="intel">Intel GPU · Quick Sync</option><option value="amd">AMD GPU · AMF</option><option value="cpu">CPU 고화질</option></select><p className="text-[10px] leading-5 text-zinc-500">자동은 사용 가능한 GPU 인코더를 검사해 우선 사용하고, 지원하지 않으면 CPU 고화질로 안전 전환합니다. GPU 처리 시 메모리 안정성을 위해 한 파일씩 처리합니다.</p><p className="text-[10px] leading-5 text-zinc-500">720p·1080p는 첫 번째 원본의 가로·세로 방향을 기준으로 만들고, 다른 영상은 자르지 않고 검은 여백으로 맞춥니다.</p></section>
 
       <section className="control-room-panel flex flex-col gap-2 p-4"><div className="flex items-center justify-between gap-2"><div><h4 className="font-bold text-zinc-100">완료 알림</h4><p className="mt-1 text-[10px] text-zinc-500">웹훅은 브라우저를 닫아도 완료 시 전송됩니다</p></div>{notification.configured && <span className="font-mono text-[10px] text-emerald-300">연결됨 · {notification.host}</span>}</div><div className="flex gap-2"><input value={webhookUrl} onChange={(event) => setWebhookUrl(event.target.value)} type="url" placeholder="https://discord.com/api/webhooks/..." className="min-w-0 flex-1 border border-[var(--control-line)] bg-[var(--control-bg)] px-3 py-2 text-xs text-zinc-100 outline-none" /><button type="button" className="control-room-button px-3 py-2 text-xs" onClick={() => void saveWebhook()}>웹훅 저장</button></div>{notification.configured && <button type="button" className="self-start text-[10px] text-zinc-500 underline" onClick={() => void saveWebhook(true)}>웹훅 해제</button>}<button type="button" className="self-start border border-[var(--control-line)] px-3 py-2 text-[10px] text-zinc-200" onClick={() => void enableBrowserNotification()}>{notifyBrowser ? "브라우저 알림 허용됨" : "이 브라우저 알림 허용"}</button></section>
 
