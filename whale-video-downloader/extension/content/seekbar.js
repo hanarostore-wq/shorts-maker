@@ -109,6 +109,10 @@
     for (const e of bars.values()) e.w.hidden = true;
   }
   function tick() {
+    const P = globalThis.__SMD_PERF;
+    return P ? P.time('재생바', tickNow) : tickNow();
+  }
+  function tickNow() {
     running = false;
     if (!alive()) return;
     if (!on || document.hidden) return hideAll();

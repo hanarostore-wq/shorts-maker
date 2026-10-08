@@ -288,6 +288,24 @@ function renderSitePanel(id) {
     r.appendChild(b);
     box.appendChild(r);
   }
+  // 성능 진단: 지금 탭에서 확장 기능별로 쓴 시간과 페이지가 멈춘 시간(최근 60초)
+  {
+    const r = document.createElement('div');
+    r.className = 'row-toggle sp-perf';
+    r.innerHTML = '<div><b>성능 진단</b><small>이 페이지가 느릴 때 눌러 보세요. 확장 기능별로 쓴 시간과 페이지가 멈춘 시간(최근 60초)을 보여 줍니다</small><pre class="sp-perf-out" hidden></pre></div>';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sp-floatreset sp-perf-run';
+    b.textContent = '진단';
+    const out = r.querySelector('.sp-perf-out');
+    b.addEventListener('click', async () => {
+      out.hidden = false;
+      out.textContent = '재는 중…';
+      out.textContent = await perfText(currentTabId);
+    });
+    r.appendChild(b);
+    box.appendChild(r);
+  }
   let group = '';
   for (const f of SITE_FEATURES) {
     if (f.sites && !f.sites.includes(id)) continue;
@@ -340,6 +358,29 @@ const fmtDur = (s) => {
 };
 const PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>';
 
+let currentTabId = null;
+// 성능 진단 결과를 읽기 쉬운 글로(실패하면 단계·원인·조치)
+async function perfText(tabId) {
+  if (!tabId) return '진단 실패\n단계: 탭 찾기\n원인: 지금 보고 있는 웹페이지 탭을 찾지 못했습니다\n조치: 웹사이트 탭에서 확장프로그램 아이콘을 눌러 다시 여세요.';
+  let r;
+  try {
+    r = await chrome.tabs.sendMessage(tabId, { type: 'smd:perf' }, { frameId: 0 });
+  } catch (err) {
+    return `진단 실패\n단계: 페이지 연결\n원인: 이 페이지의 확장 스크립트와 연결하지 못했습니다 (${err?.message || err})\n조치: 페이지를 새로고침(F5)한 뒤 다시 누르세요.`;
+  }
+  if (!r) return '진단 실패\n단계: 페이지 응답\n원인: 페이지가 진단 결과를 보내지 않았습니다(확장 업데이트 전에 열린 페이지일 수 있음)\n조치: 페이지를 새로고침(F5)하고 잠시 쓴 뒤 다시 누르세요.';
+  const ours = r.parts.reduce((a, p) => a + p.ms, 0);
+  const lines = [`최근 ${r.seconds}초 동안`, `· 확장 기능이 쓴 시간: 합계 ${ours}ms`];
+  for (const p of r.parts.slice(0, 8)) lines.push(`   - ${p.name}: ${p.ms}ms (${p.n}번, 가장 길게 ${p.max}ms)`);
+  lines.push(`· 페이지가 멈춘 시간(50ms 넘는 작업): ${r.longTasks.n}번, 합계 ${r.longTasks.ms}ms, 가장 길게 ${r.longTasks.max}ms`);
+  lines.push(`· 페이지 안 사진 ${r.images}장 · 영상 ${r.videos}개 · 화면에 보이는 것 ${r.visible}개`);
+  const share = r.longTasks.ms ? Math.round((ours / r.longTasks.ms) * 100) : 0;
+  if (r.longTasks.ms > 1500 && ours < r.longTasks.ms * 0.2) lines.push(`→ 판단: 멈춤의 대부분은 사이트 자체 작업입니다(확장 몫 약 ${share}% 이하). 재생목록·탭을 줄이면 나아질 수 있습니다.`);
+  else if (ours > 1500) lines.push(`→ 판단: 확장 기능이 시간을 많이 씁니다. 위에서 가장 큰 항목을 '이 사이트'에서 꺼 보세요.`);
+  else lines.push('→ 판단: 확장 기능이 쓰는 시간은 작습니다.');
+  return lines.join('\n');
+}
+
 async function renderPage() {
   const forced = Number(new URLSearchParams(location.search).get('tabId'));
   const [tab] = forced ? [await chrome.tabs.get(forced)] : await chrome.tabs.query({ active: true, currentWindow: true });
@@ -352,6 +393,7 @@ async function renderPage() {
     hint.textContent = '웹사이트 탭에서 확장프로그램 아이콘을 눌러 주세요';
     return;
   }
+  currentTabId = tab.id;
   const host = new URL(tab.url).hostname;
   const siteId = SITE_HOSTS.find(([re]) => re.test(host))?.[1] || 'generic';
   renderSitePanel(siteId);

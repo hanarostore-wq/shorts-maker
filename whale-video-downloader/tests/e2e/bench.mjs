@@ -21,7 +21,7 @@ const page = await ctx.newPage();
 const cdp = await ctx.newCDPSession(page);
 await cdp.send('Performance.enable');
 const t0 = Date.now();
-await page.goto('https://www.youtube.com/benchheavy', { waitUntil: 'load' });
+await page.goto(`https://www.youtube.com/${process.env.BENCH_PAGE || 'benchheavy'}`, { waitUntil: 'load' });
 const loadMs = Date.now() - t0;
 await page.waitForTimeout(2000);
 const m = async () => Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map((x) => [x.name, x.value]));
@@ -47,7 +47,8 @@ if (process.env.PROFILE) {
   for (const [k, us] of [...self].sort((x, y) => y[1] - x[1]).slice(0, 18)) console.log(`${(us / 1000).toFixed(0)}ms  ${k}`);
 }
 const d = (k) => Math.round((b[k] - a[k]) * 1000);
-console.log(JSON.stringify({ ext: path.basename(EXT), loadMs, scriptMs: d('ScriptDuration'), layoutMs: d('LayoutDuration'), recalcMs: d('RecalcStyleDuration'), taskMs: d('TaskDuration'), layouts: b.LayoutCount - a.LayoutCount }));
+const gaps = await page.evaluate(() => (window.__gaps || []).slice().sort((a, b) => b - a));
+console.log(JSON.stringify({ page: process.env.BENCH_PAGE || 'benchheavy', maxFrameGapMs: Math.round(gaps[0] || 0), p95GapMs: Math.round(gaps[Math.floor(gaps.length * 0.05)] || 0), ext: path.basename(EXT), loadMs, scriptMs: d('ScriptDuration'), layoutMs: d('LayoutDuration'), recalcMs: d('RecalcStyleDuration'), taskMs: d('TaskDuration'), layouts: b.LayoutCount - a.LayoutCount }));
 await ctx.close();
 server.close?.();
 process.exit(0);

@@ -561,7 +561,17 @@
     const re = PROFILE_RE[adapter.id];
     let handle = '';
     let name = '';
-    if (adapter.id === 'bluesky' && SITES.bskyPost) {
+    // 유튜브: 보기·쇼츠 화면의 채널 칸(재생목록·관련 영상의 다른 채널 링크를 잡지 않게)
+    if (adapter.id === 'youtube') {
+      const inMain = el.closest('#movie_player, #shorts-player, ytd-player, ytd-reel-video-renderer, ytd-shorts');
+      const ch = inMain && (el.closest('ytd-reel-video-renderer')?.querySelector('a[href^="/@"]') ||
+        document.querySelector('ytd-reel-video-renderer[is-active] a[href^="/@"], ytd-watch-metadata #owner a[href^="/@"], ytd-watch-metadata ytd-channel-name a[href^="/@"], ytd-video-owner-renderer a[href^="/@"], #owner a[href^="/@"]'));
+      if (ch) {
+        handle = decodeURIComponent((ch.getAttribute('href') || '').replace(/^\/@/, '').split(/[/?#]/)[0]);
+        name = txtOf(ch).replace(/^@/, '').slice(0, 40);
+        if (name.toLowerCase() === handle.toLowerCase()) name = '';
+      }
+    } else if (adapter.id === 'bluesky' && SITES.bskyPost) {
       const p = SITES.bskyPost(el, '영상');
       if (p.found) {
         const it = el.closest('[data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]');
@@ -1463,7 +1473,8 @@
     if (!imagesOn()) return;
     const vids = videoRects();
     // 싼 검사(원본 크기·화면 안)부터 하고, 비싼 검사(영상 위 썸네일·댓글·가려짐)는 남은 사진에만
-    for (const img of document.images) {
+    const vis = globalThis.__SMD_PERF?.visible;
+    for (const img of vis ? [...vis].filter((x) => x.tagName === 'IMG') : document.images) {
       if ((img.naturalWidth || 0) < 200 || (img.naturalHeight || 0) < 150) continue;
       const r = img.getBoundingClientRect();
       if (r.width < 120 || r.height < 100) continue;
@@ -1712,7 +1723,8 @@
     if (!tracked.size || document.hidden) return;
     if (t - lastPlace < 50) return;
     lastPlace = t;
-    place();
+    const PERF = globalThis.__SMD_PERF;
+    PERF ? PERF.time('다운로드 버튼 위치 맞추기', place) : place();
   };
 
   const boot = () => {
@@ -1722,11 +1734,14 @@
     let pending = false;
     let lastScan = 0;
     const idle = window.requestIdleCallback ? (fn) => requestIdleCallback(fn, { timeout: 1000 }) : (fn) => setTimeout(fn, 50);
+    const PERF = globalThis.__SMD_PERF;
     const runScan = () => {
       pending = false;
       if (document.hidden) return;
+      // 유튜브가 다음 영상으로 넘어가는 중(재생목록·관련 영상을 다시 그림)에는 쉬었다가 끝난 뒤 찾는다
+      if (PERF?.navigating()) return setTimeout(schedule, 300);
       lastScan = performance.now();
-      scan();
+      PERF ? PERF.time('다운로드 버튼 찾기', scan) : scan();
     };
     const schedule = () => {
       if (pending) return;

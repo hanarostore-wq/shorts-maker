@@ -367,8 +367,38 @@ const handlers = {
       // 보기 화면: 구독 단추는 플레이어와 떨어진 곳(제목 아래)에 있다
       const sub = u.searchParams.get('v') === 'YTsubbed001' ? '구독중' : '구독';
       const likeBtn = u.searchParams.get('v') === 'YTlike00001' ? `<ytd-watch-metadata><like-button-view-model><button id="ytlike" aria-pressed="false" onclick="window.__liked = (window.__liked || 0) + 1; this.setAttribute('aria-pressed', this.getAttribute('aria-pressed') === 'true' ? 'false' : 'true')">좋아요</button></like-button-view-model></ytd-watch-metadata>` : '';
+      if (u.searchParams.get('v') === 'YTplist0001') return html(res, ytPage('YTplist0001', false).replace('<body>', '<body><ytd-playlist-panel-renderer><ytd-playlist-panel-video-renderer><a href="/watch?v=other000001">다른 영상</a><a href="/@newstudio_mini">Newstudio_mini</a></ytd-playlist-panel-video-renderer></ytd-playlist-panel-renderer>').replace('</body>', `<ytd-watch-metadata><div id="owner"><ytd-channel-name><a href="/@realowner">진짜 채널</a></ytd-channel-name></div></ytd-watch-metadata></body>`));
       if (u.searchParams.get('v') === 'YTnosub0001') return html(res, ytPage('YTnosub0001', false).replace('</body>', `<ytd-watch-metadata><div id="owner"><a href="/@Jackson-xxz">Jackson</a></div></ytd-watch-metadata></body>`));
       return html(res, ytPage(u.searchParams.get('v'), false).replace('</body>', `${likeBtn}<div id="below" style="margin-top:40px"><ytd-channel-name>테스트 채널</ytd-channel-name> <ytd-subscribe-button-renderer><button id="subbtn" onclick="window.__subscribed = (window.__subscribed || 0) + 1; this.textContent = '구독중'">${sub}</button></ytd-subscribe-button-renderer></div></body>`));
+    }
+    if (u.pathname === '/benchplaylist') {
+      // 성능 측정용: 유튜브 보기 화면 + 영상 544개 재생목록. 2초마다 '다음 영상으로 이동'(재생목록·관련 영상 다시 그림)을 흉내 내고
+      //   이동 뒤 1초 동안 화면이 가장 오래 멈춘 시간(프레임 간격)을 잰다
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>YouTube</title></head><body style="margin:0;background:#0f0f0f;color:#fff">
+        <ytd-app><ytd-watch-flexy><div id="columns" style="display:flex"><div id="primary"><div id="primary-inner"><div id="player"><div id="movie_player" class="html5-video-player" style="width:900px;height:506px;position:relative"><video id="v" src="https://cdn.example-videos.com/long_95s.webm" muted loop autoplay style="width:900px;height:506px"></video><div class="ytp-chrome-bottom" style="position:absolute;bottom:0;left:0;right:0;height:40px"></div></div></div>
+        <ytd-watch-metadata><div id="owner"><ytd-channel-name><a href="/@owner_ch">채널</a></ytd-channel-name><ytd-subscribe-button-renderer><button>구독</button></ytd-subscribe-button-renderer></div><like-button-view-model><button aria-pressed="false">좋아요</button></like-button-view-model></ytd-watch-metadata>
+        <div id="related"></div></div></div><div id="secondary" style="width:400px;height:800px;overflow:auto"><ytd-playlist-panel-renderer id="pl"></ytd-playlist-panel-renderer></div></div></ytd-watch-flexy></ytd-app>
+        <script>
+          window.__gaps = [];
+          let navAt = 0, last = performance.now();
+          (function f(t){ if (navAt && t - navAt < 1000) window.__gaps.push(t - last); last = t; requestAnimationFrame(f); })(performance.now());
+          function build(n){
+            const pl = document.getElementById('pl'); pl.innerHTML = '';
+            for (let i = 0; i < 544; i++) { const e = document.createElement('ytd-playlist-panel-video-renderer'); e.innerHTML = '<a href="/watch?v=pl' + String(i).padStart(9,'0') + '&list=LL&index=' + i + '"><img src="https://cdn.example-videos.com/img/photo.jpg?p=' + i + '" style="width:100px;height:56px"></a><span>영상 ' + i + ' · ' + n + '</span><a href="/@ch' + i + '">채널' + i + '</a>'; pl.appendChild(e); }
+            const rel = document.getElementById('related'); rel.innerHTML = '';
+            for (let i = 0; i < 40; i++) { const e = document.createElement('ytd-compact-video-renderer'); e.innerHTML = '<a href="/watch?v=rl' + String(i).padStart(9,'0') + '"><img src="https://cdn.example-videos.com/img/photo.jpg?r=' + i + '" style="width:168px;height:94px"></a>'; rel.appendChild(e); }
+          }
+          build(0);
+          let n = 0;
+          setInterval(() => {
+            n++;
+            dispatchEvent(new Event('yt-navigate-start'));
+            history.replaceState(null, '', '/watch?v=nav' + String(n).padStart(8, '0') + '&list=LL&index=' + n);
+            navAt = performance.now(); last = navAt;
+            build(n);
+            setTimeout(() => dispatchEvent(new Event('yt-navigate-finish')), 150);
+          }, 2000);
+        </script></body></html>`);
     }
     if (u.pathname === '/benchheavy') {
       // 성능 측정용: 썸네일 600개 + 계속 바뀌는 화면(유튜브 홈·보기 화면처럼 DOM 이 계속 변함)

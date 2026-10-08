@@ -37,8 +37,15 @@
   const scan = (root) => root.querySelectorAll?.('video').forEach(watch);
   // 새로 생기는 영상(무한 스크롤 피드)도 지켜본다. 재생 시작 때도 한 번 더 확인.
   document.addEventListener('play', (ev) => ev.target instanceof HTMLVideoElement && watch(ev.target), true);
-  new MutationObserver((ms) => {
-    for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) (n.tagName === 'VIDEO' ? watch(n) : scan(n));
+  // 새 영상 찾기: 화면이 바뀔 때마다 바뀐 부분을 하나하나 뒤지지 않고, 0.5초에 한 번 영상 목록만 확인(유튜브 재생목록처럼 수백 개가 한꺼번에 바뀔 때 느려지지 않게)
+  const vids = document.getElementsByTagName('video');
+  let pend = 0;
+  new MutationObserver(() => {
+    if (pend) return;
+    pend = setTimeout(() => {
+      pend = 0;
+      for (const v of vids) watch(v);
+    }, 500);
   }).observe(document.documentElement, { childList: true, subtree: true });
   scan(document);
 })();

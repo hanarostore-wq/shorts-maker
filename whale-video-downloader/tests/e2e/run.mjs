@@ -438,6 +438,38 @@ if (!only || only === 'folder') {
   }
 }
 
+// ── 성능 진단(팝업 '이 사이트'): 기능별 시간·페이지 멈춤 표시 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await page.goto('https://www.example-videos.com/float', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(3000);
+    const pp = await extPage();
+    const tabId = await pp.evaluate(async () => (await chrome.tabs.query({ url: 'https://www.example-videos.com/float*' }))[0]?.id);
+    await pp.goto(`chrome-extension://${extId}/popup/popup.html?tabId=${tabId}`);
+    await pp.click('.tab[data-tab="site"]');
+    await pp.waitForTimeout(600);
+    await pp.click('.sp-perf-run');
+    await pp.waitForTimeout(800);
+    const out = await pp.evaluate(() => document.querySelector('.sp-perf-out').textContent);
+    // 오류 경로: 연결할 수 없는 탭
+    await page.goto('about:blank');
+    await pp.goto(`chrome-extension://${extId}/popup/popup.html?tabId=${tabId}`);
+    await pp.click('.tab[data-tab="site"]');
+    await pp.waitForTimeout(600);
+    await pp.click('.sp-perf-run');
+    await pp.waitForTimeout(800);
+    const out2 = await pp.evaluate(() => document.querySelector('.sp-perf-out').textContent);
+    await pp.close();
+    record('[성능 진단] 기능별 시간·페이지 멈춤·판단 표시', /확장 기능이 쓴 시간/.test(out) && /다운로드 버튼 찾기/.test(out) && /페이지가 멈춘 시간/.test(out) && /판단/.test(out), { note: out.replace(/\n/g, ' / ').slice(0, 300) });
+    record('[성능 진단] (오류 경로) 탭과 연결 못 하면 단계·원인·조치', /진단 실패/.test(out2) && /단계:/.test(out2) && /조치:/.test(out2), { note: out2.replace(/\n/g, ' / ') });
+  } catch (err) {
+    record('[성능 진단]', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
 // ── 모든 사이트: 재생바(기본 재생 막대가 있는 영상은 건너뜀) ──
 {
   const page = await ctx.newPage();
@@ -1126,6 +1158,16 @@ if (!only || only === 'place' || '배치'.includes(only)) {
       await page.waitForTimeout(1500);
       const sub2 = await page.evaluate(() => window.__subscribed || 0);
       record('[자동 팔로우] 유튜브: 다운로드 누르면 떨어진 구독 단추도 눌러 구독(이미 구독 중이면 안 누름)', sub.n === 1 && sub.label === '구독중' && sub2 === 0, { note: `구독 ${sub.n}회(${sub.label}) · 이미 구독 중 페이지 ${sub2}회` });
+    }
+
+    // 유튜브: 재생목록에 다른 채널 링크가 있어도 지금 영상 채널(@realowner)을 작성자로
+    {
+      await page.goto('https://www.youtube.com/watch?v=YTplist0001', { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      await page.locator('smd-anchor .btn.show').first().click();
+      await page.waitForTimeout(2500);
+      const t = await page.evaluate(() => document.querySelector('smd-toast')?.dataset.history || '');
+      record('[자동 팔로우] 유튜브 재생목록 화면: 재생목록의 다른 채널 말고 지금 영상 채널을 팔로우 대상으로', /@realowner/.test(t) && !/newstudio_mini/.test(t), { note: t.slice(0, 160) });
     }
 
     // 유튜브: 화면에 구독 단추가 없으면 유튜브 구독 요청으로(로그인 없으면 단계·원인·조치)

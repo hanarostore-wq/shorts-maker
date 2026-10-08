@@ -109,7 +109,11 @@
     return null;
   }
 
-  async function tick() {
+  const tick = () => {
+    const P = globalThis.__SMD_PERF;
+    return P ? P.time('쇼츠 조회수', tickNow) : tickNow();
+  };
+  async function tickNow() {
     if (!alive()) return;
     const m = location.pathname.match(/^\/shorts\/([\w-]{6,})/);
     if (!on || !m) {

@@ -35,8 +35,10 @@
     let bestScore = 0;
     const cx = innerWidth / 2;
     const cy = innerHeight / 2;
-    for (const el of document.querySelectorAll('video, img')) {
-      if (ours(el)) continue;
+    // 화면에 보이는 것만(perf.js 가 브라우저에게서 받아 둔 목록) — 사진 수백 장 위치를 매번 재지 않는다
+    const vis = globalThis.__SMD_PERF?.visible;
+    for (const el of vis ? [...vis] : document.querySelectorAll('video, img')) {
+      if (!el.isConnected || ours(el)) continue;
       const r = el.getBoundingClientRect();
       if (r.width < 160 || r.height < 120) continue;
       const w = Math.min(r.right, innerWidth) - Math.max(r.left, 0);
@@ -246,7 +248,11 @@
   }
 
   function tick() {
-    if (document.hidden) return;
+    if (document.hidden || globalThis.__SMD_PERF?.navigating()) return;
+    const P = globalThis.__SMD_PERF;
+    return P ? P.time('좋아요·팔로우 플로팅', tickNow) : tickNow();
+  }
+  function tickNow() {
     if (!alive()) {
       host?.remove();
       return;
