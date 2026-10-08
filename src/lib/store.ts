@@ -65,15 +65,17 @@ export function isConcatPersistentStorageAvailable() {
 
 const getRedis = getSharedRedis;
 
-export type LocalConcatJobStatus = "queued" | "working" | "completed" | "failed" | "canceled";
+export type LocalConcatJobStatus = "queued" | "working" | "canceling" | "completed" | "failed" | "canceled";
 export type LocalConcatOutputFormat = "mp4";
 export type LocalConcatProcessingMode = "copy" | "normalize";
+export type LocalConcatOutputQuality = "source" | "720p" | "1080p";
 export interface LocalConcatJob {
   id: string;
   token: string;
   status: LocalConcatJobStatus;
   outputFormat: LocalConcatOutputFormat;
   processingMode: LocalConcatProcessingMode;
+  outputQuality: LocalConcatOutputQuality;
   outputName?: string;
   sourceBytes?: number;
   outputBytes?: number;
@@ -250,6 +252,7 @@ function publicConcatJob(job: LocalConcatJob): Omit<LocalConcatJob, "token"> {
     status: job.status,
     outputFormat: job.outputFormat,
     processingMode: job.processingMode,
+    outputQuality: job.outputQuality,
     outputName: job.outputName,
     sourceBytes: job.sourceBytes,
     outputBytes: job.outputBytes,
@@ -391,11 +394,12 @@ async function reflectConcatJobOnAgent(job: LocalConcatJob, incrementCompletion:
       formatConcatEta(job.etaSeconds),
       formatConcatBytes(job.sourceBytes) ? `원본 ${formatConcatBytes(job.sourceBytes)}` : null,
     ].filter(Boolean).join(" · "),
+    canceling: "이어붙이기 취소중",
     completed: ["제작완료", job.outputName, formatConcatBytes(job.outputBytes)].filter(Boolean).join(" · "),
     failed: `⚠ 제작실패${job.error ? ` · ${job.error}` : ""}`,
     canceled: "이어붙이기 대기중",
   };
-  agent.status = job.status === "working" ? "active" : job.status === "queued" || job.status === "canceled" ? "standby" : job.status === "failed" ? "offline" : "active";
+  agent.status = job.status === "working" || job.status === "canceling" ? "active" : job.status === "queued" || job.status === "canceled" ? "standby" : job.status === "failed" ? "offline" : "active";
   agent.task = labels[job.status];
   if (incrementCompletion) {
     const message = labels.completed;
@@ -416,7 +420,7 @@ async function reflectConcatJobOnAgent(job: LocalConcatJob, incrementCompletion:
   await writeState(state);
 }
 
-export async function createLocalConcatJob(outputFormat: LocalConcatOutputFormat, processingMode: LocalConcatProcessingMode) {
+export async function createLocalConcatJob(outputFormat: LocalConcatOutputFormat, processingMode: LocalConcatProcessingMode, outputQuality: LocalConcatOutputQuality) {
   const now = new Date().toISOString();
   const job: LocalConcatJob = {
     id: randomUUID(),
@@ -424,6 +428,7 @@ export async function createLocalConcatJob(outputFormat: LocalConcatOutputFormat
     status: "queued",
     outputFormat,
     processingMode,
+    outputQuality,
     progress: 0,
     createdAt: now,
     updatedAt: now,
@@ -454,6 +459,9 @@ export async function updateLocalConcatJob(input: {
 }) {
   const job = await readConcatJob(input.id);
   if (!job || job.token !== input.token) return null;
+  const terminalStatuses: LocalConcatJobStatus[] = ["completed", "failed", "canceled"];
+  if (terminalStatuses.includes(job.status) && job.status !== input.status) return publicConcatJob(job);
+  if (job.status === "canceling" && input.status === "working") return publicConcatJob(job);
   const wasCompleted = job.status === "completed";
   job.status = input.status;
   job.updatedAt = new Date().toISOString();

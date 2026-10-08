@@ -18,15 +18,53 @@ function readableProcessError(error, toolName) {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-function run(executable, args, { onProgress, totalDuration = 0, baseProgress = 0, progressSpan = 1 } = {}) {
+function cancellationError() {
+  const error = new Error("사용자 요청으로 이어붙이기 작업을 취소했습니다.");
+  error.code = "CONCAT_CANCELED";
+  return error;
+}
+
+function terminateProcessTree(child) {
+  if (!child?.pid || child.exitCode !== null) return;
+  if (process.platform === "win32") {
+    const killer = spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], { windowsHide: true, stdio: "ignore" });
+    killer.on("error", () => child.kill());
+  } else {
+    child.kill("SIGTERM");
+    setTimeout(() => { if (child.exitCode === null) child.kill("SIGKILL"); }, 1500).unref();
+  }
+}
+
+function run(executable, args, { onProgress, totalDuration = 0, baseProgress = 0, progressSpan = 1, signal } = {}) {
   return new Promise((resolve, reject) => {
     let child;
+    let settled = false;
+    let canceled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", abort);
+      callback(value);
+    };
+    const abort = () => {
+      if (!child) {
+        finish(reject, cancellationError());
+        return;
+      }
+      canceled = true;
+      terminateProcessTree(child);
+    };
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
     try {
       child = spawn(executable, args, { windowsHide: true });
     } catch (error) {
-      reject(readableProcessError(error, "FFmpeg"));
+      finish(reject, readableProcessError(error, "FFmpeg"));
       return;
     }
+    signal?.addEventListener("abort", abort, { once: true });
     let stderr = "";
     let progressBuffer = "";
     const startedAt = Date.now();
@@ -51,8 +89,8 @@ function run(executable, args, { onProgress, totalDuration = 0, baseProgress = 0
         newline = progressBuffer.indexOf("\n");
       }
     });
-    child.once("error", (error) => reject(readableProcessError(error, "FFmpeg")));
-    child.once("close", (code) => code === 0 ? resolve(stderr) : reject(new Error(stderr.trim() || `FFmpeg 종료 코드: ${code}`)));
+    child.once("error", (error) => finish(reject, readableProcessError(error, "FFmpeg")));
+    child.once("close", (code) => canceled ? finish(reject, cancellationError()) : code === 0 ? finish(resolve, stderr) : finish(reject, new Error(stderr.trim() || `FFmpeg 종료 코드: ${code}`)));
   });
 }
 
@@ -127,6 +165,21 @@ function outputPathFor(firstFile) {
   return path.join(path.dirname(firstFile), `이어붙임_${stamp}.mp4`);
 }
 
+function outputCanvas(sources, outputQuality) {
+  if (outputQuality === "720p" || outputQuality === "1080p") {
+    const portrait = sources[0].signature.video.height > sources[0].signature.video.width;
+    const shortSide = outputQuality === "720p" ? 720 : 1080;
+    const longSide = outputQuality === "720p" ? 1280 : 1920;
+    return portrait ? { width: shortSide, height: longSide, label: outputQuality, resize: true } : { width: longSide, height: shortSide, label: outputQuality, resize: true };
+  }
+  return {
+    width: even(Math.max(...sources.map((source) => source.signature.video.width))),
+    height: even(Math.max(...sources.map((source) => source.signature.video.height))),
+    label: "원본 최대",
+    resize: false,
+  };
+}
+
 async function inspectSources(inputPaths, binaries = resolveBinaries()) {
   if (!Array.isArray(inputPaths) || inputPaths.length < 2) throw new Error("이어붙일 원본 영상을 2개 이상 선택하세요.");
   const sources = [];
@@ -140,7 +193,7 @@ async function inspectSources(inputPaths, binaries = resolveBinaries()) {
   return { sources, streamCopyCompatible: sources.every((source) => sameSignature(source.signature, sources[0].signature)) };
 }
 
-async function joinSegmentList(segments, outputPath, binaries, onProgress, expectedDuration, message, baseProgress = 0.9, progressSpan = 0.1) {
+async function joinSegmentList(segments, outputPath, binaries, onProgress, expectedDuration, message, baseProgress = 0.9, progressSpan = 0.1, signal) {
   const listPath = path.join(path.dirname(segments[0]), "concat-list.txt");
   await fs.writeFile(listPath, segments.map((segment) => `file '${concatEscape(segment)}'`).join("\n"), "utf8");
   onProgress({ phase: "join", current: segments.length, total: segments.length, progress: baseProgress, message });
@@ -148,11 +201,12 @@ async function joinSegmentList(segments, outputPath, binaries, onProgress, expec
     totalDuration: expectedDuration,
     baseProgress,
     progressSpan,
+    signal,
     onProgress: (details) => onProgress({ phase: "join", current: segments.length, total: segments.length, message, ...details }),
   });
 }
 
-async function streamCopyConcat(sources, outputPath, binaries, onProgress, workDir, expectedDuration) {
+async function streamCopyConcat(sources, outputPath, binaries, onProgress, workDir, expectedDuration, signal) {
   const segments = [];
   let completedDuration = 0;
   for (let index = 0; index < sources.length; index += 1) {
@@ -164,17 +218,19 @@ async function streamCopyConcat(sources, outputPath, binaries, onProgress, workD
       totalDuration: keptDuration,
       baseProgress: (completedDuration / expectedDuration) * 0.9,
       progressSpan: (keptDuration / expectedDuration) * 0.9,
+      signal,
       onProgress: (details) => onProgress({ phase: "trim", current: index + 1, total: sources.length, message: `${index + 1}/${sources.length} 원본 스트림 키프레임 컷`, ...details }),
     });
     completedDuration += keptDuration;
     segments.push(segmentPath);
   }
-  await joinSegmentList(segments, outputPath, binaries, onProgress, expectedDuration, "원본 비트스트림 그대로 이어붙이는 중");
+  await joinSegmentList(segments, outputPath, binaries, onProgress, expectedDuration, "원본 비트스트림 그대로 이어붙이는 중", 0.9, 0.1, signal);
 }
 
-async function normalizeConcat(sources, outputPath, binaries, onProgress, expectedDuration, workDir) {
-  const canvasWidth = even(Math.max(...sources.map((source) => source.signature.video.width)));
-  const canvasHeight = even(Math.max(...sources.map((source) => source.signature.video.height)));
+async function normalizeConcat(sources, outputPath, binaries, onProgress, expectedDuration, workDir, signal, outputQuality) {
+  const canvas = outputCanvas(sources, outputQuality);
+  const canvasWidth = canvas.width;
+  const canvasHeight = canvas.height;
   const targetFps = Math.max(...sources.map((source) => rate(source.signature.video.frameRate)));
   const audioTrackCount = sources[0].signature.audioTracks.length;
   if (!sources.every((source) => source.signature.audioTracks.length === audioTrackCount)) {
@@ -206,9 +262,8 @@ async function normalizeConcat(sources, outputPath, binaries, onProgress, expect
     const keptDuration = keptDurations[index];
     const end = (source.duration - 1).toFixed(3);
     const segmentPath = path.join(workDir, `normalized-${String(index + 1).padStart(6, "0")}.mp4`);
-    const filters = [
-      `[0:v]trim=start=1:end=${end},setpts=PTS-STARTPTS,fps=${targetFps},setsar=1,pad=${canvasWidth}:${canvasHeight}:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p[v]`,
-    ];
+    const resize = canvas.resize ? `,scale=${canvasWidth}:${canvasHeight}:force_original_aspect_ratio=decrease` : "";
+    const filters = [`[0:v]trim=start=1:end=${end},setpts=PTS-STARTPTS,fps=${targetFps}${resize},setsar=1,pad=${canvasWidth}:${canvasHeight}:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p[v]`];
     for (let trackIndex = 0; trackIndex < audioTrackCount; trackIndex += 1) {
       const track = source.signature.audioTracks[trackIndex];
       filters.push(`[0:${track.streamIndex}]atrim=start=1:end=${end},aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo,asetpts=PTS-STARTPTS[a${trackIndex}]`);
@@ -218,28 +273,33 @@ async function normalizeConcat(sources, outputPath, binaries, onProgress, expect
     args.push("-c:v", "libx264", "-crf", "18", "-preset", "veryfast", "-threads", String(threadsPerJob), "-pix_fmt", "yuv420p");
     if (audioTrackCount > 0) args.push("-c:a", "aac", "-b:a", "192k");
     args.push(segmentPath);
-    updateProgress(index, 0, `자동 규격 맞춤 · ${parallelism}개 동시 처리 중`);
+    updateProgress(index, 0, `자동 규격 맞춤 ${canvas.label} · ${parallelism}개 동시 처리 중`);
     await run(binaries.ffmpeg, args, {
       totalDuration: keptDuration,
-      onProgress: (details) => updateProgress(index, details.progress ?? 0, `자동 규격 맞춤 · ${parallelism}개 동시 처리 중`),
+      signal,
+      onProgress: (details) => updateProgress(index, details.progress ?? 0, `자동 규격 맞춤 ${canvas.label} · ${parallelism}개 동시 처리 중`),
     });
     normalizedSegments[index] = segmentPath;
-    updateProgress(index, 1, `자동 규격 맞춤 · ${parallelism}개 동시 처리 중`);
+    updateProgress(index, 1, `자동 규격 맞춤 ${canvas.label} · ${parallelism}개 동시 처리 중`);
   };
   let nextIndex = 0;
-  await Promise.all(Array.from({ length: Math.min(parallelism, sources.length) }, async () => {
+  const normalized = await Promise.allSettled(Array.from({ length: Math.min(parallelism, sources.length) }, async () => {
     while (nextIndex < sources.length) {
       const index = nextIndex;
       nextIndex += 1;
       await normalizeOne(index);
     }
   }));
-  await joinSegmentList(normalizedSegments, outputPath, binaries, onProgress, expectedDuration, "규격을 맞춘 MP4 묶음을 이어붙이는 중");
+  if (signal?.aborted) throw cancellationError();
+  const failed = normalized.find((item) => item.status === "rejected");
+  if (failed?.status === "rejected") throw failed.reason;
+  await joinSegmentList(normalizedSegments, outputPath, binaries, onProgress, expectedDuration, "규격을 맞춘 MP4 묶음을 이어붙이는 중", 0.9, 0.1, signal);
 }
 
-async function concatOriginalQuality(inputPaths, outputPath = null, { onProgress = () => {}, binaries = resolveBinaries(), processingMode = "normalize" } = {}) {
+async function concatOriginalQuality(inputPaths, outputPath = null, { onProgress = () => {}, binaries = resolveBinaries(), processingMode = "normalize", outputQuality = "source", signal } = {}) {
+  if (signal?.aborted) throw cancellationError();
   const { sources, streamCopyCompatible } = await inspectSources(inputPaths, binaries);
-  const shouldNormalize = processingMode === "normalize" && !streamCopyCompatible;
+  const shouldNormalize = processingMode === "normalize" && (!streamCopyCompatible || outputQuality !== "source");
   if (!streamCopyCompatible && !shouldNormalize) throw new Error("규격이 다른 MP4입니다. 자동 규격 맞춤 MP4 옵션을 선택하세요.");
   const absoluteOutput = path.resolve(outputPath || outputPathFor(sources[0].filePath));
   if (new Set(sources.map((source) => source.filePath)).has(absoluteOutput)) throw new Error("출력 파일은 원본과 다른 이름이어야 합니다.");
@@ -250,15 +310,15 @@ async function concatOriginalQuality(inputPaths, outputPath = null, { onProgress
   let completed = false;
   try {
     const expectedDuration = sources.reduce((total, source) => total + source.duration - 2, 0);
-    if (shouldNormalize) await normalizeConcat(sources, stagedOutput, binaries, onProgress, expectedDuration, workDir);
-    else await streamCopyConcat(sources, stagedOutput, binaries, onProgress, workDir, expectedDuration);
+    if (shouldNormalize) await normalizeConcat(sources, stagedOutput, binaries, onProgress, expectedDuration, workDir, signal, outputQuality);
+    else await streamCopyConcat(sources, stagedOutput, binaries, onProgress, workDir, expectedDuration, signal);
     const metadata = await probe(stagedOutput, binaries);
     const signature = streamSignature({ ...metadata, filePath: stagedOutput });
     if (!shouldNormalize && !sameOutputContent(signature, sources[0].signature)) throw new Error("출력 규격이 원본과 달라져 결과 파일을 보존하지 않았습니다.");
     await fs.rename(stagedOutput, absoluteOutput);
     completed = true;
     onProgress({ phase: "done", current: sources.length, total: sources.length, progress: 1, etaSeconds: 0, message: "제작완료" });
-    return { outputPath: absoluteOutput, sourceCount: sources.length, keptDuration: expectedDuration, mode: shouldNormalize ? "normalized-mp4" : "source-stream-copy", signature };
+    return { outputPath: absoluteOutput, sourceCount: sources.length, keptDuration: expectedDuration, outputQuality, mode: shouldNormalize ? "normalized-mp4" : "source-stream-copy", signature };
   } finally {
     if (!completed) await fs.rm(stagedOutput, { force: true });
     await fs.rm(workDir, { recursive: true, force: true });

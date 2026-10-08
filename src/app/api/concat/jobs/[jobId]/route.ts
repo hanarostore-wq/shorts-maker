@@ -4,7 +4,7 @@ import { getLocalConcatJob, isConcatPersistentStorageAvailable, updateLocalConca
 export const runtime = "nodejs";
 
 type Context = { params: Promise<{ jobId: string }> };
-const statuses = new Set<LocalConcatJobStatus>(["queued", "working", "completed", "failed", "canceled"]);
+const statuses = new Set<LocalConcatJobStatus>(["queued", "working", "canceling", "completed", "failed", "canceled"]);
 
 export async function GET(request: NextRequest, context: Context) {
   if (!isConcatPersistentStorageAvailable()) return NextResponse.json({ error: "공유 저장소가 연결되지 않았습니다." }, { status: 503 });
