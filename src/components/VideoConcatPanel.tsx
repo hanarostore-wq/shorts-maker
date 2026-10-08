@@ -103,6 +103,30 @@ export function VideoConcatPanel() {
     }
   };
 
+  const confirmWorkerStopped = async () => {
+    if (!job || job.status !== "canceling") return;
+    setCanceling(true);
+    setActionError("");
+    try {
+      const savedText = window.localStorage.getItem(STORAGE_KEY);
+      if (!savedText) throw new Error("이 브라우저에 작업 취소 권한이 없습니다.");
+      const saved = JSON.parse(savedText) as SavedJob;
+      if (saved.id !== job.id) throw new Error("현재 작업의 취소 정보를 찾지 못했습니다. 페이지를 새로고침하세요.");
+      const response = await fetch(`/api/concat/jobs/${encodeURIComponent(saved.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: saved.token, status: "canceled", stage: "PC 작업자 종료 확인" }),
+      });
+      const payload = await response.json().catch(() => null) as { job?: Job; error?: string } | null;
+      if (!response.ok || !payload?.job) throw new Error(payload?.error ?? "취소 완료 처리에 실패했습니다.");
+      setJob(payload.job);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "취소 완료 처리에 실패했습니다.");
+    } finally {
+      setCanceling(false);
+    }
+  };
+
   const saveWebhook = async (clear = false) => {
     const response = await fetch("/api/concat/notifications", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ webhookUrl: clear ? null : webhookUrl }) });
     if (!response.ok) return;
@@ -134,7 +158,7 @@ export function VideoConcatPanel() {
 
       <section className="control-room-panel flex flex-col gap-2 p-4"><div className="flex items-center justify-between gap-2"><div><h4 className="font-bold text-zinc-100">완료 알림</h4><p className="mt-1 text-[10px] text-zinc-500">웹훅은 브라우저를 닫아도 완료 시 전송됩니다</p></div>{notification.configured && <span className="font-mono text-[10px] text-emerald-300">연결됨 · {notification.host}</span>}</div><div className="flex gap-2"><input value={webhookUrl} onChange={(event) => setWebhookUrl(event.target.value)} type="url" placeholder="https://discord.com/api/webhooks/..." className="min-w-0 flex-1 border border-[var(--control-line)] bg-[var(--control-bg)] px-3 py-2 text-xs text-zinc-100 outline-none" /><button type="button" className="control-room-button px-3 py-2 text-xs" onClick={() => void saveWebhook()}>웹훅 저장</button></div>{notification.configured && <button type="button" className="self-start text-[10px] text-zinc-500 underline" onClick={() => void saveWebhook(true)}>웹훅 해제</button>}<button type="button" className="self-start border border-[var(--control-line)] px-3 py-2 text-[10px] text-zinc-200" onClick={() => void enableBrowserNotification()}>{notifyBrowser ? "브라우저 알림 허용됨" : "이 브라우저 알림 허용"}</button></section>
 
-      <section className="control-room-panel flex flex-col gap-3 p-4"><div><h4 className="font-bold text-zinc-100">내 PC에서 이어붙이기 시작</h4><p className="mt-1 text-[10px] leading-5 text-zinc-500">브라우저·작업 창을 닫아도 시작된 작업은 계속됩니다. 완료 팝업 대신 이 직원 상태와 설정한 웹훅으로 결과를 확인합니다.</p></div>{busy ? <button type="button" className="border border-red-500/70 bg-red-950/20 px-3 py-2 text-center text-xs font-bold text-red-200 disabled:cursor-not-allowed disabled:opacity-50" disabled={canceling || job?.status === "canceling"} onClick={() => void cancel()}>{canceling || job?.status === "canceling" ? "취소 요청 중" : "작업 취소"}</button> : <button type="button" className="control-room-button px-3 py-2 text-center text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50" disabled={starting} onClick={() => void start()}>{processingMode === "normalize" ? "자동 규격 맞춤으로 선택" : "원본 MP4 여러 개 선택"}</button>}{job?.stage && (job.status === "working" || job.status === "canceling") && <p className="text-[10px] text-zinc-500">{job.stage}</p>}{actionError && <p className="text-[10px] leading-5 text-red-300">{actionError}</p>}{job?.status === "failed" && <p className="text-[10px] leading-5 text-red-300">{job.error ?? "작업에 실패했습니다."}</p>}</section>
+      <section className="control-room-panel flex flex-col gap-3 p-4"><div><h4 className="font-bold text-zinc-100">내 PC에서 이어붙이기 시작</h4><p className="mt-1 text-[10px] leading-5 text-zinc-500">브라우저·작업 창을 닫아도 시작된 작업은 계속됩니다. 완료 팝업 대신 이 직원 상태와 설정한 웹훅으로 결과를 확인합니다.</p></div>{busy ? job?.status === "canceling" ? <div className="flex flex-col gap-2"><p className="text-[10px] leading-5 text-amber-200">PC 작업자가 15초 이상 응답하지 않으면 PC에서 FFmpeg를 종료한 뒤 아래 버튼으로 취소를 확정하세요.</p><button type="button" className="border border-amber-500/70 bg-amber-950/20 px-3 py-2 text-center text-xs font-bold text-amber-100 disabled:cursor-not-allowed disabled:opacity-50" disabled={canceling} onClick={() => void confirmWorkerStopped()}>{canceling ? "취소 완료 처리 중" : "PC 작업자 종료 확인"}</button></div> : <button type="button" className="border border-red-500/70 bg-red-950/20 px-3 py-2 text-center text-xs font-bold text-red-200 disabled:cursor-not-allowed disabled:opacity-50" disabled={canceling} onClick={() => void cancel()}>{canceling ? "취소 요청 중" : "작업 취소"}</button> : <button type="button" className="control-room-button px-3 py-2 text-center text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50" disabled={starting} onClick={() => void start()}>{processingMode === "normalize" ? "자동 규격 맞춤으로 선택" : "원본 MP4 여러 개 선택"}</button>}{job?.stage && (job.status === "working" || job.status === "canceling") && <p className="text-[10px] text-zinc-500">{job.stage}</p>}{actionError && <p className="text-[10px] leading-5 text-red-300">{actionError}</p>}{job?.status === "failed" && <p className="text-[10px] leading-5 text-red-300">{job.error ?? "작업에 실패했습니다."}</p>}</section>
     </div>
   );
 }
