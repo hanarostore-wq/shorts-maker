@@ -280,24 +280,19 @@ async function joinSegmentList(segments, outputPath, binaries, onProgress, expec
 }
 
 async function streamCopyConcat(sources, outputPath, binaries, onProgress, workDir, expectedDuration, signal) {
-  const segments = [];
-  let completedDuration = 0;
-  for (let index = 0; index < sources.length; index += 1) {
-    const source = sources[index];
-    const keptDuration = source.duration - 2;
-    const segmentPath = path.join(workDir, `segment-${String(index + 1).padStart(6, "0")}.mp4`);
-    onProgress({ phase: "trim", current: index + 1, total: sources.length, progress: completedDuration / expectedDuration, message: `${index + 1}/${sources.length} 원본 스트림 키프레임 컷` });
-    await run(binaries.ffmpeg, ["-hide_banner", "-nostdin", "-y", "-progress", "pipe:2", "-ss", "1", "-i", source.filePath, "-t", keptDuration.toFixed(3), "-map", "0", "-c", "copy", "-avoid_negative_ts", "make_zero", "-fflags", "+genpts", segmentPath], {
-      totalDuration: keptDuration,
-      baseProgress: (completedDuration / expectedDuration) * 0.9,
-      progressSpan: (keptDuration / expectedDuration) * 0.9,
-      signal,
-      onProgress: (details) => onProgress({ phase: "trim", current: index + 1, total: sources.length, message: `${index + 1}/${sources.length} 원본 스트림 키프레임 컷`, ...details }),
-    });
-    completedDuration += keptDuration;
-    segments.push(segmentPath);
-  }
-  await joinSegmentList(segments, outputPath, binaries, onProgress, expectedDuration, "원본 비트스트림 그대로 이어붙이는 중", 0.9, 0.1, signal);
+  const listPath = path.join(workDir, "fast-concat-list.txt");
+  const list = sources.map((source) => [
+    `file '${concatEscape(source.filePath)}'`,
+    "inpoint 1",
+    `outpoint ${(source.duration - 1).toFixed(3)}`,
+  ].join("\n")).join("\n");
+  await fs.writeFile(listPath, list, "utf8");
+  onProgress({ phase: "fast-copy", current: 0, total: sources.length, progress: 0, message: `초고속 원본 이어붙이기 · ${sources.length}개 파일` });
+  await run(binaries.ffmpeg, ["-hide_banner", "-nostdin", "-y", "-progress", "pipe:2", "-f", "concat", "-safe", "0", "-i", listPath, "-map", "0", "-c", "copy", "-avoid_negative_ts", "make_zero", "-fflags", "+genpts", "-movflags", "+faststart", outputPath], {
+    totalDuration: expectedDuration,
+    signal,
+    onProgress: (details) => onProgress({ phase: "fast-copy", current: sources.length, total: sources.length, message: `초고속 원본 이어붙이기 · ${sources.length}개 파일`, ...details }),
+  });
 }
 
 async function normalizeConcat(sources, outputPath, binaries, onProgress, expectedDuration, workDir, signal, outputQuality, encoderPlan) {
