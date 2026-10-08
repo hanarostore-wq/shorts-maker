@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { randomBytes, randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
+import fs from "node:fs";
 import { isIP } from "node:net";
 import { departments as initialDepartments, projects } from "./mock-data";
 import { getAgentPlatforms } from "./agentIntegrations";
@@ -71,6 +72,20 @@ type TraderTrade = {
 type TraderRuntime = { health: TraderHealth; lastTrade: TraderTrade | null } | { error: string };
 
 const TRADER_ORIGIN = (process.env.YUJIN_TRADERS_ORIGIN || "http://127.0.0.1:7070").replace(/\/$/, "");
+const COLLAB_SYNC_STATUS_PATH = process.env.YUJIN_COLLAB_SYNC_STATUS_PATH || "C:/ProgramData/YuJinTraders/collaboration-sync/status.json";
+
+type CollaborationRuntime = {
+  phase?: string;
+  lastError?: string | null;
+  pendingCommands?: number;
+  lastExport?: { market?: string; side?: string; at?: string } | null;
+  lastCommand?: { agentId?: string; agentName?: string; operation?: string; status?: string; processedAt?: string; error?: string } | null;
+};
+
+function inspectCollaborationRuntime(): CollaborationRuntime | null {
+  try { return JSON.parse(fs.readFileSync(COLLAB_SYNC_STATUS_PATH, "utf8")) as CollaborationRuntime; }
+  catch { return null; }
+}
 
 function parseTraderCsvRow(line: string): TraderTrade | null {
   const values = [...line.matchAll(/"((?:""|[^"])*)"/g)].map((match) => match[1].replaceAll('""', '"'));
@@ -139,6 +154,34 @@ function applyTraderRuntime(state: State, runtime: TraderRuntime) {
   const tradeId = `trader-fill-${trade.time}-${trade.market}-${trade.side}`;
   const detail = [trade.pnl && `손익 ${trade.pnl}원`, trade.pnlPct && `${trade.pnlPct}%`, trade.reason].filter(Boolean).join(" · ");
   upsertTraderLog(state, tradeId, `PAPER ${trade.side} 체결 · ${trade.market}${detail ? ` · ${detail}` : ""}`);
+}
+
+function applyCollaborationRuntime(state: State, runtime: CollaborationRuntime | null) {
+  const coin = state.departments.find((department) => department.id === "coin");
+  const analyst = coin?.agents.find((agent) => agent.id === "c_trade_analyst");
+  if (!coin || !analyst) return;
+  if (!runtime) {
+    analyst.status = "standby";
+    analyst.task = "체결·차트·진입·매도·익절·손절 근거 동기화 서비스 연결 대기";
+    return;
+  }
+  const healthy = runtime.phase === "healthy";
+  analyst.status = healthy ? "active" : runtime.phase === "degraded" ? "offline" : "standby";
+  analyst.task = healthy && runtime.lastExport
+    ? `GitHub 내보내기 정상 · ${runtime.lastExport.market || "-"} ${runtime.lastExport.side || "체결"} · 차트·근거 포함`
+    : `⚠ GitHub 내보내기 ${runtime.lastError || "연결 확인 중"}`.slice(0, 180);
+  for (const agent of coin.agents.filter((item) => ["c_gemini", "c_claude", "c_grok", "c_manus", "c_gpt"].includes(item.id))) {
+    const command = runtime.lastCommand;
+    if (command?.agentId === agent.id) {
+      agent.status = command.status === "applied" ? "active" : "offline";
+      agent.task = command.status === "applied"
+        ? `${agent.name} 슬롯 ${command.operation || "명령"} 적용 완료 · GitHub 이력 기록`
+        : `⚠ ${agent.name} 슬롯 명령 거부 · ${command.error || "검증 실패"}`.slice(0, 180);
+    } else {
+      agent.status = healthy ? "standby" : "offline";
+      agent.task = healthy ? `${agent.name} 슬롯 추가·삭제·적용 명령 GitHub 대기` : `⚠ ${agent.name} 명령 대기열 연결 확인 필요`;
+    }
+  }
 }
 
 export function getSharedRedis(): Redis | null {
@@ -577,6 +620,7 @@ export async function getState(): Promise<State> {
     inspectTraderRuntime(),
   ]);
   applyTraderRuntime(state, traderRuntime);
+  applyCollaborationRuntime(state, inspectCollaborationRuntime());
   const storeDepartment = state.departments.find((department) => department.id === "store");
   const approvalAgent = storeDepartment?.agents.find((agent) => agent.id === "s7");
   const taskAgent = storeDepartment?.agents.find((agent) => agent.id === "s8");
