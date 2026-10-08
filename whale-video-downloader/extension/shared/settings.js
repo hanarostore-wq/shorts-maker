@@ -8,7 +8,7 @@ export const DEFAULT_SETTINGS = {
   translateCaption: true, // 피드 글이 한국어가 아니면 한국어 번역을 캡처 아래에 붙임 // 요약 넣을 때 원본도 함께 저장
   captionCover: false, // [재인코딩 없음] 영상 표지(썸네일)에 피드 스크린샷 + 설명 정보에 피드 내용 + 같은 이름 PNG
   captionIntro: false, // 영상 맨 앞에 피드 스크린샷 3초(재인코딩)
-  potPlayer: false, // 재생 버튼을 누르면 팟플레이어로 재생(업데이트 bat 이 연결을 등록해야 동작)
+  potPlayer: false, // 재생 버튼을 누르면 팟플레이어로 재생(팟플레이어가 등록한 potplayer:// 연결 사용)
   noAutoplay: false, // 사이트가 스스로 영상을 트는 자동재생 막기(직접 누른 영상만 재생). X·블루스카이는 사이트별 기본값으로 켬
   siteSettings: {}, // 사이트별 기능 켜고 끄기 { x: { noAutoplay: true, … } } — 없으면 위의 전체 기본값
   captionAuthor: true, // 영상·사진 위 글자 첫 줄에 '작성자 이름 (@아이디) · 사이트'
@@ -121,7 +121,7 @@ export const SITE_FEATURES = [
   { key: 'captionCover', group: '글자 넣기', name: '영상 표지에 피드 화면', desc: '영상 표지(썸네일)에 게시물 화면을 넣습니다' },
   { key: 'captionIntro', group: '글자 넣기', name: '영상 앞 3초에 피드 화면', desc: '영상 맨 앞에 게시물 화면을 3초 붙입니다' },
   { key: 'noAutoplay', group: '재생', name: '자동재생 끄기', desc: '사이트가 스스로 영상을 틀지 못하게 합니다. 직접 누른 영상만 재생 (바꾼 뒤 새로고침)' },
-  { key: 'potPlayer', group: '재생', name: '재생 버튼 → 팟플레이어로 재생', desc: '재생을 누르면 웨일 대신 팟플레이어로 원본을 엽니다 (업데이트 bat 1회 실행 필요 · 바꾼 뒤 새로고침)' },
+  { key: 'potPlayer', group: '재생', name: '재생 버튼 → 팟플레이어로 재생', desc: '재생을 누르면 웨일 대신 팟플레이어로 원본을 엽니다 (처음에 웨일이 묻는 "외부 프로그램 열기" 허용 · 바꾼 뒤 새로고침)' },
   { key: 'pauseOffscreen', group: '재생', name: '화면 밖 영상 정지', desc: '스크롤로 화면에서 벗어난 영상은 멈춥니다' },
   { key: 'autoFollow', group: '팔로우', name: '다운로드하면 작성자 자동 팔로우', desc: '저장 버튼을 누른 게시물의 작성자를 팔로우합니다', sites: ['x', 'bluesky', 'instagram', 'tiktok', 'youtube', 'threads', 'douyin', 'weibo', 'bilibili', 'xiaohongshu', 'pinterest', 'kuaishou', 'facebook', 'generic'] },
   { key: 'followAllButton', group: '팔로우', name: '팔로우 목록 전부 팔로우 버튼', desc: '팔로워·팔로잉 목록 화면에 버튼을 띄웁니다', sites: ['x', 'bluesky', 'instagram', 'threads', 'tiktok', 'douyin', 'weibo', 'bilibili', 'xiaohongshu', 'pinterest', 'kuaishou'] },

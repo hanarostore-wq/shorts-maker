@@ -734,7 +734,8 @@ function cancelJob(id) {
 }
 
 // ───────────────────────────── 팟플레이어로 재생 ─────────────────────────────
-// 다운로드와 같은 방법으로 원본 주소를 찾은 뒤 smdplay: 주소로 열면, PC 에 등록된 연결(업데이트 bat 이 등록)이 팟플레이어를 실행한다.
+// 다운로드와 같은 방법으로 원본 주소를 찾은 뒤 potplayer:// 주소로 연다. 팟플레이어가 설치할 때 스스로 등록한 연결을 쓰므로
+//   PC 설정(레지스트리)을 따로 바꾸지 않는다(업데이트 bat 에 연결 등록을 넣었더니 백신이 bat 실행을 막았음).
 //   유튜브는 영상·음성이 나뉘어 있어 영상 페이지 주소를 넘긴다(팟플레이어가 유튜브 주소를 직접 재생).
 export function playableUrl(req, desc) {
   if (req.site === 'youtube' && req.id) return `https://www.youtube.com/watch?v=${req.id}`;
@@ -754,12 +755,12 @@ async function playExternal(req, sender) {
   }
   const url = playableUrl(req, desc);
   if (!url) return { error: { step: '재생 주소 확인', reason: '이 영상은 팟플레이어에 넘길 수 있는 하나짜리 주소를 찾지 못했습니다(영상·음성이 나뉜 형식 등).', action: '다운로드 버튼으로 받아서 재생하세요.' } };
-  const target = `smdplay:${encodeURIComponent(url)}`;
+  const target = `potplayer://${url}`;
   chrome.storage.session.set({ lastExternalPlay: { url, at: Date.now() } }).catch(() => {});
   try {
     await chrome.tabs.update(sender.tab.id, { url: target });
   } catch (err) {
-    return { error: { step: '팟플레이어 실행', reason: `웨일이 팟플레이어 연결을 열지 못했습니다 (${err?.message || err}).`, action: '업데이트 bat 을 한 번 더 실행해 팟플레이어 연결을 등록한 뒤, 웨일이 "외부 프로그램 열기"를 물으면 허용하세요.' } };
+    return { error: { step: '팟플레이어 실행', reason: `웨일이 팟플레이어 연결을 열지 못했습니다 (${err?.message || err}).`, action: '팟플레이어가 설치돼 있는지 확인하고, 웨일이 "외부 프로그램 열기(PotPlayer)"를 물으면 허용하세요.' } };
   }
   return { ok: true, url };
 }
