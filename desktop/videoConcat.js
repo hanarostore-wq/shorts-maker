@@ -37,7 +37,7 @@ function capture(executable, args) {
 function unique(values) { return [...new Set(values.filter(Boolean))]; }
 
 const hardwareEncoders = [
-  { id: "nvidia", encoder: "h264_nvenc", label: "NVIDIA NVENC", args: ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "19", "-b:v", "0", "-pix_fmt", "yuv420p"] },
+  { id: "nvidia", encoder: "h264_nvenc", label: "NVIDIA NVENC 고속", args: ["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "19", "-b:v", "0", "-pix_fmt", "yuv420p"] },
   { id: "intel", encoder: "h264_qsv", label: "Intel Quick Sync", args: ["-c:v", "h264_qsv", "-global_quality", "20", "-look_ahead", "0", "-pix_fmt", "nv12"] },
   { id: "amd", encoder: "h264_amf", label: "AMD AMF", args: ["-c:v", "h264_amf", "-quality", "balanced", "-rc", "cqp", "-qp_i", "20", "-qp_p", "22", "-pix_fmt", "yuv420p"] },
 ];
@@ -305,17 +305,20 @@ async function normalizeConcat(sources, outputPath, binaries, onProgress, expect
     throw new Error("원본마다 오디오 트랙 수가 달라 자동 규격 맞춤을 중단했습니다. 소리를 삭제하지 않기 위한 안전 조치입니다.");
   }
 
-  // Windows에는 FFmpeg 명령줄 길이 제한이 있다. 한 파일씩 임시 MP4를 만든 뒤
-  // 목록 파일로 합치되, 여유 RAM과 해상도에 맞춰 병렬 수를 제한한다.
+  // 파일마다 FFmpeg를 띄우면 GPU 초기화와 프로세스 시작 비용이 누적된다.
+  // 명령줄 길이와 메모리를 안전하게 지키는 작은 묶음 단위로 한 번에 변환한다.
   const cpuCount = Math.max(1, os.cpus().length || 1);
   const cpuParallelism = cpuCount >= 12 ? 3 : cpuCount >= 6 ? 2 : 1;
-  const estimatedMemoryPerJob = Math.max(512 * MB, canvasWidth * canvasHeight * 80);
+  const batchSize = encoderPlan.hardware ? 4 : 2;
+  const estimatedMemoryPerJob = Math.max(512 * MB, canvasWidth * canvasHeight * 80) * batchSize;
   const reservedMemory = Math.max(Math.floor(os.totalmem() * 0.15), 1536 * MB);
   const usableMemory = Math.max(estimatedMemoryPerJob, os.freemem() - reservedMemory);
   const memoryParallelism = Math.max(1, Math.floor(usableMemory / estimatedMemoryPerJob));
   const parallelism = encoderPlan.hardware ? 1 : Math.max(1, Math.min(cpuParallelism, memoryParallelism));
   const threadsPerJob = Math.max(1, Math.floor(cpuCount / parallelism));
-  const normalizedSegments = new Array(sources.length);
+  const batches = [];
+  for (let start = 0; start < sources.length; start += batchSize) batches.push(Array.from({ length: Math.min(batchSize, sources.length - start) }, (_, offset) => start + offset));
+  const normalizedSegments = new Array(batches.length);
   const sourceProgress = new Array(sources.length).fill(0);
   const keptDurations = sources.map((source) => source.duration - 2);
   const updateProgress = (index, localProgress, message) => {
@@ -330,38 +333,61 @@ async function normalizeConcat(sources, outputPath, binaries, onProgress, expect
       message,
     });
   };
-  const normalizeOne = async (index) => {
-    const source = sources[index];
-    const keptDuration = keptDurations[index];
-    const end = (source.duration - 1).toFixed(3);
-    const segmentPath = path.join(workDir, `normalized-${String(index + 1).padStart(6, "0")}.mp4`);
+  const normalizeBatch = async (batchIndex) => {
+    const sourceIndexes = batches[batchIndex];
+    const batchSources = sourceIndexes.map((index) => sources[index]);
+    const batchDuration = sourceIndexes.reduce((total, index) => total + keptDurations[index], 0);
+    const segmentPath = path.join(workDir, `normalized-batch-${String(batchIndex + 1).padStart(5, "0")}.mp4`);
     const resize = canvas.resize ? `,scale=${canvasWidth}:${canvasHeight}:force_original_aspect_ratio=decrease` : "";
-    const filters = [`[0:v]trim=start=1:end=${end},setpts=PTS-STARTPTS,fps=${targetFps}${resize},setsar=1,pad=${canvasWidth}:${canvasHeight}:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p[v]`];
-    for (let trackIndex = 0; trackIndex < audioTrackCount; trackIndex += 1) {
-      const track = source.signature.audioTracks[trackIndex];
-      filters.push(`[0:${track.streamIndex}]atrim=start=1:end=${end},aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo,asetpts=PTS-STARTPTS[a${trackIndex}]`);
-    }
-    const args = ["-hide_banner", "-nostdin", "-y", "-progress", "pipe:2", "-i", source.filePath, "-filter_complex", filters.join(";"), "-map", "[v]"];
-    for (let trackIndex = 0; trackIndex < audioTrackCount; trackIndex += 1) args.push("-map", `[a${trackIndex}]`);
+    const filters = [];
+    const videoLabels = [];
+    const audioLabels = Array.from({ length: audioTrackCount }, () => []);
+    const args = ["-hide_banner", "-nostdin", "-y", "-progress", "pipe:2"];
+    for (const source of batchSources) args.push("-i", source.filePath);
+    batchSources.forEach((source, inputIndex) => {
+      const end = (source.duration - 1).toFixed(3);
+      const videoLabel = `v${inputIndex}`;
+      filters.push(`[${inputIndex}:v]trim=start=1:end=${end},setpts=PTS-STARTPTS,fps=${targetFps}${resize},setsar=1,pad=${canvasWidth}:${canvasHeight}:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p[${videoLabel}]`);
+      videoLabels.push(`[${videoLabel}]`);
+      for (let trackIndex = 0; trackIndex < audioTrackCount; trackIndex += 1) {
+        const track = source.signature.audioTracks[trackIndex];
+        const audioLabel = `a${inputIndex}_${trackIndex}`;
+        filters.push(`[${inputIndex}:${track.streamIndex}]atrim=start=1:end=${end},aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo,asetpts=PTS-STARTPTS[${audioLabel}]`);
+        audioLabels[trackIndex].push(`[${audioLabel}]`);
+      }
+    });
+    filters.push(`${videoLabels.join("")}concat=n=${batchSources.length}:v=1:a=0[vout]`);
+    for (let trackIndex = 0; trackIndex < audioTrackCount; trackIndex += 1) filters.push(`${audioLabels[trackIndex].join("")}concat=n=${batchSources.length}:v=0:a=1[aout${trackIndex}]`);
+    args.push("-filter_complex", filters.join(";"), "-map", "[vout]");
+    for (let trackIndex = 0; trackIndex < audioTrackCount; trackIndex += 1) args.push("-map", `[aout${trackIndex}]`);
     args.push(...encoderPlan.args);
     if (!encoderPlan.hardware) args.push("-threads", String(threadsPerJob));
     if (audioTrackCount > 0) args.push("-c:a", "aac", "-b:a", "192k");
     args.push(segmentPath);
-    updateProgress(index, 0, `${encoderPlan.label} · ${canvas.label} · ${parallelism}개 동시 처리 중`);
-    await run(encoderPlan.ffmpeg, args, {
-      totalDuration: keptDuration,
-      signal,
-      onProgress: (details) => updateProgress(index, details.progress ?? 0, `${encoderPlan.label} · ${canvas.label} · ${parallelism}개 동시 처리 중`),
-    });
-    normalizedSegments[index] = segmentPath;
-    updateProgress(index, 1, `${encoderPlan.label} · ${canvas.label} · ${parallelism}개 동시 처리 중`);
+    const progressMessage = `${encoderPlan.label} · ${canvas.label} · ${batchSources.length}개 묶음 · ${parallelism}개 동시 처리 중`;
+    const updateBatchProgress = (seconds) => {
+      let remaining = Math.max(0, Math.min(batchDuration, seconds));
+      sourceIndexes.forEach((sourceIndex) => {
+        const localProgress = Math.max(0, Math.min(1, remaining / keptDurations[sourceIndex]));
+        sourceProgress[sourceIndex] = Math.max(sourceProgress[sourceIndex], localProgress);
+        remaining -= keptDurations[sourceIndex];
+      });
+      const completedCount = sourceProgress.filter((value) => value >= 1).length;
+      const totalProgress = sourceProgress.reduce((sum, value, sourceIndex) => sum + value * keptDurations[sourceIndex], 0) / expectedDuration;
+      onProgress({ phase: "normalize", current: completedCount, total: sources.length, progress: totalProgress * 0.9, message: progressMessage });
+    };
+    updateBatchProgress(0);
+    await run(encoderPlan.ffmpeg, args, { totalDuration: batchDuration, signal, onProgress: (details) => updateBatchProgress((details.progress ?? 0) * batchDuration) });
+    sourceIndexes.forEach((sourceIndex) => { sourceProgress[sourceIndex] = 1; });
+    normalizedSegments[batchIndex] = segmentPath;
+    updateBatchProgress(batchDuration);
   };
-  let nextIndex = 0;
-  const normalized = await Promise.allSettled(Array.from({ length: Math.min(parallelism, sources.length) }, async () => {
-    while (nextIndex < sources.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      await normalizeOne(index);
+  let nextBatchIndex = 0;
+  const normalized = await Promise.allSettled(Array.from({ length: Math.min(parallelism, batches.length) }, async () => {
+    while (nextBatchIndex < batches.length) {
+      const batchIndex = nextBatchIndex;
+      nextBatchIndex += 1;
+      await normalizeBatch(batchIndex);
     }
   }));
   if (signal?.aborted) throw cancellationError();
