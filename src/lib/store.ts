@@ -83,7 +83,7 @@ type CollaborationRuntime = {
 };
 
 function inspectCollaborationRuntime(): CollaborationRuntime | null {
-  try { return JSON.parse(fs.readFileSync(COLLAB_SYNC_STATUS_PATH, "utf8")) as CollaborationRuntime; }
+  try { return JSON.parse(fs.readFileSync(/* turbopackIgnore: true */ COLLAB_SYNC_STATUS_PATH, "utf8")) as CollaborationRuntime; }
   catch { return null; }
 }
 
