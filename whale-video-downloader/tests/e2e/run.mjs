@@ -232,7 +232,7 @@ const scenarios = [
 
 console.log(`확장프로그램 ID: ${extId}\n`);
 // 일반 시나리오는 원본 그대로 저장되는지 보므로 요약 글자 넣기는 끄고, 아래 전용 테스트에서 켠다.
-await setSettings({ captionOnMedia: false, preventDuplicates: false, siteFolders: false, noAutoplay: false, alwaysShowButtons: false, siteSettings: {}, siteSettingsV: 3, siteFolderV: 2 }); // 사이트별 기능 설정은 전용 테스트에서 확인. 저장 버튼 항상 표시는 전용 테스트에서 확인(다른 테스트는 마우스를 올린 사진의 버튼을 누름). 자동재생 끄기는 전용 테스트에서 확인. 사이트별 폴더는 전용 테스트에서 확인. 같은 페이지를 여러 번 받는 시나리오가 많아 중복 막기는 전용 테스트에서만 켠다
+await setSettings({ subfolder: '', subfolderV: 2, forceH264Aac: false, captionOnMedia: false, preventDuplicates: false, siteFolders: false, noAutoplay: false, alwaysShowButtons: false, siteSettings: {}, siteSettingsV: 3, siteFolderV: 2 }); // 사이트별 기능 설정은 전용 테스트에서 확인. 저장 버튼 항상 표시는 전용 테스트에서 확인(다른 테스트는 마우스를 올린 사진의 버튼을 누름). 자동재생 끄기는 전용 테스트에서 확인. 사이트별 폴더는 전용 테스트에서 확인. 같은 페이지를 여러 번 받는 시나리오가 많아 중복 막기는 전용 테스트에서만 켠다
 for (const s of scenarios) await scenario(s);
 
 // ── 저장 위치: 하위 폴더 설정 반영 ──
@@ -529,6 +529,31 @@ if (!only || only === 'folder') {
     const p1 = await extPage();
     await p1.evaluate(() => chrome.storage.local.set({ downloadedKeys: [] }));
     await p1.close();
+    await page.close();
+  }
+}
+
+// ── X: 재생 전(표지 사진만 있을 때)에도 영상 다운로드 버튼 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ siteSettings: {}, alwaysShowButtons: true });
+    await page.goto('https://x.com/xposter', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2500);
+    const r = await page.evaluate(() => {
+      const vr = document.getElementById('vp').getBoundingClientRect();
+      const btns = [...document.querySelectorAll('smd-anchor')].map((h) => h.shadowRoot?.querySelector('.btn.show')).filter(Boolean);
+      const inside = btns.filter((b) => {
+        const br = b.getBoundingClientRect();
+        return br.left >= vr.left - 2 && br.right <= vr.right + 2 && br.top >= vr.top - 2 && br.bottom <= vr.bottom + 2;
+      });
+      return { n: inside.length, txt: inside.map((b) => b.textContent.trim()).join('|'), photo: inside.some((b) => /사진/.test(b.title || '')) };
+    });
+    record('[X] 재생 전(표지 사진만)에도 영상 다운로드 버튼 1개', r.n === 1 && /다운로드/.test(r.txt) && !r.photo, { note: JSON.stringify(r) });
+  } catch (err) {
+    record('[X] 재생 전 버튼', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ alwaysShowButtons: false });
     await page.close();
   }
 }
@@ -1439,6 +1464,35 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── 최상위 폴더 '다운로드': 모든 파일이 다운로드/(사이트 폴더)/(종류)/(나라) 안에 ──
+{
+  const page = await ctx.newPage();
+  try {
+    // 예전 버전 사용자(최상위 폴더 비어 있음) → 업데이트 후 '다운로드' 로 한 번 바뀜
+    await setSettings({ subfolder: '', subfolderV: 1, captionOnMedia: false, siteFolders: false, sortFolders: true, countryFolders: true, siteFolderMap: { youtube: '유튜브' } });
+    const pp = await extPage();
+    await pp.waitForTimeout(500);
+    const top = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.subfolder);
+    await pp.close();
+    await clearDownloaded();
+    const got = {};
+    for (const [key, url] of [['유튜브', 'https://www.youtube.com/watch?v=YTwatch0001'], ['일반', 'https://www.example-videos.com/rerender']]) {
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      const before = new Set(listFiles(DL));
+      await page.locator('smd-anchor .btn.show').first().click();
+      const saved = await waitFile(before, 60000);
+      got[key] = saved ? path.relative(DL, saved).split(path.sep).slice(0, -1).join('/') : '저장 안 됨';
+    }
+    record("[폴더] 최상위 폴더 '다운로드'(업데이트 시 자동): 다운로드/유튜브/…, 다운로드/영상 1분30초 이하/…", top === '다운로드' && got['유튜브'] === '다운로드/유튜브/영상 1분30초 이하/한국' && got['일반'] === '다운로드/영상 1분30초 이하/한국', { note: JSON.stringify({ 최상위: top, ...got }) });
+  } catch (err) {
+    record('[폴더] 최상위 폴더', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ subfolder: '', subfolderV: 2, siteFolderMap: {} });
+    await page.close();
+  }
+}
+
 // ── 같은 파일 중복 다운로드 막기 ──
 {
   const page = await ctx.newPage();
@@ -2142,6 +2196,40 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       record('[요약] 실패 시 원본 저장', false, { note: err.message.split('\n')[0] });
     } finally {
       await page.close();
+    }
+  }
+  // MP4(H.264·AAC) 맞추기: 이미 맞는 영상은 그대로 / 인코더가 없으면 원본 저장 + 단계·원인·조치
+  {
+    await setSettings({ forceH264Aac: true, audioKbps: 192, captionOnMedia: false });
+    await clearDownloaded();
+    const one = async (url) => {
+      const page = await ctx.newPage();
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded' });
+        await page.waitForTimeout(1500);
+        const before = new Set(listFiles(DL));
+        await page.locator('smd-anchor .btn.show').first().click();
+        const saved = await waitFile(before, 90000);
+        await new Promise((r) => setTimeout(r, 800));
+        const pp = await extPage();
+        const warn = await pp.evaluate(async () => (await chrome.storage.local.get('history')).history?.[0]?.warning || '');
+        await pp.close();
+        return { saved, info: saved && probe(saved), warn };
+      } finally {
+        await page.close();
+      }
+    };
+    try {
+      const a = await one('https://www.example-videos.com/aac320');
+      record('[H.264·AAC] 이미 MP4·H.264·고음질 AAC 면 변환 없이 그대로 저장', a.info?.vcodec === 'h264' && a.info?.acodec === 'aac' && !a.warn, { note: `${a.saved ? path.basename(a.saved) : '없음'} · ${a.info?.vcodec}/${a.info?.acodec} · 안내: ${a.warn || '없음'}` });
+      await setSettings({ audioKbps: 320 });
+      const b = await one('https://www.example-videos.com/watch');
+      // 이 테스트용 Chromium 에는 AAC 인코더가 없다 → 오류 경로: 원본(H.264·AAC 128k) 저장 + 안내
+      record('[H.264·AAC] (오류 경로) AAC 해독·인코딩을 못 하면 원본 저장 + 단계·원인·조치', b.info?.vcodec === 'h264' && /H\.264·AAC 로 바꾸지 못해/.test(b.warn) && /단계: (AAC 인코더 확인|원본 소리 읽기)/.test(b.warn) && /원인:/.test(b.warn) && /조치:/.test(b.warn), { note: `${b.saved ? path.basename(b.saved) : '없음'} · 안내: ${b.warn.slice(0, 160)}` });
+    } catch (err) {
+      record('[H.264·AAC] 저장 형식', false, { note: err.message.split('\n')[0] });
+    } finally {
+      await setSettings({ forceH264Aac: false, audioKbps: 320 });
     }
   }
   // ② 재인코딩 없이: 표지(피드 스크린샷) + 같은 이름 PNG, 영상 데이터는 그대로

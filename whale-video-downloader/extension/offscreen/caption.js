@@ -636,3 +636,55 @@ export function authorLine(cap) {
   const who = name && handle ? `${name} (@${handle})` : handle ? `@${handle}` : name;
   return `작성자 ${who}${cap.site ? ` · ${cap.site}` : ''}`;
 }
+
+// ── 저장 형식 맞추기: MP4 + 영상 H.264 + 소리 AAC(기본 320kbps) ──
+//   이미 H.264 면 영상은 그대로 복사(화질 손실·시간 없음), 소리만 AAC 지정 비트레이트로 다시 만든다.
+//   브라우저가 H.264/AAC 인코더를 못 쓰면 단계·원인·조치를 담은 오류를 던진다(호출하는 쪽이 원본으로 저장).
+export async function ensureH264Aac(file, writable, onProgress, { audioBitrate = 320000 } = {}) {
+  const input = new MB.Input({ source: new MB.BlobSource(file), formats: MB.ALL_FORMATS });
+  try {
+    const vt = await input.getPrimaryVideoTrack();
+    const at = await input.getPrimaryAudioTrack();
+    const vc = vt ? await vt.getCodec().catch(() => null) : null;
+    const ac = at ? await at.getCodec().catch(() => null) : null;
+    let abr = 0;
+    if (at && ac === 'aac') {
+      try {
+        abr = (await at.computePacketStats(300)).averageBitrate || 0;
+      } catch {}
+    }
+    const fmt = await input.getFormat().catch(() => null);
+    const isMp4 = /mp4|mov|quicktime/i.test(fmt?.name || fmt?.mimeType || '');
+    const needVideo = !!vt && vc !== 'avc';
+    const needAudio = !!at && (ac !== 'aac' || abr < audioBitrate * 0.9);
+    const info = { videoFrom: vc || '없음', audioFrom: ac ? `${ac}${abr ? ` ${Math.round(abr / 1000)}kbps` : ''}` : '없음' };
+    if (!needVideo && !needAudio && isMp4) return { changed: false, ...info };
+    if (needVideo) {
+      const w = await vt.getDisplayWidth();
+      const h = await vt.getDisplayHeight();
+      if (!(await vt.canDecode())) throw Object.assign(new Error(`이 브라우저가 원본 영상(${vc})을 해독할 수 없습니다`), { step: '원본 영상 읽기' });
+      if (!(await MB.canEncodeVideo('avc', { width: w, height: h, bitrate: MB.QUALITY_VERY_HIGH }))) throw Object.assign(new Error(`이 브라우저에서 H.264 영상 인코더를 쓸 수 없습니다(${w}x${h})`), { step: 'H.264 인코더 확인' });
+    }
+    if (needAudio) {
+      if (!(await at.canDecode())) throw Object.assign(new Error(`이 브라우저가 원본 소리(${ac})를 해독할 수 없습니다`), { step: '원본 소리 읽기' });
+      const ch = await at.getNumberOfChannels().catch(() => 2);
+      const sr = await at.getSampleRate().catch(() => 48000);
+      if (!(await MB.canEncodeAudio('aac', { numberOfChannels: ch, sampleRate: sr, bitrate: audioBitrate }))) throw Object.assign(new Error(`이 브라우저에서 AAC 소리 인코더를 쓸 수 없습니다(${Math.round(audioBitrate / 1000)}kbps)`), { step: 'AAC 인코더 확인' });
+    }
+    const output = new MB.Output({ format: new MB.Mp4OutputFormat({ fastStart: false }), target: new MB.StreamTarget(writable, { chunked: true, chunkSize: 4 * 1024 * 1024 }) });
+    const conv = await MB.Conversion.init({
+      input,
+      output,
+      showWarnings: false,
+      video: vt ? { codec: 'avc', bitrate: MB.QUALITY_VERY_HIGH, forceTranscode: needVideo } : undefined,
+      audio: at ? { codec: 'aac', bitrate: audioBitrate, forceTranscode: needAudio } : undefined,
+    });
+    if (!conv.isValid) throw Object.assign(new Error(`변환할 수 없습니다: ${conv.discardedTracks.map((d) => d.reason).join(', ')}`), { step: '변환 준비' });
+    if (conv.discardedTracks.length) throw Object.assign(new Error(`일부 트랙을 옮기지 못했습니다: ${conv.discardedTracks.map((d) => d.reason).join(', ')}`), { step: '변환 준비' });
+    if (onProgress) conv.onProgress = (p) => onProgress(Math.round(p * 100));
+    await conv.execute();
+    return { changed: true, ...info };
+  } finally {
+    try { input.dispose(); } catch {}
+  }
+}

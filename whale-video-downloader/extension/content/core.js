@@ -1240,6 +1240,7 @@
           j.phase === 'resolve' ? '원본 찾는 중…'
           : j.phase === 'queue' ? '대기 중…'
           : j.phase === 'caption' ? `피드 내용 넣는 중 ${Math.floor(j.percent || 0)}%`
+          : j.phase === 'encode' ? `H.264·AAC 변환 중 ${Math.floor(j.percent || 0)}%`
           : j.phase === 'mux' ? `${q}합치는 중 ${Math.floor(j.percent || 0)}%`
           : j.phase === 'save' ? '저장 중…'
           : j.percent != null ? `${q}${Math.floor(j.percent)}%`
@@ -1570,6 +1571,22 @@
     if (e) setTimeout(() => refreshIdentity(e), 50);
   }, true);
 
+  // 영상 칸 중 아직 보이는 <video> 가 없고 표지 사진만 있는 것(X 재생 전)
+  function videoPosterBoxes() {
+    const out = [];
+    for (const box of document.querySelectorAll('[data-testid="videoPlayer"], [data-testid="videoComponent"]')) {
+      if (box.parentElement?.closest('[data-testid="videoPlayer"], [data-testid="videoComponent"]')) continue; // 바깥 칸 하나만
+      const v = box.querySelector('video');
+      if (v) {
+        const r = v.getBoundingClientRect();
+        if (r.width >= 140 && r.height >= 100 && getComputedStyle(v).visibility !== 'hidden' && Number(getComputedStyle(v).opacity) > 0) continue;
+      }
+      const r = box.getBoundingClientRect();
+      if (r.width < 140 || r.height < 100 || r.bottom < 0 || r.top > innerHeight) continue;
+      out.push(box);
+    }
+    return out;
+  }
   function scan() {
     const vids = [];
     collectVideos(document, vids);
@@ -1577,6 +1594,8 @@
     collectImages(imgs);
     // 댓글 칸 안의 영상(댓글 첨부 움짤 등)도 제외
     for (let i = vids.length - 1; i >= 0; i--) if (inComment(vids[i], 5)) vids.splice(i, 1);
+    // X: 재생 전(자동재생 끄기 등)에는 <video> 없이 표지 사진(video_thumb)만 있다 → 영상 칸에 영상 다운로드 버튼
+    if (adapter.id === 'x') for (const box of videoPosterBoxes()) if (!vids.includes(box)) vids.push(box);
     const set = new Set([...vids, ...imgs]);
     for (const v of vids) if (!tracked.has(v)) track(v, 'video');
     for (const e of tracked.values()) refreshIdentity(e);

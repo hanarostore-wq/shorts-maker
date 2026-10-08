@@ -425,7 +425,8 @@ function siteFolderOf(job) {
 }
 
 function saveFolder(job, settings) {
-  if (job.request?.playMode) return '팟플레이어 재생';
+  // 모든 파일은 최상위 폴더(기본 '다운로드') 안에: 다운로드/(사이트 폴더)/(1분30초 이하·초과·사진)/(나라)
+  if (job.request?.playMode) return [sanitizeFolder(settings.subfolder), '팟플레이어 재생'].filter(Boolean).join('/');
   const parts = [sanitizeFolder(settings.subfolder)];
   // 사이트 폴더: '사이트별 폴더' 전체 켜기 > 지원 사이트 탭에서 사이트마다 넣은 폴더 이름(같은 이름이면 한 폴더로 합쳐짐) > 없으면 다운로드 폴더 그대로
   const own = (settings.siteFolderMap || {})[job.site];
@@ -536,7 +537,7 @@ async function attempt(job, d, settings) {
   try {
     // 브라우저 다운로드 관리자 요청에는 declarativeNetRequest 헤더가 붙지 않는다(실측).
     // Referer/User-Agent 가 필요한 CDN 은 처음부터 확장 엔진으로 받아 웨일 다운로드 목록에 실패 항목이 남지 않게 한다.
-    const native = d.type === 'file' && !d.caption && !d.rangeParam && d.credentials !== 'omit' && !headerOps(d.headers || {}).length;
+    const native = d.type === 'file' && !d.caption && !d.encode && !d.rangeParam && d.credentials !== 'omit' && !headerOps(d.headers || {}).length;
     if (native) {
       job.phase = 'download';
       notify(job);
@@ -627,6 +628,11 @@ async function runJob(job) {
       pageUrl: req.pageUrl || '',
     };
     for (const d of [desc, ...(desc.fallbacks || [])]) d.caption = caption;
+  }
+  // 영상은 MP4 · H.264 · AAC(기본 320kbps)로 맞춰 저장(설정에서 끌 수 있음). 팟플레이어 재생용은 원본 그대로
+  if (!play && !isImage && settings.forceH264Aac !== false) {
+    const encode = { h264aac: true, audioBitrate: Math.min(512, Math.max(64, Number(settings.audioKbps) || 320)) * 1000 };
+    for (const d of [desc, ...(desc.fallbacks || [])]) d.encode = encode;
   }
   delete req.shotData;
   // 동시에 너무 많이 받지 않도록 최대 5개씩(사진 일괄 저장 대비)

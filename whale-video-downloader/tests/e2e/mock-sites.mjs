@@ -218,6 +218,9 @@ const handlers = {
     if (u.pathname === '/watch') {
       return html(res, page('일반 사이트 영상', `<div class="card"><h3>일반 사이트</h3><video src="https://cdn.example-videos.com/progressive_1080p_land.mp4" controls muted style="width:640px;height:360px;background:#000"></video></div>`));
     }
+    if (u.pathname === '/aac320') {
+      return html(res, page('고음질 AAC 영상', `<div class="card"><video src="https://cdn.example-videos.com/h264_aac320.mp4" muted style="width:640px;height:360px;background:#000"></video></div>`));
+    }
     if (u.pathname === '/float') {
       // 떠 있는 좋아요·팔로우: 게시물 2개(가운데 큰 게시물 = 두 번째). 첫 게시물 좋아요는 눌러도 상태가 안 바뀜(오류 경로)
       const post = (i, stuck) => `<article style="margin:40px 0;width:520px"><div><a href="/user${i}">작성자${i}</a> <button class="fb" onclick="window.__fol${i}=(window.__fol${i}||0)+1;this.textContent='팔로잉'">팔로우</button></div>
@@ -667,6 +670,11 @@ const handlers = {
 
   // ── X ──
   'x.com': (req, res, u) => {
+    if (u.pathname === '/xposter') {
+      // 재생 전 X 게시물: <video> 없이 표지 사진(amplify_video_thumb)과 재생 단추만
+      return html(res, page('X 재생 전', `<article data-testid="tweet" style="width:520px"><a href="/tester/status/1790000000000000009">시간</a>
+        <div data-testid="videoPlayer" id="vp" style="position:relative;width:480px;height:270px"><img src="https://cdn.example-videos.com/img/photo.jpg?amplify_video_thumb" style="width:480px;height:270px;object-fit:cover;display:block"><div role="button" aria-label="재생" style="position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px;border-radius:50%;background:#1d9bf0"></div></div></article>`));
+    }
     if (u.pathname === '/autoplaytest') {
       // 사이트가 0.6초 뒤 스스로 play() (스크롤 자동재생 흉내), 영상 위 막을 누르면 play()
       return html(res, page('X 자동재생', `<div style="position:relative;width:480px;height:270px"><video id="av" src="https://cdn.example-videos.com/preview.webm" muted loop playsinline style="width:100%;height:100%;background:#000"></video>

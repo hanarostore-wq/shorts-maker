@@ -1,6 +1,6 @@
 // 설정 기본값과 읽기/쓰기 (서비스워커·팝업·폴더 선택 창에서 공용)
 export const DEFAULT_SETTINGS = {
-  subfolder: '', // 웨일 다운로드 폴더 안의 하위 폴더 (비우면 바로 저장)
+  subfolder: '다운로드', // 최상위 폴더: 웨일 다운로드 폴더 안의 이 폴더에 모든 파일을 저장 (비우면 다운로드 폴더에 바로)
   askEveryTime: false, // 다운로드마다 저장 위치 묻기
   imageButtons: true, // 사진에도 저장 버튼
   captionOnMedia: true, // 사진·영상 빈 공간에 피드 내용 요약 넣기(영상은 재인코딩)
@@ -13,6 +13,8 @@ export const DEFAULT_SETTINGS = {
   siteSettings: {}, // 사이트별 기능 켜고 끄기 { x: { noAutoplay: true, … } } — 없으면 위의 전체 기본값
   captionAuthor: true, // 영상·사진 위 글자 첫 줄에 '작성자 이름 (@아이디) · 사이트'
   pauseOffscreen: true, // 재생 중인 영상이 스크롤로 화면에서 벗어나면 멈춤
+  forceH264Aac: true, // 영상은 MP4 · H.264 영상 · AAC 소리로 맞춰 저장(이미 H.264 면 영상은 그대로 복사)
+  audioKbps: 320, // AAC 소리 비트레이트(kbps)
   preventDuplicates: true, // 같은 파일 중복 다운로드 막기(파일이 지워졌으면 다시 받음)
   autoFollow: true, // 다운로드 누르면 그 게시물 작성자 자동 팔로우(팔로우 기능이 있는 사이트)
   aiLabel: true, // AI 영상·사진 표시 + 파일 이름 [AI]
@@ -59,6 +61,11 @@ export async function getSettings() {
     if (!s.buttonPosition || s.buttonPosition === 'right') s.buttonPosition = 'mid-right';
     s.posVersion = 2;
   }
+  // v1.28.0: 모든 파일을 최상위 폴더 '다운로드' 안에 저장(사용자 요청). 비어 있던 경우에만 한 번 넣고, 이후에는 사용자가 정한 값을 따른다
+  if (!(s.subfolderV >= 2)) {
+    if (!String(s.subfolder || '').trim()) s.subfolder = '다운로드';
+    s.subfolderV = 2;
+  }
   // v1.25.0: 사이트별 폴더 나누기는 기본으로 끈다(사용자 요청). 한 번만 바꾸고 이후에는 사용자가 켠 값을 따른다.
   if (s.siteFolderV !== 2) {
     s.siteFolders = false;
@@ -91,7 +98,7 @@ export async function getSettings() {
   for (const k of ['adBlock', 'hoverPlay', 'xHoverPlay', 'bskyAutoSound', 'xAutoSound', 'xAutoPlay', 'keepScroll', 'noClickPause', 'xWideLayout', 'xKeepControls', 'xThickBar', 'xHighQuality', 'playLock']) delete s[k];
   // 바뀐 기본값(마이그레이션)은 바로 저장해 둔다 — 페이지 쪽 스크립트는 저장된 값을 그대로 읽기 때문
   const stored = r.settings || {};
-  if (stored.siteFolderV !== s.siteFolderV || stored.siteSettingsV !== s.siteSettingsV || stored.posVersion !== s.posVersion) {
+  if (stored.subfolderV !== s.subfolderV || stored.siteFolderV !== s.siteFolderV || stored.siteSettingsV !== s.siteSettingsV || stored.posVersion !== s.posVersion) {
     await chrome.storage.local.set({ settings: s }).catch(() => {});
   }
   return s;
@@ -135,6 +142,7 @@ export const SITE_FEATURES = [
   { key: 'imageButtons', group: '버튼', name: '사진에도 저장 버튼', desc: '사진에도 원본 저장 버튼을 띄웁니다' },
   { key: 'downloadedMark', group: '버튼', name: '받은 적 있는 영상·사진 초록 표시', desc: '이미 받은 것은 버튼이 초록 체크로 바뀝니다' },
   { key: 'aiLabel', group: '버튼', name: 'AI 영상·사진 표시', desc: 'AI 생성으로 표시된 것에 표시를 붙이고 파일 이름에 [AI]' },
+  { key: 'forceH264Aac', group: '저장', name: 'MP4(H.264·AAC 320kbps)로 저장', desc: '영상은 H.264, 소리는 AAC 320kbps 로 맞춰 저장합니다. 이미 H.264 면 영상은 그대로(화질 손실 없음), 아니면 다시 인코딩(시간 걸림)' },
   { key: 'preventDuplicates', group: '저장', name: '같은 파일 중복 다운로드 막기', desc: '이미 받은 것은 다시 받지 않고 위치를 알려 줍니다' },
   { key: 'captionOnMedia', group: '글자 넣기', name: '영상·사진에 본문 글자 넣기', desc: '게시물 본문을 왼쪽 위에 넣습니다' },
   { key: 'captionAuthor', group: '글자 넣기', name: '글자 첫 줄에 작성자 줄', desc: "'작성자 이름 (@아이디) · 사이트'" },

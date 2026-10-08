@@ -36,3 +36,5 @@ ff -f lavfi -i testsrc2=size=1600x1000 -frames:v 1 images/photo.jpg
 ff -f lavfi -i testsrc2=size=2000x1500 -frames:v 1 images/x_orig.jpg
 ff -f lavfi -i testsrc2=size=680x510 -frames:v 1 images/x_small.jpg
 echo "픽스처 생성 완료: $(pwd)"
+# 이미 MP4 · H.264 · 고음질 AAC 인 영상(변환 없이 그대로 저장되는지 확인용). ffmpeg 기본 AAC 인코더는 약 240kbps 가 최대
+ff -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i anoisesrc=color=white:amplitude=1:sample_rate=48000 -t 6 -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a aac -b:a 320k -ac 2 -movflags +faststart h264_aac320.mp4

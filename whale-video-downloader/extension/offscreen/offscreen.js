@@ -2,7 +2,7 @@
 //   OPFS 임시 파일에 쓴 뒤 blob 주소를 서비스워커에 넘겨 웨일 다운로드 폴더(사용자가 지정한 폴더)로 저장한다.
 //   사진은 원본 그대로, jpg·png·gif 가 아니면 PNG 로 변환한다.
 import { copyFile, mergeStreams, remuxHls, StepError, STEP } from './engine.js';
-import { summarize, captionImage, captionVideo, feedImage, canvasPng, coverVideo, introVideo, cropShot, needsKorean, translateToKorean, withTranslation, postCard, authorLine } from './caption.js';
+import { summarize, captionImage, captionVideo, feedImage, canvasPng, coverVideo, introVideo, cropShot, needsKorean, translateToKorean, withTranslation, postCard, authorLine, ensureH264Aac } from './caption.js';
 
 // ① 방식: 찍어 둔 피드 글 부분 캡처가 있으면 그것을, 없으면 요약 글자를 붙인다
 async function overlayFor(cap, summary, warns) {
@@ -276,6 +276,30 @@ async function run({ jobId, desc, filename, mode, prefer }) {
       cleanup = async () => {
         for (const c of cleanups) await c().catch(() => {});
       };
+    }
+    // 저장 형식 맞추기: MP4 · H.264 · AAC(설정한 kbps). 실패하면 원본 형식으로 저장하고 단계·원인·조치를 알린다
+    if (desc.encode?.h264aac) {
+      const en = await opfsTarget(`${jobId}-enc`, filename);
+      try {
+        send({ type: 'smd:engine-progress', jobId, phase: 'encode', percent: 0, quality });
+        const r = await ensureH264Aac(outFile, en.writable, (pct) => onProgress({ phase: 'encode', percent: Math.min(99, pct) }), { audioBitrate: desc.encode.audioBitrate || 320000 });
+        if (r.changed) {
+          const enFile = await en.fh.getFile();
+          if (!enFile.size) throw Object.assign(new Error('변환 결과 파일이 비어 있습니다'), { step: '변환 결과 확인' });
+          outFile = enFile;
+          ext = 'mp4';
+          const prev = cleanup;
+          cleanup = async () => {
+            await prev().catch(() => {});
+            await en.cleanup().catch(() => {});
+          };
+        } else {
+          await en.fail().catch(() => {});
+        }
+      } catch (err) {
+        await en.fail().catch(() => {});
+        warns.push(`H.264·AAC 로 바꾸지 못해 원본 형식으로 저장했습니다 — 단계: ${err?.step || '변환'} · 원인: ${err?.message || err} · 조치: 웨일을 최신 버전으로 업데이트하거나, 팝업 '저장 설정'에서 'MP4(H.264·AAC 320kbps)로 저장'을 끄세요.`);
+      }
     }
     warning = warns.join(' ');
     const url = URL.createObjectURL(outFile.slice(0, outFile.size, MIME[ext] || 'video/mp4'));

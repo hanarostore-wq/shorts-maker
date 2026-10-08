@@ -86,10 +86,10 @@
         </div>
         <p class="note">버튼을 누르면 웨일 다운로드 설정이 열려요. <b>위치 → 변경</b>에서 원하는 폴더(바탕화면, D 드라이브 등 어디든)를 고르면, 그 다음부터 모든 영상·사진이 그 폴더에 바로 저장됩니다.</p>
         <label class="field" style="margin-top:12px">
-          <span>그 폴더 안에 하위 폴더 만들기 (선택)</span>
+          <span>최상위 폴더 — 모든 파일이 이 폴더 안에 저장됩니다 (기본: 다운로드)</span>
           <div class="path">
             <span class="pfx">저장 폴더 /</span>
-            <input id="subfolder" type="text" placeholder="(비우면 저장 폴더에 바로 저장)" maxlength="80" spellcheck="false" />
+            <input id="subfolder" type="text" placeholder="다운로드 (비우면 저장 폴더에 바로 저장)" maxlength="80" spellcheck="false" />
           </div>
         </label>
         <label class="row-toggle">
@@ -200,6 +200,10 @@
         <label class="row-toggle">
           <div><b>화면 밖 영상 정지</b><small>재생 중인 영상이 스크롤로 화면에서 완전히 벗어나면 멈춥니다 (화면 속 화면·전체 화면은 제외, 다시 보여도 저절로 재생하지 않음)</small></div>
           <input type="checkbox" id="pauseOffscreen" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>MP4(H.264·AAC 320kbps)로 저장</b><small>모든 영상을 MP4 · 영상 H.264 · 소리 AAC 320kbps 로 맞춰 저장합니다. 원본이 이미 H.264 면 영상은 그대로 복사(화질 손실 없음)하고 소리만 바꿉니다. VP9·AV1 원본(유튜브 4K 등)은 다시 인코딩해서 시간이 걸립니다. 바꾸지 못하면 원본 형식으로 저장하고 이유를 알려 줍니다</small></div>
+          <input type="checkbox" id="forceH264Aac" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
           <div><b>같은 파일 중복 다운로드 막기</b><small>이미 받은 영상·사진은 다시 받지 않고 저장 위치를 알려 줍니다 ("다시 받기"로 또 받을 수 있음). 받은 파일을 지웠으면 그냥 다시 받습니다</small></div>
