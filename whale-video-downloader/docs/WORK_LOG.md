@@ -297,3 +297,9 @@
 - 수정: 업데이트 bat 을 v1.24 때의 잘 되던 내용으로 되돌림(레지스트리 등록 없음). 팟플레이어로 재생은 팟플레이어가 설치할 때 스스로 등록하는 potplayer:// 연결로 열도록 변경(PC 설정 변경 없음). 실제 PotPlayer 가 potplayer://https://… 를 여는지는 UNVERIFIED
 - 이 과정에서 settings.js 설명 글의 따옴표 실수(배포 전)로 서비스워커가 뜨지 않던 것을 찾아 고침
 - 검증: E2E 145/145, 단위 27/27
+
+## 2026-10-08 · WVD-036 · 업데이트 bat 을 윈도우 기본 명령만 쓰는 형태로
+
+- 사용자: 받은 bat 파일 크기가 0(백신이 내용을 지운 것으로 보임)
+- 추정: bat 이 자기 자신을 읽어 PowerShell 로 실행하는(Invoke-Expression) 방식이 백신 탐지 대상
+- 변경: PowerShell 없이 curl.exe(받기)·tar.exe(압축 풀기)·robocopy(덮어쓰기)만 쓰는 일반 bat, CRLF 줄바꿈. 단계·원인·해결 안내 유지. Windows 실행은 UNVERIFIED
