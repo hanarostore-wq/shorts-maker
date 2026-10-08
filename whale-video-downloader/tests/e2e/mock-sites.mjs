@@ -370,6 +370,14 @@ const handlers = {
       if (u.searchParams.get('v') === 'YTnosub0001') return html(res, ytPage('YTnosub0001', false).replace('</body>', `<ytd-watch-metadata><div id="owner"><a href="/@Jackson-xxz">Jackson</a></div></ytd-watch-metadata></body>`));
       return html(res, ytPage(u.searchParams.get('v'), false).replace('</body>', `${likeBtn}<div id="below" style="margin-top:40px"><ytd-channel-name>테스트 채널</ytd-channel-name> <ytd-subscribe-button-renderer><button id="subbtn" onclick="window.__subscribed = (window.__subscribed || 0) + 1; this.textContent = '구독중'">${sub}</button></ytd-subscribe-button-renderer></div></body>`));
     }
+    if (u.pathname === '/benchheavy') {
+      // 성능 측정용: 썸네일 600개 + 계속 바뀌는 화면(유튜브 홈·보기 화면처럼 DOM 이 계속 변함)
+      const items = Array.from({ length: 600 }, (_, i) => `<ytd-rich-item-renderer style="display:inline-block;width:300px;margin:4px"><a href="/watch?v=bench${i}"><img src="https://cdn.example-videos.com/img/photo.jpg?i=${i}" style="width:300px;height:170px;object-fit:cover"></a><div id="meta"><a href="/@ch${i}">채널 ${i}</a><span>조회수 ${i}회</span></div></ytd-rich-item-renderer>`).join('');
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>YouTube</title></head><body style="margin:0;background:#0f0f0f;color:#fff">
+        <div id="primary-inner"><div id="player" style="width:960px;height:540px"><video id="v" src="https://cdn.example-videos.com/long_95s.webm" muted loop autoplay style="width:960px;height:540px"></video></div></div>
+        <div id="grid">${items}</div><div id="churn"></div>
+        <script>let n=0;setInterval(()=>{const c=document.getElementById('churn');c.innerHTML='';for(let i=0;i<40;i++){const d=document.createElement('div');d.textContent='x'+(n++);c.appendChild(d)}},50);</script></body></html>`);
+    }
     if (u.pathname === '/adsfeed') {
       return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>YouTube</title></head><body>
         <ytd-rich-item-renderer id="vid1"><p>일반 영상</p></ytd-rich-item-renderer>

@@ -254,7 +254,7 @@
   function aiInDom(entry) {
     try {
       const box = U.container(entry.el, 18);
-      const text = (box.innerText || '').slice(0, 4000);
+      const text = (box.textContent || '').slice(0, 4000); // innerText 는 화면 배치를 다시 계산하게 해서 느림
       if (AI_TEXT.test(text)) return true;
       for (const el of box.querySelectorAll('[aria-label],[title]')) {
         if (AI_TEXT.test(el.getAttribute('aria-label') || el.getAttribute('title') || '')) return true;
@@ -1462,13 +1462,14 @@
   function collectImages(out) {
     if (!imagesOn()) return;
     const vids = videoRects();
+    // 싼 검사(원본 크기·화면 안)부터 하고, 비싼 검사(영상 위 썸네일·댓글·가려짐)는 남은 사진에만
     for (const img of document.images) {
-      if (img.closest('smd-anchor')) continue;
-      if (onVideo(img, vids)) continue;
       if ((img.naturalWidth || 0) < 200 || (img.naturalHeight || 0) < 150) continue;
       const r = img.getBoundingClientRect();
       if (r.width < 120 || r.height < 100) continue;
       if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue; // 화면에 보이는 사진만(스크롤하면 다시 찾음)
+      if (img.closest('smd-anchor')) continue;
+      if (onVideo(img, vids)) continue;
       if (inComment(img) || !shownImage(img, r)) continue;
       out.push(img);
     }
@@ -1670,7 +1671,7 @@
       }
       if (!entry.visible) b.classList.add('show');
       entry.visible = true;
-      if (!entry.ai && now - (entry.aiCheck || 0) > 2000) {
+      if (settings.aiLabel !== false && !entry.ai && (entry.aiCheck === undefined || now - entry.aiCheck > 5000)) {
         entry.aiCheck = now;
         entry.ai = aiInDom(entry);
         if (entry.ai && isImg) entry.badge.textContent = 'AI 이미지';
@@ -1716,15 +1717,25 @@
 
   const boot = () => {
     scan();
-    let pending = 0;
-    new MutationObserver(() => {
+    // 화면이 바뀔 때 다시 찾기: 유튜브처럼 DOM 이 쉬지 않고 바뀌는 사이트에서 페이지를 느리게 하지 않게
+    //   마지막 찾기에서 최소 0.7초 지난 뒤, 브라우저가 한가할 때(최대 1초 기다림)만 찾는다. 숨은 탭에서는 쉬기
+    let pending = false;
+    let lastScan = 0;
+    const idle = window.requestIdleCallback ? (fn) => requestIdleCallback(fn, { timeout: 1000 }) : (fn) => setTimeout(fn, 50);
+    const runScan = () => {
+      pending = false;
+      if (document.hidden) return;
+      lastScan = performance.now();
+      scan();
+    };
+    const schedule = () => {
       if (pending) return;
-      pending = setTimeout(() => {
-        pending = 0;
-        scan();
-      }, 250);
-    }).observe(document.documentElement, { childList: true, subtree: true });
-    setInterval(scan, 1500);
+      pending = true;
+      setTimeout(() => idle(runScan), Math.max(0, 700 - (performance.now() - lastScan)));
+    };
+    new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
+    setInterval(schedule, 1500);
+    document.addEventListener('visibilitychange', () => !document.hidden && schedule());
     raf = requestAnimationFrame(loop);
   };
   if (document.documentElement) boot();

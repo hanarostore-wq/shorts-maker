@@ -375,6 +375,69 @@ if (!only || only === 'folder') {
   }
 }
 
+// ── 떠 있는 버튼 끌어서 옮기기(위치 기억·처음으로) ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ siteSettings: {} });
+    await (async () => {
+      const p = await extPage();
+      await p.evaluate(() => chrome.storage.local.remove('floatPos'));
+      await p.close();
+    })();
+    await page.goto('https://www.example-videos.com/float', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => document.getElementById('fp2').scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(1600);
+    const rect = () => page.evaluate(() => {
+      const r = document.querySelector('smd-float').getBoundingClientRect();
+      return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
+    });
+    const r0 = await rect();
+    const lb = await page.evaluate(() => {
+      const r = document.querySelector('smd-float').shadowRoot.querySelector('button.like').getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
+    await page.mouse.move(lb.x, lb.y);
+    await page.mouse.down();
+    for (let i = 1; i <= 10; i++) await page.mouse.move(lb.x - 30 * i, lb.y - 20 * i);
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    const r1 = await rect();
+    const lk = await page.evaluate(() => window.__lk2 || 0);
+    const saved = await (async () => {
+      const p = await extPage();
+      const v = await p.evaluate(async () => (await chrome.storage.local.get('floatPos')).floatPos);
+      await p.close();
+      return v;
+    })();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => document.getElementById('fp2').scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(1600);
+    const r2 = await rect();
+    // 끌지 않고 누르면 좋아요가 그대로 눌림
+    await page.evaluate(() => document.querySelector('smd-float').shadowRoot.querySelector('button.like').click());
+    await page.waitForTimeout(1200);
+    const lkAfter = await page.evaluate(() => window.__lk2 || 0);
+    // 팝업 '이 사이트' → 처음으로
+    const pp = await extPage();
+    const tabId = await pp.evaluate(async () => (await chrome.tabs.query({ url: 'https://www.example-videos.com/float*' }))[0]?.id);
+    await pp.goto(`chrome-extension://${extId}/popup/popup.html?tabId=${tabId}`);
+    await pp.click('.tab[data-tab="site"]');
+    await pp.waitForTimeout(800);
+    await pp.click('.sp-floatreset');
+    await pp.waitForTimeout(500);
+    await pp.close();
+    await page.waitForTimeout(600);
+    const r3 = await rect();
+    const moved = r1.x < r0.x - 250 && r1.y < r0.y - 150;
+    record('[떠 있는 버튼] 끌어서 옮기기: 끌면 이동·좋아요 안 눌림, 새로고침해도 위치 유지, 그냥 누르면 동작, 처음으로 되돌리기', moved && lk === 0 && !!saved?.generic?.float && Math.abs(r2.x - r1.x) < 3 && Math.abs(r2.y - r1.y) < 3 && lkAfter === 1 && Math.abs(r3.x - r0.x) < 3 && Math.abs(r3.y - r0.y) < 3, { note: JSON.stringify({ 처음: r0, 끈뒤: r1, 새로고침: r2, 처음으로: r3, 끌때좋아요: lk, 누른뒤좋아요: lkAfter, 저장: saved?.generic }) });
+  } catch (err) {
+    record('[떠 있는 버튼] 끌어서 옮기기', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
 // ── 모든 사이트: 재생바(기본 재생 막대가 있는 영상은 건너뜀) ──
 {
   const page = await ctx.newPage();

@@ -100,7 +100,24 @@
     return [...out].filter((b) => shown(b) && !ours(b) && !inComment(b));
   }
   // 게시물 안 좋아요(가장 가까운 묶음부터) → 없으면 화면 전체에서 사진·영상과 가장 가까운 것(유튜브 보기·틱톡 상세처럼 떨어져 있는 경우)
+  // 찾은 좋아요 단추를 잠깐 기억(같은 게시물이면 2.5초 동안 다시 찾지 않음 — 페이지를 느리게 하지 않게)
+  let likeCache = { media: null, btn: null, t: 0 };
+  function likeButtonCached(media) {
+    const now = performance.now();
+    if (likeCache.media === media && now - likeCache.t < 2500 && (!likeCache.btn || likeCache.btn.isConnected)) return likeCache.btn;
+    const btn = likeButtonFor(media);
+    likeCache = { media, btn, t: now };
+    return btn;
+  }
   function likeButtonFor(media) {
+    // 유튜브: 좋아요 자리가 정해져 있어 바로 찾는다(넓은 범위를 뒤지지 않음)
+    if (site === 'youtube') {
+      for (const sel of LIKE_SEL.youtube) {
+        const b = [...document.querySelectorAll(sel)].find(shown);
+        if (b) return b;
+      }
+      return null;
+    }
     const mr = media.getBoundingClientRect();
     const dist = (b) => {
       const r = b.getBoundingClientRect();
@@ -140,8 +157,15 @@
 
   // ── 팔로우가 되는 게시물인가 ──
   const FOLLOW_TEXT = /^(\+\s*)?(팔로우|팔로우하기|follow|follow back|구독|구독하기|subscribe|关注|關注|加关注|フォロー|seguir|suivre|abonnieren)$/i;
+  let folCache = { media: null, v: false, t: 0 };
   function followable(media) {
     if (site !== 'generic') return true;
+    if (folCache.media === media && performance.now() - folCache.t < 2500) return folCache.v;
+    const v = followableNow(media);
+    folCache = { media, v, t: performance.now() };
+    return v;
+  }
+  function followableNow(media) {
     for (let p = media.parentElement, i = 0; p && i < 15; p = p.parentElement, i++) {
       if (p.getBoundingClientRect().height > innerHeight * 2.5) break;
       if ([...p.querySelectorAll('button, [role="button"]')].some((b) => FOLLOW_TEXT.test((b.innerText || '').trim()))) return true;
@@ -179,6 +203,7 @@
     ui.like.addEventListener('click', onLike);
     ui.follow.addEventListener('click', onFollow);
     document.documentElement.appendChild(host);
+    globalThis.__SMD_DRAG?.(host, 'float'); // 끌어서 옮기기(사이트마다 위치 기억)
   }
   let msgTimer = 0;
   function say(text, err = false, ms = 8000) {
@@ -221,6 +246,7 @@
   }
 
   function tick() {
+    if (document.hidden) return;
     if (!alive()) {
       host?.remove();
       return;
@@ -229,7 +255,7 @@
     const media = want ? currentMedia() : null;
     // 유튜브 보기·쇼츠 화면은 좋아요 단추를 늦게 그려도 버튼을 띄워 둔다(누르면 원인 안내)
     const ytPage = site === 'youtube' && (/^\/shorts\//.test(location.pathname) || location.pathname === '/watch');
-    const like = likeOn && want ? (media ? likeButtonFor(media) : ytPage ? likeButtonFor(document.body) : null) : null;
+    const like = likeOn && want ? (media ? likeButtonCached(media) : ytPage ? likeButtonCached(document.body) : null) : null;
     const canFollow = !!media && followOn && followable(media);
     const showLike = likeOn && !siteOff && (!!like || ytPage);
     if (!showLike && !canFollow) {
@@ -250,6 +276,11 @@
     ui.like.classList.toggle('on', on);
     ui.like.title = on ? '좋아요 누름 · 누르면 취소' : '좋아요';
   }
-  setInterval(tick, 700);
-  addEventListener('scroll', () => setTimeout(tick, 150), { passive: true, capture: true });
+  setInterval(tick, 1000);
+  // 스크롤 중에는 멈췄을 때 한 번만
+  let scrollT = 0;
+  addEventListener('scroll', () => {
+    clearTimeout(scrollT);
+    scrollT = setTimeout(tick, 200);
+  }, { passive: true, capture: true });
 })();

@@ -4,6 +4,7 @@ import { buildFilename, sanitizeFolder } from '../shared/filename.js';
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 let settings = await getSettings();
+let floatPos = (await chrome.storage.local.get('floatPos').catch(() => ({}))).floatPos || {}; // 떠 있는 버튼을 옮긴 위치(사이트별)
 const siteMeta = Object.fromEntries(SITE_LIST.map((s) => [s.id, s]));
 
 $('#version').textContent = `v${chrome.runtime.getManifest().version}`;
@@ -261,6 +262,32 @@ function renderSitePanel(id) {
     renderSites();
     renderSitePanel(id);
   }));
+  // 떠 있는 버튼(좋아요·팔로우·목록 전부 팔로우)을 끌어서 옮긴 위치 되돌리기
+  {
+    const moved = Object.keys(floatPos[id] || {}).length > 0;
+    const r = document.createElement('div');
+    r.className = 'row-toggle sp-floatpos';
+    r.innerHTML = `<div><b>떠 있는 버튼 위치</b><small>${moved ? '끌어서 옮긴 위치에 있습니다' : '처음 위치(오른쪽 아래). 버튼을 끌어서 옮길 수 있습니다'}</small></div>`;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sp-floatreset';
+    b.textContent = '처음으로';
+    b.disabled = !moved;
+    b.addEventListener('click', async () => {
+      try {
+        const all = { ...((await chrome.storage.local.get('floatPos')).floatPos || {}) };
+        delete all[id];
+        await chrome.storage.local.set({ floatPos: all });
+        floatPos = all;
+        renderSitePanel(id);
+      } catch (err) {
+        b.textContent = '되돌리기 실패';
+        b.title = `단계: 위치 저장소 쓰기 · 원인: ${err?.message || err} · 조치: 팝업을 닫았다 다시 열고 누르세요`;
+      }
+    });
+    r.appendChild(b);
+    box.appendChild(r);
+  }
   let group = '';
   for (const f of SITE_FEATURES) {
     if (f.sites && !f.sites.includes(id)) continue;

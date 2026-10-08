@@ -10,7 +10,7 @@
   globalThis.__SMD_SEEKBAR = true;
 
   const effOf = (s, id) => ({ ...(s || {}), ...(((s || {}).siteSettings || {})[id] || {}) });
-  let on = true;
+  let on = false; // 설정을 읽은 뒤에 켠다
   const alive = () => {
     try {
       return !!chrome.runtime?.id;
@@ -21,9 +21,15 @@
   // 자체 재생바가 있는 사이트는 이 사이트에서 직접 켰을 때만(사이트 재생 단추를 가리지 않게)
   const NATIVE_BAR = new Set(['youtube', 'x', 'bluesky', 'tiktok', 'douyin', 'facebook', 'bilibili', 'weibo', 'vimeo', 'dailymotion', 'naver']);
   const want = (s) => (NATIVE_BAR.has(site) ? ((s || {}).siteSettings || {})[site]?.seekBar === true : effOf(s, site).seekBar !== false);
-  chrome.storage.local.get('settings').then((r) => (on = want(r.settings)), () => {});
+  chrome.storage.local.get('settings').then((r) => {
+    on = want(r.settings);
+    kick();
+  }, () => {});
   chrome.storage.onChanged.addListener((c, area) => {
-    if (area === 'local' && c.settings) on = want(c.settings.newValue);
+    if (area === 'local' && c.settings) {
+      on = want(c.settings.newValue);
+      kick();
+    }
   });
 
   const CSS = `
@@ -97,8 +103,16 @@
     e.buf.style.width = `${Number.isFinite(d) && d > 0 ? Math.min(1, b / d) * 100 : 0}%`;
     e.t.textContent = `${fmt(v.currentTime)} / ${fmt(d)}`;
   }
+  // 꺼져 있으면 아무것도 하지 않고(이미 띄운 바만 숨김), 켜져 있어도 보이는 바가 있을 때만 매 프레임 움직인다(페이지를 느리게 하지 않게)
+  let running = false;
+  function hideAll() {
+    for (const e of bars.values()) e.w.hidden = true;
+  }
   function tick() {
+    running = false;
     if (!alive()) return;
+    if (!on || document.hidden) return hideAll();
+    let visible = 0;
     for (const v of document.querySelectorAll('video')) if (!bars.has(v)) make(v);
     for (const [v, e] of bars) {
       if (!v.isConnected) {
@@ -110,13 +124,20 @@
       const show = on && !v.controls && !v.closest('smd-anchor') && r.width >= 200 && r.height >= 150 && r.bottom > 30 && r.top < innerHeight - 10 && Number.isFinite(v.duration) && v.duration > 0 && getComputedStyle(v).visibility !== 'hidden';
       e.w.hidden = !show;
       if (!show) continue;
+      visible++;
       // 영상 맨 아래(화면 밖으로 잘리면 화면 안쪽 끝)에 붙인다
       const bottom = Math.min(r.bottom, innerHeight) - 4;
       e.w.style.transform = `translate(${Math.round(r.left)}px,${Math.round(bottom - 22)}px)`;
       e.w.style.width = `${Math.round(r.width)}px`;
       paint(e);
     }
-    requestAnimationFrame(tick);
+    if (visible) {
+      running = true;
+      requestAnimationFrame(tick);
+    }
   }
-  requestAnimationFrame(tick);
+  const kick = () => !running && (running = true) && requestAnimationFrame(tick);
+  setInterval(kick, 500); // 새 영상·스크롤로 보이게 된 영상 찾기
+  addEventListener('scroll', kick, { passive: true, capture: true });
+  kick();
 })();

@@ -84,6 +84,7 @@
     ui.go.addEventListener('click', start);
     ui.stop.addEventListener('click', () => run && (run.stop = true));
     document.documentElement.appendChild(host);
+    globalThis.__SMD_DRAG?.(host, 'followall'); // 끌어서 옮기기(사이트마다 위치 기억)
   }
   const say = (text, err = false) => {
     ui.msg.textContent = text;
