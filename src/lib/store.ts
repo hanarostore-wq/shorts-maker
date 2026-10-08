@@ -231,7 +231,7 @@ function healState(state: State): State {
   state.projects = state.projects || [];
   const freshBlogProject = projects.find((project) => project.id === "p4");
   const blogProject = state.projects.find((project) => project.id === "p4");
-  if (blogProject) { blogProject.departmentId = "blog"; blogProject.agentCount = 2; blogProject.leadAgent = "네이버블로그"; }
+  if (blogProject) { blogProject.departmentId = "blog"; blogProject.agentCount = 0; blogProject.leadAgent = "미배정"; }
   else if (freshBlogProject) state.projects.push(structuredClone(freshBlogProject));
   const existingDepartmentIds = new Set(state.departments.map((department) => department.id));
   for (const freshDepartment of initialDepartments) {
@@ -302,7 +302,7 @@ function healState(state: State): State {
   const shortsProject = state.projects.find((project) => project.id === "p3");
   if (shortsProject) {
     shortsProject.agentCount = state.departments.find((department) => department.id === "shorts")?.agents.length ?? 0;
-    shortsProject.leadAgent = "영상감독";
+    shortsProject.leadAgent = shortsProject.agentCount > 0 ? "영상감독" : "미배정";
   }
   const vercelLogPattern = /Vercel|빌드|배포|대기열|INITIALIZING/;
   const newestVercelLog = state.log.find((item) => item.agentId === "o4" && vercelLogPattern.test(item.message));
