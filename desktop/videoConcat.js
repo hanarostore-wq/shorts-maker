@@ -181,13 +181,29 @@ async function normalizeConcat(sources, outputPath, binaries, onProgress, expect
     throw new Error("원본마다 오디오 트랙 수가 달라 자동 규격 맞춤을 중단했습니다. 소리를 삭제하지 않기 위한 안전 조치입니다.");
   }
 
-  // Windows에는 FFmpeg 명령줄 길이 제한이 있다. 원본을 한 번에 모두 넘기지 않고
-  // 한 파일씩 동일 규격의 임시 MP4로 만든 뒤 concat 목록 파일로 합친다.
-  const normalizedSegments = [];
-  let completedDuration = 0;
-  for (let index = 0; index < sources.length; index += 1) {
+  // Windows에는 FFmpeg 명령줄 길이 제한이 있다. 한 파일씩 임시 MP4를 만든 뒤
+  // 목록 파일로 합치되, CPU 코어 여유가 있을 때만 제한된 개수로 병렬 처리한다.
+  const cpuCount = Math.max(1, os.cpus().length || 1);
+  const parallelism = cpuCount >= 12 ? 3 : cpuCount >= 6 ? 2 : 1;
+  const threadsPerJob = Math.max(1, Math.floor(cpuCount / parallelism));
+  const normalizedSegments = new Array(sources.length);
+  const sourceProgress = new Array(sources.length).fill(0);
+  const keptDurations = sources.map((source) => source.duration - 2);
+  const updateProgress = (index, localProgress, message) => {
+    sourceProgress[index] = Math.max(0, Math.min(1, localProgress));
+    const completedCount = sourceProgress.filter((value) => value >= 1).length;
+    const totalProgress = sourceProgress.reduce((sum, value, sourceIndex) => sum + value * keptDurations[sourceIndex], 0) / expectedDuration;
+    onProgress({
+      phase: "normalize",
+      current: completedCount,
+      total: sources.length,
+      progress: totalProgress * 0.9,
+      message,
+    });
+  };
+  const normalizeOne = async (index) => {
     const source = sources[index];
-    const keptDuration = source.duration - 2;
+    const keptDuration = keptDurations[index];
     const end = (source.duration - 1).toFixed(3);
     const segmentPath = path.join(workDir, `normalized-${String(index + 1).padStart(6, "0")}.mp4`);
     const filters = [
@@ -199,19 +215,25 @@ async function normalizeConcat(sources, outputPath, binaries, onProgress, expect
     }
     const args = ["-hide_banner", "-nostdin", "-y", "-progress", "pipe:2", "-i", source.filePath, "-filter_complex", filters.join(";"), "-map", "[v]"];
     for (let trackIndex = 0; trackIndex < audioTrackCount; trackIndex += 1) args.push("-map", `[a${trackIndex}]`);
-    args.push("-c:v", "libx264", "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p");
+    args.push("-c:v", "libx264", "-crf", "18", "-preset", "veryfast", "-threads", String(threadsPerJob), "-pix_fmt", "yuv420p");
     if (audioTrackCount > 0) args.push("-c:a", "aac", "-b:a", "192k");
-    args.push("-movflags", "+faststart", segmentPath);
-    onProgress({ phase: "normalize", current: index + 1, total: sources.length, progress: (completedDuration / expectedDuration) * 0.9, message: `${index + 1}/${sources.length} 자동 규격 맞춤 MP4 처리 중` });
+    args.push(segmentPath);
+    updateProgress(index, 0, `자동 규격 맞춤 · ${parallelism}개 동시 처리 중`);
     await run(binaries.ffmpeg, args, {
       totalDuration: keptDuration,
-      baseProgress: (completedDuration / expectedDuration) * 0.9,
-      progressSpan: (keptDuration / expectedDuration) * 0.9,
-      onProgress: (details) => onProgress({ phase: "normalize", current: index + 1, total: sources.length, message: `${index + 1}/${sources.length} 자동 규격 맞춤 MP4 처리 중`, ...details }),
+      onProgress: (details) => updateProgress(index, details.progress ?? 0, `자동 규격 맞춤 · ${parallelism}개 동시 처리 중`),
     });
-    completedDuration += keptDuration;
-    normalizedSegments.push(segmentPath);
-  }
+    normalizedSegments[index] = segmentPath;
+    updateProgress(index, 1, `자동 규격 맞춤 · ${parallelism}개 동시 처리 중`);
+  };
+  let nextIndex = 0;
+  await Promise.all(Array.from({ length: Math.min(parallelism, sources.length) }, async () => {
+    while (nextIndex < sources.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      await normalizeOne(index);
+    }
+  }));
   await joinSegmentList(normalizedSegments, outputPath, binaries, onProgress, expectedDuration, "규격을 맞춘 MP4 묶음을 이어붙이는 중");
 }
 
