@@ -230,10 +230,61 @@
       const id = ytIdOf(el);
       return id ? `youtube:${id}` : '';
     }
-    const poster = el.getAttribute('poster') || '';
+    // ① 그 게시물 안의 게시물 번호 링크 ② 게시물 화면 주소(화면에서 가장 큰 영상 하나에만) ③ 영상 파일·표지 주소
+    //   예전에는 멀리 있는 링크(다른 게시물·'/reels/audio/' 음악 링크)나 피드 주소를 써서, 하나만 받아도 여러 영상이 '받은 적 있음'으로 보였다
+    const re = POST_ID_RE[adapter.id] || POST_ID_RE.generic;
+    const box = el.closest(POST_BOX_SEL);
+    if (box) {
+      for (const a of box.querySelectorAll('a[href]')) {
+        const m = re.exec(a.getAttribute('href') || '');
+        if (m) return `${adapter.id}:${m[1] || m[2]}`;
+      }
+    }
+    const wrap = el.closest('a[href]');
+    const wm = wrap && re.exec(wrap.getAttribute('href') || '');
+    if (wm) return `${adapter.id}:${wm[1] || wm[2]}`;
+    const um = re.exec(location.pathname + location.search);
+    if (um && mainVideo() === el) return `${adapter.id}:${um[1] || um[2]}`;
+    const poster = (el.getAttribute('poster') || '').split('?')[0];
     const src = /^https?:/.test(el.currentSrc || '') ? el.currentSrc.split('?')[0] : '';
-    const link = U.findLink(el, /\/(?:status|video|reel|reels|p|pin|short-video|explore|shorts)\/[\w-]+/)?.[0] || '';
-    return `${adapter.id}:${link || poster.split('?')[0] || src || location.pathname + location.search}`;
+    return src || poster ? `${adapter.id}:${src || poster}` : '';
+  }
+  // 사이트별 게시물 번호(주소에서). 인스타 '/reels/audio/…'(음악) 같은 공용 주소는 제외
+  const POST_ID_RE = {
+    instagram: /\/(?:p|reel|reels|tv)\/(?!audio\/)([\w-]{6,})/,
+    threads: /\/post\/([\w-]{6,})/,
+    x: /\/status\/(\d{6,})/,
+    bluesky: /\/profile\/[^/]+\/post\/([\w]+)/,
+    tiktok: /\/(?:video|photo)\/(\d{10,})/,
+    douyin: /\/(?:video|note)\/(\d{10,})/,
+    facebook: /(?:\/reel\/|\/videos\/(?:[^/]+\/)?|[?&]v=)(\d{6,})/,
+    pinterest: /\/pin\/(\d{6,})/,
+    xiaohongshu: /\/(?:explore|discovery\/item|user\/profile\/\w+)\/([0-9a-f]{24})/,
+    bilibili: /\/video\/(BV\w{8,}|av\d+)/,
+    kuaishou: /\/short-video\/([\w-]{6,})/,
+    weibo: /weibo\.com\/\d+\/(\w{8,})|\/detail\/(\d{10,})/,
+    vimeo: /vimeo\.com\/(\d{5,})|^\/(\d{5,})/,
+    dailymotion: /\/video\/(\w{5,})/,
+    naver: /\/(?:v|clips?|shortform)\/(\w{4,})/,
+    snapchat: /\/spotlight\/([\w-]{6,})/,
+    generic: /\/(?:status|video|videos|reel|watch|v|post|p)\/([\w-]{6,})/,
+  };
+  const POST_BOX_SEL = 'article, [role="article"], [role="dialog"], [data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"], [data-e2e="recommend-list-item-container"], [data-e2e="browse-video"], .note-item, .feed-item';
+  // 화면에서 가장 크게 보이는 영상(게시물 화면 주소는 이 영상 것으로 본다)
+  function mainVideo() {
+    let best = null;
+    let bestA = 0;
+    for (const v of document.getElementsByTagName('video')) {
+      const r = v.getBoundingClientRect();
+      const w = Math.min(r.right, innerWidth) - Math.max(r.left, 0);
+      const h = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0);
+      if (w < 150 || h < 100) continue;
+      if (w * h > bestA) {
+        bestA = w * h;
+        best = v;
+      }
+    }
+    return best;
   }
   async function markDownloaded(entry) {
     const k = entry.dlKey || keyFor(entry);

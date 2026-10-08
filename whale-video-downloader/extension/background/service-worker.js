@@ -99,7 +99,11 @@ const REG_MAX = 5000;
 function dupKeyOf(req, desc) {
   if (desc?.type === 'image' || req.kind === 'image') return `img:${String(desc?.url || req.info?.image?.url || '').replace(/#.*$/, '')}`;
   if (req.id) return `${req.site}:${req.id}`;
-  const u = String(desc?.url || req.pageUrl || '').replace(/[?#].*$/, '');
+  // 게시물 번호가 없으면 영상 파일 주소로. 페이지 주소는 그 자체가 게시물 주소일 때만(피드·홈 주소는 여러 영상이 같아서 쓰지 않음)
+  const file = /^https?:/.test(String(desc?.url || '')) ? String(desc.url).replace(/[?#].*$/, '') : '';
+  const page = String(req.pageUrl || '');
+  const postPage = /\/(?:p|reel|reels|tv|status|video|videos|pin|post|shorts|short-video|explore)\/(?!audio\/)[\w-]{5,}/.test(page) ? page.replace(/[?#].*$/, '') : '';
+  const u = file || postPage;
   return u ? `${req.site}:${u}` : '';
 }
 async function rememberDownload(job) {

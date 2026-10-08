@@ -541,6 +541,21 @@ const handlers = {
 
   // ── Instagram ──
   'www.instagram.com': (req, res, u) => {
+    if (u.pathname === '/igfeedmark') {
+      // 피드: 게시물마다 같은 음악 링크(/reels/audio/…), C 는 게시물 링크 없음 — 받은 적 있음 표시는 A 에만
+      const post = (id, link) => `<article style="width:420px;margin:24px"><a href="/reels/audio/999000111/">원본 오디오</a>${link ? `<a href="/p/${link}/">게시물</a>` : ''}<video id="${id}" src="https://cdn.example-videos.com/preview.webm" muted loop playsinline style="width:400px;height:300px;display:block;background:#000"></video></article>`;
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Instagram</title></head><body style="margin:0;background:#111;display:flex;flex-wrap:wrap">${post('va', 'AAAAAAA1')}${post('vb', 'BBBBBBB2')}${post('vc', '')}</body></html>`);
+    }
+    if (u.pathname === '/igreels') {
+      // 릴스: 스크롤 상자 안에 위·아래 영상(상자 밖으로 잘림) + 가운데 영상 뒤에 흐린 배경용 복사본
+      const vid = (id, extra = '') => `<video id="${id}" src="https://cdn.example-videos.com/long_95s.webm" muted loop autoplay playsinline style="width:400px;height:600px;display:block;background:#000;${extra}"></video>`;
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Instagram</title></head><body style="margin:0;background:#000">
+        <div id="box" style="position:absolute;left:300px;top:100px;width:400px;height:600px;overflow:hidden">
+          <div style="height:600px">${vid('prev')}</div>
+          <div style="height:600px;position:relative">${vid('bg', 'position:absolute;left:0;top:0;filter:blur(20px)')}<div style="position:relative">${vid('main')}</div><div style="position:absolute;inset:0"></div></div>
+          <div style="height:600px">${vid('next')}</div>
+        </div><script>document.getElementById('box').scrollTop = 600;</script></body></html>`);
+    }
     if (/^\/igfollow(-err|-429|-cached)?$/.test(u.pathname)) {
       // 인스타 피드 게시물(로그인 쿠키 있음). 작성자는 머리글 프로필 링크로만 알 수 있음. -cached 는 페이지 데이터에 계정 번호가 있음
       const who = { '/igfollow': 'igauthor', '/igfollow-err': 'ghostuser', '/igfollow-429': 'busyuser', '/igfollow-cached': 'igcached' }[u.pathname];

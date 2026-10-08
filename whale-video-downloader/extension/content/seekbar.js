@@ -112,27 +112,88 @@
     const P = globalThis.__SMD_PERF;
     return P ? P.time('재생바', tickNow) : tickNow();
   }
+  // 영상이 실제로 보이는 부분: 스크롤 상자(overflow)로 잘린 부분을 뺀 영역. 인스타 릴스처럼 위·아래 영상이
+  //   스크롤 상자 밖에 숨어 있어도 화면 좌표로는 겹쳐 보여서 재생바가 여러 개 뜨던 문제를 막는다
+  function shownRect(v) {
+    const r = v.getBoundingClientRect();
+    let L = Math.max(0, r.left);
+    let T = Math.max(0, r.top);
+    let R = Math.min(innerWidth, r.right);
+    let B = Math.min(innerHeight, r.bottom);
+    for (let p = v.parentElement; p && p !== document.body && p !== document.documentElement && R > L && B > T; p = p.parentElement) {
+      const st = getComputedStyle(p);
+      if (st.overflowX === 'visible' && st.overflowY === 'visible' && st.clipPath === 'none') continue;
+      const pr = p.getBoundingClientRect();
+      L = Math.max(L, pr.left);
+      T = Math.max(T, pr.top);
+      R = Math.min(R, pr.right);
+      B = Math.min(B, pr.bottom);
+    }
+    const area = Math.max(1, r.width * r.height);
+    return { r, L, T, R, B, ratio: R > L && B > T ? ((R - L) * (B - T)) / area : 0 };
+  }
+  // 다른 영상·사진에 가려졌는지(보이는 영역 가운데에 맨 위로 그려진 것이 이 영상 묶음인지)
+  function onTop(v, s) {
+    const hit = document.elementFromPoint((s.L + s.R) / 2, (s.T + s.B) / 2);
+    if (!hit) return false;
+    if (hit === v || /^SMD-/.test(hit.tagName)) return true;
+    if (hit.tagName === 'VIDEO') return false; // 다른 영상이 위에 있음
+    for (let p = hit, i = 0; p && i < 8; p = p.parentElement, i++) if (p.contains(v)) return true;
+    return false;
+  }
+  let chosen = new Set();
+  let chosenAt = 0;
+  function choose() {
+    const cands = [];
+    for (const [v, e] of bars) {
+      if (!v.isConnected || v.controls || v.closest('smd-anchor') || !(Number.isFinite(v.duration) && v.duration > 0)) continue;
+      const s = shownRect(v);
+      // 화면에 60% 넘게 보이고, 보이는 부분이 충분히 크고, 다른 것에 가려지지 않은 영상만
+      if (s.ratio < 0.6 || s.R - s.L < 200 || s.B - s.T < 150) continue;
+      if (getComputedStyle(v).visibility === 'hidden' || !onTop(v, s)) continue;
+      cands.push({ v, s });
+    }
+    // 같은 자리에 겹친 영상(흐린 배경용 복사본 등)은 하나만: 재생 중·큰 것 우선
+    cands.sort((a, b) => (b.v.paused ? 0 : 1) - (a.v.paused ? 0 : 1) || (b.s.R - b.s.L) * (b.s.B - b.s.T) - (a.s.R - a.s.L) * (a.s.B - a.s.T));
+    const keep = [];
+    for (const c of cands) {
+      const dup = keep.some((k) => {
+        const w = Math.min(k.s.R, c.s.R) - Math.max(k.s.L, c.s.L);
+        const h = Math.min(k.s.B, c.s.B) - Math.max(k.s.T, c.s.T);
+        return w > 0 && h > 0 && w * h > 0.5 * Math.min((k.s.R - k.s.L) * (k.s.B - k.s.T), (c.s.R - c.s.L) * (c.s.B - c.s.T));
+      });
+      if (!dup) keep.push(c);
+    }
+    chosen = new Set(keep.map((c) => c.v));
+    chosenAt = performance.now();
+  }
   function tickNow() {
     running = false;
     if (!alive()) return;
     if (!on || document.hidden) return hideAll();
-    let visible = 0;
     for (const v of document.querySelectorAll('video')) if (!bars.has(v)) make(v);
     for (const [v, e] of bars) {
-      if (!v.isConnected) {
-        e.host.remove();
-        bars.delete(v);
+      if (v.isConnected) continue;
+      e.host.remove();
+      bars.delete(v);
+    }
+    if (performance.now() - chosenAt > 250) choose();
+    let visible = 0;
+    for (const [v, e] of bars) {
+      if (!chosen.has(v)) {
+        e.w.hidden = true;
         continue;
       }
-      const r = v.getBoundingClientRect();
-      const show = on && !v.controls && !v.closest('smd-anchor') && r.width >= 200 && r.height >= 150 && r.bottom > 30 && r.top < innerHeight - 10 && Number.isFinite(v.duration) && v.duration > 0 && getComputedStyle(v).visibility !== 'hidden';
-      e.w.hidden = !show;
-      if (!show) continue;
+      const s = shownRect(v);
+      if (s.ratio < 0.6) {
+        e.w.hidden = true;
+        continue;
+      }
+      e.w.hidden = false;
       visible++;
-      // 영상 맨 아래(화면 밖으로 잘리면 화면 안쪽 끝)에 붙인다
-      const bottom = Math.min(r.bottom, innerHeight) - 4;
-      e.w.style.transform = `translate(${Math.round(r.left)}px,${Math.round(bottom - 22)}px)`;
-      e.w.style.width = `${Math.round(r.width)}px`;
+      // 보이는 부분의 맨 아래에 붙인다
+      e.w.style.transform = `translate(${Math.round(s.L)}px,${Math.round(s.B - 4 - 22)}px)`;
+      e.w.style.width = `${Math.round(s.R - s.L)}px`;
       paint(e);
     }
     if (visible) {

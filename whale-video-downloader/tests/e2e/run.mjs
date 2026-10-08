@@ -498,6 +498,61 @@ if (!only || only === 'folder') {
   }
 }
 
+// ── '받은 적 있음' 표시: 받은 영상에만(같은 음악 링크·같은 피드 주소를 쓰는 다른 영상은 아님) ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ siteSettings: {}, alwaysShowButtons: true, downloadedMark: true });
+    const p0 = await extPage();
+    // A 는 받은 것, 예전 방식의 잘못된 키(음악 링크·피드 주소)도 남아 있는 상태
+    await p0.evaluate(() => chrome.storage.local.set({ downloadedKeys: ['instagram:AAAAAAA1', 'instagram:/reels/audio/999000111', 'instagram:/igfeedmark'] }));
+    await p0.close();
+    await page.goto('https://www.instagram.com/igfeedmark', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2500);
+    const r = await page.evaluate(() => {
+      const out = {};
+      for (const id of ['va', 'vb', 'vc']) {
+        const vr = document.getElementById(id).getBoundingClientRect();
+        const btn = [...document.querySelectorAll('smd-anchor')].map((h) => h.shadowRoot?.querySelector('.btn')).filter(Boolean).find((b) => {
+          const br = b.getBoundingClientRect();
+          return br.width && br.left >= vr.left - 2 && br.right <= vr.right + 2 && br.top >= vr.top - 2 && br.bottom <= vr.bottom + 2;
+        });
+        out[id] = btn ? (btn.classList.contains('downloaded') ? '받은 적 있음' : '다운로드') : '버튼 없음';
+      }
+      return out;
+    });
+    record("[받은 적 있음] 받은 영상(A)만 표시, 같은 음악 링크·피드 주소의 다른 영상(B·C)은 아님", r.va === '받은 적 있음' && r.vb === '다운로드' && r.vc === '다운로드', { note: JSON.stringify(r) });
+  } catch (err) {
+    record('[받은 적 있음] 표시', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ alwaysShowButtons: false });
+    const p1 = await extPage();
+    await p1.evaluate(() => chrome.storage.local.set({ downloadedKeys: [] }));
+    await p1.close();
+    await page.close();
+  }
+}
+
+// ── 재생바 하나만: 스크롤 상자 밖으로 잘린 위·아래 영상, 뒤에 깔린 배경 영상에는 안 띄움 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ siteSettings: {} });
+    await page.goto('https://www.instagram.com/igreels', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2500);
+    const r = await page.evaluate(() => {
+      const shown = [...document.querySelectorAll('smd-seek')].map((h) => h.shadowRoot.querySelector('.w')).filter((w) => !w.hidden).map((w) => w.getBoundingClientRect());
+      const m = document.getElementById('main').getBoundingClientRect();
+      return { n: shown.length, onMain: shown.length === 1 && shown[0].left >= m.left - 2 && shown[0].right <= m.right + 2 && shown[0].bottom <= m.bottom + 2 && shown[0].top >= m.bottom - 40 };
+    });
+    record('[재생바] 인스타 릴스: 재생바 1개만(잘린 위·아래 영상·배경 복사본 제외), 보고 있는 영상 아래', r.n === 1 && r.onMain, { note: JSON.stringify(r) });
+  } catch (err) {
+    record('[재생바] 하나만', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
 // ── 틱톡·샤오홍슈처럼 사이트가 window 에서 클릭을 먼저 가로채도 저장 버튼이 반응 ──
 for (const [SITE, URL_] of [['틱톡', 'https://www.tiktok.com/ttguard'], ['샤오홍슈', 'https://www.xiaohongshu.com/ttguard']]) {
   const page = await ctx.newPage();
