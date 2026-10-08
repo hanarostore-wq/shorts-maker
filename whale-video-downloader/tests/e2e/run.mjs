@@ -337,6 +337,105 @@ for (const [SITE, URL_] of [['틱톡', 'https://www.tiktok.com/ttguard'], ['샤�
   }
 }
 
+// ── 본문 사진·영상에만 버튼: 댓글 칸 그림·넘김 사진의 옆 장·흐린 배경 사진에는 버튼 없음 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ alwaysShowButtons: true });
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.goto('https://www.tiktok.com/ttmedia', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2500);
+    const r = await page.evaluate(() => {
+      const n = (id) => [...document.getElementById(id).querySelectorAll(':scope > smd-anchor')].filter((h) => h.shadowRoot.querySelector('.btn.show')).length;
+      return { 본문: n('mainBox'), 댓글: n('cBox'), 넘김사진: n('carBox'), 배경겹침: n('bgBox'), 전체: [...document.querySelectorAll('smd-anchor')].filter((h) => h.shadowRoot.querySelector('.btn.show')).length };
+    });
+    record('[버튼] 본문 사진에만: 댓글 그림·넘김 사진 옆 장·흐린 배경 사진 제외', r.본문 === 1 && r.댓글 === 0 && r.넘김사진 === 1 && r.배경겹침 === 1 && r.전체 === 3, { note: JSON.stringify(r) });
+  } catch (err) {
+    record('[버튼] 본문 사진에만', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ alwaysShowButtons: false });
+    await page.close();
+  }
+}
+
+// ── 인스타 자동 팔로우(인스타 웹 요청) · 샤오홍슈 자동 팔로우(깊은 구조의 关注 단추) ──
+{
+  const page = await ctx.newPage();
+  const toast = () => page.evaluate(() => {
+    const h = document.querySelector('smd-toast');
+    return h && h.style.display !== 'none' ? h.shadowRoot.querySelector('.t').textContent : '';
+  });
+  const save = async (sel) => {
+    await page.locator(sel).hover();
+    await page.waitForTimeout(500);
+    const before = new Set(listFiles(DL));
+    const p = await page.evaluate((s) => {
+      const b = document.querySelector(s).parentElement.querySelector('smd-anchor')?.shadowRoot.querySelector('.btn.show');
+      const r = b?.getBoundingClientRect();
+      return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+    }, sel);
+    await page.mouse.click(p.x, p.y);
+    await waitFile(before, 30000);
+    await page.waitForTimeout(2500);
+  };
+  try {
+    await setSettings({ autoFollow: true, captionOnMedia: false, preventDuplicates: false });
+    let l = log.length;
+    await page.goto('https://www.instagram.com/igfollow', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    await save('#igf');
+    const ig = log.slice(l).find((e) => e.igFollow);
+    const t1 = await toast();
+    record('[자동 팔로우] 인스타: 다운로드하면 인스타 웹 요청으로 작성자 팔로우(보안 값 포함)', ig?.path === '/api/v1/friendships/create/777/' && ig.csrf === 'TESTCSRF' && ig.app === '936619743392459' && /@igauthor 팔로우했습니다/.test(t1), { note: `${JSON.stringify(ig || '요청 없음')} · ${t1}` });
+    l = log.length;
+    await page.goto('https://www.instagram.com/igfollow-err', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    await save('#igf');
+    const t2 = await toast();
+    record('[자동 팔로우] (오류 경로) 인스타 작성자 정보를 못 받으면 단계·원인·조치 알림', !log.slice(l).some((e) => e.igFollow) && /단계: 작성자 정보 확인/.test(t2) && /HTTP 404/.test(t2), { note: t2 || '알림 없음' });
+    await page.goto('https://www.xiaohongshu.com/xhsfollow', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    await save('#xp');
+    const x = await page.evaluate(() => ({ n: window.__xhsFollow || 0, txt: document.getElementById('xf').textContent }));
+    const t3 = await toast();
+    record('[자동 팔로우] 샤오홍슈: 노트 창의 关注 단추를 눌러 팔로우하고 결과 알림', x.n === 1 && x.txt === '已关注' && /팔로우했습니다/.test(t3), { note: `${JSON.stringify(x)} · ${t3}` });
+  } catch (err) {
+    record('[자동 팔로우] 인스타·샤오홍슈', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+  }
+}
+
+// ── 유튜브 좋아요 플로팅 버튼 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ siteSettings: {} });
+    await page.goto('https://www.youtube.com/watch?v=YTlike00001', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1800);
+    const shown = await page.evaluate(() => getComputedStyle(document.querySelector('smd-ytlike') || document.body).display !== 'none' && !!document.querySelector('smd-ytlike'));
+    await page.evaluate(() => document.querySelector('smd-ytlike').shadowRoot.querySelector('button').click());
+    await page.waitForTimeout(1200);
+    const r = await page.evaluate(() => ({ liked: window.__liked || 0, pressed: document.getElementById('ytlike').getAttribute('aria-pressed'), on: document.querySelector('smd-ytlike').shadowRoot.querySelector('button').classList.contains('on') }));
+    record('[유튜브] 좋아요 플로팅 버튼: 누르면 유튜브 좋아요가 눌리고 버튼이 켜짐', shown && r.liked === 1 && r.pressed === 'true' && r.on, { note: JSON.stringify({ 보임: shown, ...r }) });
+    await page.goto('https://www.youtube.com/watch?v=YTwatch0001', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => document.querySelector('smd-ytlike').shadowRoot.querySelector('button').click());
+    await page.waitForTimeout(500);
+    const m = await page.evaluate(() => document.querySelector('smd-ytlike').shadowRoot.querySelector('.msg').textContent);
+    record('[유튜브] (오류 경로) 좋아요 단추가 없으면 단계·원인·조치 안내', /단계: 좋아요 단추 찾기/.test(m) && /조치:/.test(m), { note: m.replace(/\n/g, ' / ') });
+    await setSettings({ siteSettings: { youtube: { ytLikeFloat: false } } });
+    await page.waitForTimeout(1200);
+    const hidden = await page.evaluate(() => getComputedStyle(document.querySelector('smd-ytlike')).display === 'none');
+    record('[유튜브] 좋아요 플로팅 버튼 끄면 숨김', hidden, { note: hidden ? '숨김' : '보임' });
+  } catch (err) {
+    record('[유튜브] 좋아요 플로팅', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ siteSettings: {} });
+    await page.close();
+  }
+}
+
 // ── 저장 버튼 항상 표시: 마우스를 올리거나 재생하지 않아도 사진·영상 버튼이 보임 ──
 {
   const page = await ctx.newPage();

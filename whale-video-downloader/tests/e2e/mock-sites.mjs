@@ -351,7 +351,8 @@ const handlers = {
     if (u.pathname === '/watch') {
       // 보기 화면: 구독 단추는 플레이어와 떨어진 곳(제목 아래)에 있다
       const sub = u.searchParams.get('v') === 'YTsubbed001' ? '구독중' : '구독';
-      return html(res, ytPage(u.searchParams.get('v'), false).replace('</body>', `<div id="below" style="margin-top:40px"><ytd-channel-name>테스트 채널</ytd-channel-name> <ytd-subscribe-button-renderer><button id="subbtn" onclick="window.__subscribed = (window.__subscribed || 0) + 1; this.textContent = '구독중'">${sub}</button></ytd-subscribe-button-renderer></div></body>`));
+      const likeBtn = u.searchParams.get('v') === 'YTlike00001' ? `<ytd-watch-metadata><like-button-view-model><button id="ytlike" aria-pressed="false" onclick="window.__liked = (window.__liked || 0) + 1; this.setAttribute('aria-pressed', this.getAttribute('aria-pressed') === 'true' ? 'false' : 'true')">좋아요</button></like-button-view-model></ytd-watch-metadata>` : '';
+      return html(res, ytPage(u.searchParams.get('v'), false).replace('</body>', `${likeBtn}<div id="below" style="margin-top:40px"><ytd-channel-name>테스트 채널</ytd-channel-name> <ytd-subscribe-button-renderer><button id="subbtn" onclick="window.__subscribed = (window.__subscribed || 0) + 1; this.textContent = '구독중'">${sub}</button></ytd-subscribe-button-renderer></div></body>`));
     }
     if (u.pathname === '/adsfeed') {
       return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>YouTube</title></head><body>
@@ -403,6 +404,16 @@ const handlers = {
 
   // ── TikTok ──
   'www.tiktok.com': (req, res, u) => {
+    if (u.pathname === '/ttmedia') {
+      // 본문 사진 1장 + 댓글 칸 그림 + 넘김 사진(옆 장은 카드 밖) + 흐린 배경 사진(같은 그림 겹침)
+      const img = (id, st = '') => `<img id="${id}" src="https://cdn.example-videos.com/img/photo.jpg" style="width:300px;height:300px;object-fit:cover;display:block;${st}">`;
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>TikTok</title></head><body style="margin:0;display:flex;flex-wrap:wrap;gap:20px;padding:10px">
+        <div id="mainBox">${img('tmain')}</div>
+        <div data-e2e="comment-list"><div class="comment-item"><div id="cBox">${img('tcomment')}</div></div></div>
+        <div style="width:300px;height:300px;overflow:hidden"><div id="carBox" style="display:flex;width:900px">${img('ts1', 'flex:none')}${img('ts2', 'flex:none')}${img('ts3', 'flex:none')}</div></div>
+        <div id="bgBox" style="position:relative;width:300px;height:300px">${img('tbg', 'position:absolute;inset:0;filter:blur(8px)')}${img('tfg', 'position:absolute;inset:0')}</div>
+        </body></html>`);
+    }
     if (u.pathname === '/ttguard') return html(res, GUARD_PAGE);
     if (u.pathname === '/@spacestar' || u.pathname === '/@limited') {
       // 틱톡 프로필: '팔로워'를 누르면 목록 창. limited 는 누르면 'Try again later' 알림
@@ -452,6 +463,27 @@ const handlers = {
 
   // ── Instagram ──
   'www.instagram.com': (req, res, u) => {
+    if (u.pathname === '/igfollow' || u.pathname === '/igfollow-err') {
+      // 인스타 피드 게시물(로그인 쿠키 있음). 작성자는 머리글 프로필 링크로만 알 수 있음
+      const who = u.pathname.endsWith('err') ? 'ghostuser' : 'igauthor';
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Instagram</title><script>document.cookie = 'csrftoken=TESTCSRF; path=/'; document.cookie = 'ds_user_id=999; path=/';</script></head><body style="margin:0">
+        <article style="width:480px;margin:20px"><div><div><a href="/${who}/" role="link"><span>${who}</span></a></div></div>
+          <div><div><div><img id="igf" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px;height:480px;object-fit:cover;display:block"></div></div></div></article></body></html>`);
+    }
+    if (u.pathname === '/api/v1/users/web_profile_info/') {
+      const name = u.searchParams.get('username');
+      if (name !== 'igauthor' || req.headers['x-ig-app-id'] !== '936619743392459') return json(req, res, { message: 'User not found', status: 'fail' }, 404);
+      return json(req, res, { data: { user: { id: '777', username: 'igauthor', followed_by_viewer: false } }, status: 'ok' });
+    }
+    if (/^\/api\/v1\/friendships\/create\/\d+\/$/.test(u.pathname)) {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        log.push({ host: 'www.instagram.com', igFollow: 'create', path: u.pathname, csrf: req.headers['x-csrftoken'] || '', app: req.headers['x-ig-app-id'] || '', body });
+        json(req, res, { friendship_status: { following: true }, status: 'ok' });
+      });
+      return;
+    }
     if (u.pathname === '/igoverlay') {
       // 인스타그램처럼 사진·영상 위에 투명 막이 덮여 있음(누르면 게시물 열기·영상 확대)
       return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Instagram</title></head><body style="margin:0">
@@ -888,6 +920,13 @@ const handlers = {
 
   // ── Xiaohongshu ──
   'www.xiaohongshu.com': (req, res, u) => {
+    if (u.pathname === '/xhsfollow') {
+      // 샤오홍슈 노트 창: 사진이 아주 깊이 들어 있고, 작성자 '关注' 단추는 노트 창 위쪽에 따로 있음
+      const deep = (inner, n) => (n ? `<div>${deep(inner, n - 1)}</div>` : inner);
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>小红书</title></head><body style="margin:0">
+        <div id="noteContainer" style="width:900px"><div class="author-wrapper"><a href="/user/profile/abc"><span>작가</span></a><button id="xf" onclick="window.__xhsFollow = (window.__xhsFollow || 0) + 1; this.textContent = '已关注'">关注</button></div>
+        ${deep('<img id="xp" src="https://cdn.example-videos.com/img/photo.jpg" style="width:420px;height:420px;object-fit:cover;display:block">', 14)}</div></body></html>`);
+    }
     if (u.pathname === '/ttguard') return html(res, GUARD_PAGE);
     const m = /^\/explore\/([0-9a-f]{24})/.exec(u.pathname);
     if (m) {
