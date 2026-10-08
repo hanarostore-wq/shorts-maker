@@ -222,11 +222,11 @@ function healState(state: State): State {
     }
   }
   const coin = state.departments.find((department) => department.id === "coin");
-  const freshCoinAgent = initialDepartments.find((department) => department.id === "coin")?.agents.find((agent) => agent.id === "c_yujin");
-  if (coin && freshCoinAgent) {
-    // 코인매매부서는 관제실에서 YuJin Traders 직원 한 명만 남긴다.
+  const freshCoinAgents = initialDepartments.find((department) => department.id === "coin")?.agents ?? [];
+  if (coin) {
+    // 코인매매부서는 Traders 관제·체결 분석·에이전트별 슬롯 관리 직원을 표시한다.
     // 외부 YuJin Traders의 매매 엔진·계좌·거래 기록은 건드리지 않는다.
-    coin.agents = [structuredClone(freshCoinAgent)];
+    coin.agents = structuredClone(freshCoinAgents);
   }
   state.projects = state.projects || [];
   const freshBlogProject = projects.find((project) => project.id === "p4");

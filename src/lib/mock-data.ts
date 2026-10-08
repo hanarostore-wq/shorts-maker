@@ -25,6 +25,12 @@ export const departments: Department[] = [
     icon: "₿",
     agents: [
       { id: "c_yujin", name: "업비트", task: "YuJin Traders 자동매매 관제 · 클릭하면 전체 화면을 엽니다", status: "active" },
+      { id: "c_trade_analyst", name: "체결분석가", task: "체결·차트·진입·매도·익절·손절 근거 내보내기 검증 대기", status: "standby" },
+      { id: "c_gemini", name: "제미나이", task: "제미나이 슬롯 제안·추가·삭제·적용 이력 관리 대기", status: "standby" },
+      { id: "c_claude", name: "클로드", task: "클로드 슬롯 제안·추가·삭제·적용 이력 관리 대기", status: "standby" },
+      { id: "c_grok", name: "그록", task: "그록 슬롯 제안·추가·삭제·적용 이력 관리 대기", status: "standby" },
+      { id: "c_manus", name: "마누스", task: "마누스 슬롯 제안·추가·삭제·적용 이력 관리 대기", status: "standby" },
+      { id: "c_gpt", name: "지피티", task: "지피티 슬롯 제안·추가·삭제·적용 이력 관리 대기", status: "standby" },
     ],
   },
   {
