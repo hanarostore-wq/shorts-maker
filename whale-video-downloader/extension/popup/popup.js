@@ -172,37 +172,98 @@ $('#imageButtons').checked = settings.imageButtons !== false;
 $('#imageButtons').addEventListener('change', (e) => save({ imageButtons: e.target.checked }));
 
 // ───────────── 지원 사이트 ─────────────
+// 내 폴더: 사용자가 만든 폴더 이름 목록(folderList) + 사이트에 이미 지정된 폴더 이름. 사이트마다 드롭다운으로 고른다
+const cleanFolder = (v) => String(v || '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^\.+|\.+$/g, '').slice(0, 40);
+const myFolders = () => [...new Set([...(settings.folderList || []), ...Object.values(settings.siteFolderMap || {})].map(cleanFolder).filter(Boolean))];
+function folderMsg(text, err = false) {
+  const m = $('#mfMsg');
+  m.textContent = text;
+  m.classList.toggle('err', err);
+}
+async function addFolder(raw) {
+  const name = cleanFolder(raw);
+  if (!name) {
+    folderMsg('폴더 만들기 실패 — 단계: 이름 확인 · 원인: 폴더 이름이 비어 있거나 쓸 수 없는 글자(\\ / : * ? " < > |)만 있습니다 · 조치: 글자나 숫자로 된 이름을 입력하세요.', true);
+    return '';
+  }
+  if (!myFolders().includes(name)) await save({ folderList: [...(settings.folderList || []), name] });
+  folderMsg(`'${name}' 폴더를 만들었습니다. 아래 사이트의 '저장 폴더'에서 고르세요.`);
+  return name;
+}
+async function removeFolder(name) {
+  const map = { ...(settings.siteFolderMap || {}) };
+  const moved = [];
+  for (const [id, f] of Object.entries(map)) {
+    if (cleanFolder(f) !== name) continue;
+    delete map[id];
+    moved.push(siteMeta[id]?.name || id);
+  }
+  await save({ folderList: (settings.folderList || []).filter((f) => cleanFolder(f) !== name), siteFolderMap: map });
+  folderMsg(`'${name}' 폴더를 목록에서 지웠습니다${moved.length ? ` (${moved.join('·')} → 기본 폴더)` : ''}. 이미 저장된 파일은 그대로 있습니다.`);
+  renderSites();
+}
+function renderFolders() {
+  const box = $('#mfList');
+  box.innerHTML = '';
+  const list = myFolders();
+  if (!list.length) box.innerHTML = '<span class="mf-empty">아직 만든 폴더가 없습니다</span>';
+  for (const f of list) {
+    const used = SITE_LIST.filter((s) => cleanFolder((settings.siteFolderMap || {})[s.id]) === f).map((s) => s.name);
+    const chip = document.createElement('span');
+    chip.className = 'mf-chip';
+    chip.title = used.length ? `${used.join(', ')}` : '아직 이 폴더를 고른 사이트가 없습니다';
+    chip.innerHTML = `<span>📁 ${escapeHtml(f)}${used.length ? ` <em>${used.length}</em>` : ''}</span><button type="button" title="폴더 목록에서 지우기">✕</button>`;
+    chip.querySelector('button').addEventListener('click', () => removeFolder(f));
+    box.appendChild(chip);
+  }
+}
+$('#mfAdd').addEventListener('click', async () => {
+  if (await addFolder($('#mfName').value)) {
+    $('#mfName').value = '';
+    renderSites();
+  }
+});
+$('#mfName').addEventListener('keydown', (e) => e.key === 'Enter' && $('#mfAdd').click());
+
 function renderSites() {
+  renderFolders();
   const ul = $('#siteList');
   ul.innerHTML = '';
+  const folders = myFolders();
   for (const s of SITE_LIST) {
     const li = document.createElement('li');
-    const fname = (settings.siteFolderMap || {})[s.id] || '';
+    const fname = cleanFolder((settings.siteFolderMap || {})[s.id]);
+    const opts = [`<option value="">기본 (묶지 않음)</option>`, ...folders.map((f) => `<option value="${escapeHtml(f)}" ${f === fname ? 'selected' : ''}>📁 ${escapeHtml(f)}</option>`), `<option value="__new">+ 새 폴더 만들기…</option>`];
     li.innerHTML = `<label class="site"><span class="sdot" style="background:${s.color}"></span><span class="n">${escapeHtml(s.name)}</span><input type="checkbox" ${settings.disabledSites?.includes(s.id) ? '' : 'checked'}><span class="sw"><i></i></span></label>
       <button type="button" class="link sfeat">이 사이트 기능 설정 ›</button>
-      <label class="sfold" title="끄면 기본 다운로드 폴더(영상 1분30초 이하 / 초과 / 사진 / 국적)에 저장합니다. 켜면 다운로드 폴더 안에 이 사이트 폴더를 따로 만들고 그 안에 같은 순서로 나눕니다. 여러 사이트에 같은 폴더 이름을 넣으면 한 폴더로 합쳐집니다."><span class="sfl">따로 폴더</span><input type="checkbox" class="sfon" ${fname ? 'checked' : ''}><span class="sw"><i></i></span></label>
-      <div class="sfname" ${fname ? '' : 'hidden'}><span>폴더 이름</span><input type="text" class="sfin" maxlength="40" value="${escapeHtml(fname || s.name)}"></div>`;
-    const clean = (v) => String(v || '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
-    const setName = (v) => {
+      <label class="sfold" title="이 사이트 파일을 저장할 폴더. 같은 폴더를 고른 사이트끼리 한 폴더로 묶입니다"><span class="sfl">저장 폴더</span><select class="sfsel">${opts.join('')}</select></label>
+      <div class="sfname" hidden><input type="text" class="sfin" maxlength="40" placeholder="새 폴더 이름" spellcheck="false"><button type="button" class="btn sfmk">만들기</button></div>`;
+    const setFolder = async (v) => {
       const map = { ...(settings.siteFolderMap || {}) };
       if (v) map[s.id] = v;
       else delete map[s.id];
-      save({ siteFolderMap: map });
+      await save({ siteFolderMap: map });
+      renderSites();
     };
     li.querySelector('.sfeat').addEventListener('click', () => {
       renderSitePanel(s.id);
       showTab('site');
     });
-    li.querySelector('.sfon').addEventListener('change', (e) => {
-      const box = li.querySelector('.sfname');
-      box.hidden = !e.target.checked;
-      setName(e.target.checked ? clean(li.querySelector('.sfin').value) || s.name : '');
+    const sel = li.querySelector('.sfsel');
+    sel.addEventListener('change', () => {
+      if (sel.value === '__new') {
+        li.querySelector('.sfname').hidden = false;
+        li.querySelector('.sfin').focus();
+        return;
+      }
+      setFolder(sel.value);
     });
-    li.querySelector('.sfin').addEventListener('change', (e) => {
-      const v = clean(e.target.value) || s.name;
-      e.target.value = v;
-      if (li.querySelector('.sfon').checked) setName(v);
-    });
+    const make = async () => {
+      const name = await addFolder(li.querySelector('.sfin').value);
+      if (name) await setFolder(name);
+    };
+    li.querySelector('.sfmk').addEventListener('click', make);
+    li.querySelector('.sfin').addEventListener('keydown', (e) => e.key === 'Enter' && make());
     li.querySelector('.site input').addEventListener('change', (e) => {
       const set = new Set(settings.disabledSites || []);
       if (e.target.checked) set.delete(s.id);

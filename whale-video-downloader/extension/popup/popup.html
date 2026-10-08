@@ -276,7 +276,13 @@
     <!-- 지원 사이트 -->
     <section class="pane" data-pane="sites">
       <div class="card">
-        <div class="card-head"><div class="grow"><strong>지원 사이트</strong><small>끄면 해당 사이트에서 버튼을 숨깁니다. '따로 폴더'를 끄면 기본 다운로드 폴더(1분30초 이하·초과·사진 → 국적)에, 켜면 다운로드 폴더 안 사이트 폴더에 같은 순서로 저장합니다. 폴더 이름이 같은 사이트끼리는 한 폴더로 합쳐집니다 (예: X·블루스카이 = SNS)</small></div></div>
+        <div class="card-head"><div class="grow"><strong>지원 사이트</strong><small>끄면 해당 사이트에서 버튼을 숨깁니다. 사이트마다 '저장 폴더'에서 내 폴더를 고르면 그 폴더 안에(1분30초 이하·초과·사진 → 국적) 저장되고, 같은 폴더를 고른 사이트끼리 한 폴더로 묶입니다 (예: 틱톡·인스타 → SNS). '기본'은 최상위 폴더에 바로 저장합니다</small></div></div>
+        <div class="myfolders">
+          <b>내 폴더</b>
+          <div class="mf-list" id="mfList"></div>
+          <div class="mf-add"><input type="text" id="mfName" maxlength="40" placeholder="새 폴더 이름 (예: SNS)" spellcheck="false" /><button type="button" class="btn" id="mfAdd">폴더 만들기</button></div>
+          <p class="mf-msg" id="mfMsg"></p>
+        </div>
         <ul class="sites" id="siteList"></ul>
       </div>
     </section>

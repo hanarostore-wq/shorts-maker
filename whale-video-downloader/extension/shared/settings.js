@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS = {
   xFollowButtons: true, // X 피드 작성자 옆 팔로우/팔로잉 버튼
   followAllButton: true, // 블루스카이·X 팔로우 목록 화면에 '이 목록 전부 팔로우' 버튼
   bskyFollowButtons: true, // 블루스카이 피드 게시물에 팔로우/팔로잉 버튼
+  folderList: [], // 사용자가 만든 폴더 이름(지원 사이트 탭 '내 폴더')
   siteFolderMap: {}, // 사이트별 저장 폴더 이름(비우면 다운로드 폴더). 같은 이름이면 한 폴더로 합쳐짐
   siteFolders: false, // 가장 위에 사이트별 폴더(유튜브/블루스카이/X …)
   sortFolders: true,

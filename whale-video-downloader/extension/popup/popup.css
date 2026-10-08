@@ -358,6 +358,21 @@ footer {
 .sfold .sw { width: 28px; height: 16px; }
 .sfold .sw i { width: 10px; height: 10px; }
 .sfold input:checked + .sw i { transform: translateX(12px); }
+.sfold .sfsel { flex: 1.4; min-width: 0; height: 24px; border-radius: 8px; border: 1px solid rgba(128,128,140,.35); background: var(--soft); color: inherit; font: inherit; font-size: 11px; padding: 0 4px; }
+.sfname .btn { height: 22px; padding: 0 10px; font-size: 11px; }
+.myfolders { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; padding: 10px; border-radius: 12px; background: var(--soft); font-size: 12px; }
+.mf-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.mf-empty { opacity: .6; font-size: 11px; }
+.mf-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 9px; border-radius: 999px; border: 1px solid rgba(124,77,255,.35); font-size: 11.5px; }
+.mf-chip em { font-style: normal; font-size: 10px; padding: 0 5px; border-radius: 999px; background: rgba(124,77,255,.2); }
+.mf-chip button { all: unset; cursor: pointer; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; opacity: .6; }
+.mf-chip button:hover { opacity: 1; background: rgba(224,36,94,.2); }
+.mf-add { display: flex; gap: 6px; }
+.mf-add input { flex: 1; min-width: 0; height: 28px; padding: 0 9px; border-radius: 8px; border: 1px solid rgba(128,128,140,.35); background: transparent; color: inherit; font: inherit; }
+.mf-add .btn { height: 28px; padding: 0 12px; }
+.mf-msg { margin: 0; font-size: 11px; opacity: .85; }
+.mf-msg:empty { display: none; }
+.mf-msg.err { color: #e0245e; opacity: 1; }
 .sfname { display: flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 11px; opacity: .9; }
 .sfname[hidden] { display: none; }
 .sfname span { white-space: nowrap; }

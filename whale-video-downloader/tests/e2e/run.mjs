@@ -1435,31 +1435,51 @@ if (!only || only === 'place' || '배치'.includes(only)) {
       got[key] = saved ? path.relative(DL, saved).split(path.sep).slice(0, -1).join('/') : '저장 안 됨';
     }
     record('[폴더] 사이트마다 따로 폴더: 유튜브=유튜브, X·블루스카이=SNS(합침), 끈 사이트=기본 폴더', got['유튜브'] === '유튜브/영상 1분30초 이하/한국' && /^SNS\/영상 1분30초 (이하|초과)\//.test(got.X) && got['일반'] === '영상 1분30초 이하/한국', { note: JSON.stringify(got) });
-    // 팝업 스위치: 켜면 사이트 이름으로 폴더, 이름을 바꾸면 그 이름, 끄면 기본 폴더
+    // 팝업 '지원 사이트': 내 폴더 만들기 → 사이트마다 드롭다운으로 고르기(같은 폴더끼리 묶임) → 새 폴더 바로 만들기 → 폴더 지우기
     const pp = await extPage();
-    await pp.setViewportSize({ width: 392, height: 700 });
+    await pp.setViewportSize({ width: 392, height: 760 });
     await pp.goto(`chrome-extension://${extId}/popup/popup.html`);
     await pp.click('.tab[data-tab="sites"]');
     await pp.waitForTimeout(300);
-    const li = pp.locator('#siteList > li', { hasText: '틱톡' });
-    await li.locator('.sfold').click();
+    const st = () => pp.evaluate(async () => {
+      const s = (await chrome.storage.local.get('settings')).settings;
+      return { map: s.siteFolderMap || {}, list: s.folderList || [] };
+    });
+    // 오류 경로: 빈 이름
+    await pp.fill('#mfName', '  / : ');
+    await pp.click('#mfAdd');
+    await pp.waitForTimeout(300);
+    const errMsg = await pp.textContent('#mfMsg');
+    await pp.fill('#mfName', 'SNS');
+    await pp.click('#mfAdd');
     await pp.waitForTimeout(400);
-    const m1 = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.siteFolderMap || {});
-    await li.locator('.sfin').fill('SNS');
-    await li.locator('.sfin').press('Enter');
-    await li.locator('.sfin').blur();
+    const pick = async (site, value) => {
+      await pp.locator('#siteList > li', { hasText: site }).locator('.sfsel').selectOption(value);
+      await pp.waitForTimeout(400);
+    };
+    await pick('틱톡', 'SNS');
+    await pick('인스타그램', 'SNS');
+    const s1 = await st();
+    // 드롭다운에서 새 폴더 바로 만들기
+    await pick('핀터레스트', '__new');
+    const li = pp.locator('#siteList > li', { hasText: '핀터레스트' });
+    await li.locator('.sfin').fill('사진모음');
+    await li.locator('.sfmk').click();
     await pp.waitForTimeout(400);
-    const m2 = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.siteFolderMap || {});
+    const s2 = await st();
     await pp.screenshot({ path: path.join(SHOTS, 'popup-site-folders.png'), fullPage: true });
-    await li.locator('.sfold').click();
+    // 폴더 지우기 → 그 폴더를 고른 사이트는 기본으로
+    await pp.locator('.mf-chip', { hasText: '사진모음' }).locator('button').click();
     await pp.waitForTimeout(400);
-    const m3 = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.siteFolderMap || {});
+    await pick('틱톡', '');
+    const s3 = await st();
     await pp.close();
-    record('[폴더] 지원 사이트 탭 스위치: 켜기 → 사이트 이름, 이름 바꾸기, 끄기 → 기본 폴더', m1.tiktok === '틱톡' && m2.tiktok === 'SNS' && !('tiktok' in m3), { note: JSON.stringify({ 켬: m1.tiktok, 이름바꿈: m2.tiktok, 끔: m3.tiktok ?? '(없음)' }) });
+    record('[폴더] 지원 사이트 드롭다운: 내 폴더 만들기·고르기(틱톡·인스타=SNS 묶음)·새 폴더 바로 만들기·지우기', s1.map.tiktok === 'SNS' && s1.map.instagram === 'SNS' && s2.map.pinterest === '사진모음' && s2.list.includes('사진모음') && !('pinterest' in s3.map) && !s3.list.includes('사진모음') && !('tiktok' in s3.map) && s3.map.instagram === 'SNS', { note: JSON.stringify({ 묶음: s1.map, 새폴더: s2.map.pinterest, 지운뒤: s3 }) });
+    record('[폴더] (오류 경로) 빈·쓸 수 없는 폴더 이름이면 단계·원인·조치', /실패/.test(errMsg) && /단계:/.test(errMsg) && /조치:/.test(errMsg), { note: errMsg });
   } catch (err) {
     record('[폴더] 사이트마다 따로 폴더', false, { note: err.message.split('\n')[0] });
   } finally {
-    await setSettings({ siteFolderMap: {} });
+    await setSettings({ siteFolderMap: {}, folderList: [] });
     await page.close();
   }
 }
