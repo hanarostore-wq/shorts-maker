@@ -12,6 +12,14 @@ function publish(payload) {
   if (workerWindow && !workerWindow.isDestroyed()) workerWindow.webContents.send("concat-worker:progress", payload);
 }
 
+function readableWorkerError(error, sourceCount) {
+  if (error?.code === "ENAMETOOLONG" || /ENAMETOOLONG/i.test(error?.message || "")) {
+    return `${sourceCount}개 파일을 한 번에 FFmpeg에 전달하면서 Windows 명령줄 길이 제한에 도달했습니다. PC 작업자를 업데이트하면 파일을 하나씩 묶음 처리합니다.`;
+  }
+  if (error?.code === "ENOENT") return "로컬 FFmpeg 실행 파일을 찾지 못했습니다. PC 작업자를 업데이트한 뒤 다시 실행하세요.";
+  return error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.";
+}
+
 function curlPatch(url, payload) {
   return new Promise((resolve, reject) => {
     const executable = process.platform === "win32" ? "curl.exe" : "curl";
@@ -57,6 +65,7 @@ async function runLocalConcatWorker({ jobId = null, token = null, processingMode
   let startedAt = 0;
   let statusQueue = Promise.resolve();
   let lastProgressReport = 0;
+  let failed = false;
   const queueStatus = (status, extra = {}) => {
     statusQueue = statusQueue.then(() => updateRemoteStatus(job, status, extra));
     return statusQueue;
@@ -78,19 +87,26 @@ async function runLocalConcatWorker({ jobId = null, token = null, processingMode
     await openProgressWindow();
     isRunning = true;
     startedAt = Date.now();
-    await queueStatus("working", { sourceBytes, progress: 0, stage: "원본 규격 확인 중" });
+    await queueStatus("working", { sourceBytes, progress: 0, stage: `${selection.filePaths.length}개 원본 규격 확인 중` });
     const output = await concatOriginalQuality(selection.filePaths, undefined, { onProgress: reportProgress, processingMode: processingMode === "normalize" ? "normalize" : "copy" });
     const outputBytes = (await fs.stat(output.outputPath)).size;
     publish({ phase: "done", current: output.sourceCount, total: output.sourceCount, progress: 1, etaSeconds: 0, message: "제작완료 · 작업자가 자동으로 종료됩니다." });
     await statusQueue;
     await queueStatus("completed", { outputName: path.basename(output.outputPath), sourceBytes, outputBytes, progress: 1, etaSeconds: 0, stage: "제작완료" });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.";
-    publish({ phase: "error", current: 0, total: 0, message });
+    failed = true;
+    const message = readableWorkerError(error, selection.filePaths.length);
+    console.error("[concat-worker] 제작실패", { code: error?.code ?? null, sourceCount: selection.filePaths.length, processingMode, message });
+    publish({ phase: "error", current: 0, total: selection.filePaths.length, progress: 0, message });
     await statusQueue;
-    await queueStatus("failed", { sourceBytes, error: message, stage: "제작실패" });
+    await queueStatus("failed", { sourceBytes, error: message, stage: `제작실패 · ${selection.filePaths.length}개 파일` });
   } finally {
     isRunning = false;
+    if (failed && workerWindow && !workerWindow.isDestroyed()) {
+      workerWindow.show();
+      workerWindow.focus();
+      return;
+    }
     if (workerWindow && !workerWindow.isDestroyed()) workerWindow.close();
     app.quit();
   }

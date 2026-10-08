@@ -61,13 +61,16 @@ export function VideoConcatPanel() {
     setStarting(true);
     try {
       const response = await fetch("/api/concat/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ processingMode }) });
-      if (!response.ok) throw new Error("작업 등록에 실패했습니다.");
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(errorBody?.error ?? `작업 등록에 실패했습니다. (HTTP ${response.status})`);
+      }
       const payload = await response.json() as { job: Job; token: string };
       const saved = { id: payload.job.id, token: payload.token };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
       setJob(payload.job);
       window.location.href = `clipjoin://run?job=${encodeURIComponent(saved.id)}&token=${encodeURIComponent(saved.token)}&mode=${processingMode}`;
-    } catch { setJob({ id: "local-error", status: "failed", processingMode, error: "작업 등록에 실패했습니다. 새로고침 후 다시 시도하세요." }); }
+    } catch (error) { setJob({ id: "local-error", status: "failed", processingMode, error: error instanceof Error ? error.message : "작업 등록에 실패했습니다. 새로고침 후 다시 시도하세요." }); }
     finally { setStarting(false); }
   };
 
