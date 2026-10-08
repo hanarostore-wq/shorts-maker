@@ -52,6 +52,95 @@ interface State {
 
 const STATE_KEY = "shorts-maker:state";
 
+type TraderHealth = {
+  ok?: boolean;
+  version?: string;
+  markets?: number;
+  status?: { upbit?: boolean; lastUpbitLatency?: number };
+};
+
+type TraderTrade = {
+  time: string;
+  market: string;
+  side: string;
+  pnl: string;
+  pnlPct: string;
+  reason: string;
+};
+
+type TraderRuntime = { health: TraderHealth; lastTrade: TraderTrade | null } | { error: string };
+
+const TRADER_ORIGIN = (process.env.YUJIN_TRADERS_ORIGIN || "http://127.0.0.1:7070").replace(/\/$/, "");
+
+function parseTraderCsvRow(line: string): TraderTrade | null {
+  const values = [...line.matchAll(/"((?:""|[^"])*)"/g)].map((match) => match[1].replaceAll('""', '"'));
+  if (values.length < 13) return null;
+  return { time: values[0], market: values[1], side: values[2], pnl: values[8], pnlPct: values[9], reason: values[11] };
+}
+
+async function inspectTraderRuntime(): Promise<TraderRuntime> {
+  try {
+    const [healthResponse, tradesResponse] = await Promise.all([
+      fetch(`${TRADER_ORIGIN}/api/health`, { cache: "no-store", signal: AbortSignal.timeout(2_500) }),
+      fetch(`${TRADER_ORIGIN}/api/trades.csv`, { cache: "no-store", signal: AbortSignal.timeout(2_500) }),
+    ]);
+    if (!healthResponse.ok) return { error: `Traders 상태 조회 HTTP ${healthResponse.status}` };
+    if (!tradesResponse.ok) return { error: `Traders 거래이력 조회 HTTP ${tradesResponse.status}` };
+    const rows = (await tradesResponse.text()).split(/\r?\n/).filter(Boolean);
+    return { health: await healthResponse.json() as TraderHealth, lastTrade: rows.length > 1 ? parseTraderCsvRow(rows.at(-1) || "") : null };
+  } catch (error) {
+    return { error: `Traders 상태 조회 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}` };
+  }
+}
+
+function upsertTraderLog(state: State, id: string, message: string) {
+  const coin = state.departments.find((department) => department.id === "coin");
+  const agent = coin?.agents.find((item) => item.id === "c_yujin");
+  if (!coin || !agent) return;
+  const entry: LogEntry = {
+    id,
+    time: new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }),
+    departmentId: "coin",
+    agentId: agent.id,
+    agentName: agent.name,
+    message,
+  };
+  const index = state.log.findIndex((item) => item.id === id);
+  if (index >= 0) state.log[index] = entry;
+  else state.log.unshift(entry);
+  state.log = state.log.slice(0, 30);
+}
+
+function applyTraderRuntime(state: State, runtime: TraderRuntime) {
+  const agent = state.departments.find((department) => department.id === "coin")?.agents.find((item) => item.id === "c_yujin");
+  if (!agent) return;
+  if ("error" in runtime) {
+    const message = runtime.error.slice(0, 180);
+    agent.status = "offline";
+    agent.task = `⚠ ${message}`;
+    if (state.failureByKey.traderRuntime !== message) {
+      state.failureByKey.traderRuntime = message;
+      upsertTraderLog(state, "trader-runtime", `⚠ ${message}`);
+    }
+    return;
+  }
+  delete state.failureByKey.traderRuntime;
+  const receiving = runtime.health.status?.upbit === true;
+  const markets = Number(runtime.health.markets || 0);
+  agent.status = receiving ? "active" : "standby";
+  agent.task = receiving
+    ? `전체 원화마켓 ${markets}개 분석 · 자동매매 ON · 시세 수신 정상`
+    : `전체 원화마켓 ${markets}개 분석 · 자동매매 ON · 시세 재연결 대기`;
+  upsertTraderLog(state, "trader-runtime", receiving
+    ? `전체 원화마켓 ${markets}개 분석 정상 · 자동매매 ON · Traders v${runtime.health.version || "-"}`
+    : `⚠ 전체 원화마켓 ${markets}개 분석 중 · 업비트 시세 재연결 대기`);
+  if (!runtime.lastTrade) return;
+  const trade = runtime.lastTrade;
+  const tradeId = `trader-fill-${trade.time}-${trade.market}-${trade.side}`;
+  const detail = [trade.pnl && `손익 ${trade.pnl}원`, trade.pnlPct && `${trade.pnlPct}%`, trade.reason].filter(Boolean).join(" · ");
+  upsertTraderLog(state, tradeId, `PAPER ${trade.side} 체결 · ${trade.market}${detail ? ` · ${detail}` : ""}`);
+}
+
 export function getSharedRedis(): Redis | null {
   const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -481,11 +570,13 @@ export async function updateLocalConcatJob(input: {
 
 export async function getState(): Promise<State> {
   const state = await readState();
-  const [pendingApprovals, tasks, policy] = await Promise.all([
+  const [pendingApprovals, tasks, policy, traderRuntime] = await Promise.all([
     listApprovals({ state: "pending" }),
     listTasks(),
     getPolicy(),
+    inspectTraderRuntime(),
   ]);
+  applyTraderRuntime(state, traderRuntime);
   const storeDepartment = state.departments.find((department) => department.id === "store");
   const approvalAgent = storeDepartment?.agents.find((agent) => agent.id === "s7");
   const taskAgent = storeDepartment?.agents.find((agent) => agent.id === "s8");
