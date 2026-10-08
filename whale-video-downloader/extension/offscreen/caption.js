@@ -3,6 +3,11 @@
 //  - 위치: 사람(피부색)·복잡한 무늬가 적은 위/아래 띠를 골라 인물을 가리지 않게
 //  - 사진은 원본에 바로 그리고, 영상은 모든 프레임에 그려 다시 인코딩한다(화질은 최대한 높게).
 import * as MB from '../vendor/mediabunny.min.mjs';
+import { registerAacEncoder } from '../vendor/mediabunny-aac-encoder.mjs';
+
+// AAC 인코더(브라우저와 상관없이 쓰는 WebAssembly 판, libavcodec 기반): 윈도우 기본 AAC 인코더는 192kbps 까지만 돼서
+// 320kbps 를 못 만든다 → 이 인코더를 등록해 두면 AAC 를 만들 때 이것을 쓴다
+registerAacEncoder();
 
 // 영상·사진에 쓰는 글자 크기(모든 사이트 공통)
 //   기준: 1086x1448 사진에서 28px(사용자가 맞다고 한 크기). 해상도가 달라도 화면에서 보이는 크기가 같도록
@@ -676,11 +681,12 @@ export async function ensureH264Aac(file, writable, onProgress, { audioBitrate =
       input,
       output,
       showWarnings: false,
-      video: vt ? { codec: 'avc', bitrate: MB.QUALITY_VERY_HIGH, forceTranscode: needVideo } : undefined,
-      audio: at ? { codec: 'aac', bitrate: audioBitrate, forceTranscode: needAudio } : undefined,
+      // 바꿀 필요가 없는 트랙은 옵션을 주지 않는다(비트레이트를 주면 같은 코덱이어도 다시 인코딩함 → 그대로 복사)
+      video: needVideo ? { codec: 'avc', bitrate: MB.QUALITY_VERY_HIGH, forceTranscode: true } : undefined,
+      audio: needAudio ? { codec: 'aac', bitrate: audioBitrate, forceTranscode: true } : undefined,
     });
     if (!conv.isValid) throw Object.assign(new Error(`변환할 수 없습니다: ${conv.discardedTracks.map((d) => d.reason).join(', ')}`), { step: '변환 준비' });
-    if (conv.discardedTracks.length) throw Object.assign(new Error(`일부 트랙을 옮기지 못했습니다: ${conv.discardedTracks.map((d) => d.reason).join(', ')}`), { step: '변환 준비' });
+    if (conv.discardedTracks.length) throw Object.assign(new Error(`일부 트랙을 옮기지 못했습니다: ${conv.discardedTracks.map((d) => `${d.track?.type === 'video' || d.track?.isVideoTrack?.() ? '영상' : '소리'}(${d.reason})`).join(', ')}`), { step: '변환 준비' });
     if (onProgress) conv.onProgress = (p) => onProgress(Math.round(p * 100));
     await conv.execute();
     return { changed: true, ...info };

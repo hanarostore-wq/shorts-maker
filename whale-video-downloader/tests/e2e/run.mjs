@@ -2223,6 +2223,10 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       const a = await one('https://www.example-videos.com/aac320');
       record('[H.264·AAC] 이미 MP4·H.264·고음질 AAC 면 변환 없이 그대로 저장', a.info?.vcodec === 'h264' && a.info?.acodec === 'aac' && !a.warn, { note: `${a.saved ? path.basename(a.saved) : '없음'} · ${a.info?.vcodec}/${a.info?.acodec} · 안내: ${a.warn || '없음'}` });
       await setSettings({ audioKbps: 320 });
+      // 정상 경로: H.264 + Opus → 영상은 그대로, 소리는 WebAssembly AAC 인코더로 320kbps
+      const o = await one('https://www.example-videos.com/opusmp4');
+      const abr = o.saved ? Number(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=codec_name,bit_rate', '-of', 'csv=p=0', o.saved]).toString().trim().split(',')[1] || 0) : 0;
+      record('[H.264·AAC] Opus 소리 → AAC 320kbps 로 변환(영상 H.264 그대로), 안내 없음', o.info?.vcodec === 'h264' && o.info?.acodec === 'aac' && abr >= 280000 && /\.mp4$/.test(o.saved || '') && !o.warn, { note: `${o.saved ? path.basename(o.saved) : '없음'} · ${o.info?.vcodec}/${o.info?.acodec} ${Math.round(abr / 1000)}kbps · 안내: ${o.warn || '없음'}` });
       const b = await one('https://www.example-videos.com/watch');
       // 이 테스트용 Chromium 에는 AAC 인코더가 없다 → 오류 경로: 원본(H.264·AAC 128k) 저장 + 안내
       record('[H.264·AAC] (오류 경로) AAC 해독·인코딩을 못 하면 원본 저장 + 단계·원인·조치', b.info?.vcodec === 'h264' && /H\.264·AAC 로 바꾸지 못해/.test(b.warn) && /단계: (AAC 인코더 확인|원본 소리 읽기)/.test(b.warn) && /원인:/.test(b.warn) && /조치:/.test(b.warn), { note: `${b.saved ? path.basename(b.saved) : '없음'} · 안내: ${b.warn.slice(0, 160)}` });

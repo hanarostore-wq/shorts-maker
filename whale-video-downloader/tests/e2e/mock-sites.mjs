@@ -218,6 +218,9 @@ const handlers = {
     if (u.pathname === '/watch') {
       return html(res, page('일반 사이트 영상', `<div class="card"><h3>일반 사이트</h3><video src="https://cdn.example-videos.com/progressive_1080p_land.mp4" controls muted style="width:640px;height:360px;background:#000"></video></div>`));
     }
+    if (u.pathname === '/opusmp4') {
+      return html(res, page('Opus 소리 영상', `<div class="card"><video src="https://cdn.example-videos.com/h264_opus.mp4" muted style="width:640px;height:360px;background:#000"></video></div>`));
+    }
     if (u.pathname === '/aac320') {
       return html(res, page('고음질 AAC 영상', `<div class="card"><video src="https://cdn.example-videos.com/h264_aac320.mp4" muted style="width:640px;height:360px;background:#000"></video></div>`));
     }
