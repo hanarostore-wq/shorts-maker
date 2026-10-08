@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 function Get-FfmpegEncoders([string]$Exe) {
   try { return (& $Exe -hide_banner -encoders 2>$null | Out-String) } catch { return "" }
