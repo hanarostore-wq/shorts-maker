@@ -7,7 +7,14 @@ const { spawn } = require("node:child_process");
 const SUPPORTED_EXTENSIONS = new Set([".mp4"]);
 
 function resolveBinaries() {
-  return { ffmpeg: require("ffmpeg-static"), ffprobe: require("ffprobe-static").path };
+  const bundledFfmpeg = require("ffmpeg-static");
+  const bundledFfprobe = require("ffprobe-static").path;
+  const explicitFfmpeg = process.env.MONEYOS_FFMPEG_PATH;
+  const systemFfmpeg = process.platform === "win32" ? "C:\\ffmpeg\\bin\\ffmpeg.exe" : null;
+  const preferredFfmpeg = [explicitFfmpeg, systemFfmpeg, bundledFfmpeg].find((candidate) => typeof candidate === "string" && fssync.existsSync(candidate)) || bundledFfmpeg;
+  const siblingFfprobe = typeof preferredFfmpeg === "string" ? path.join(path.dirname(preferredFfmpeg), process.platform === "win32" ? "ffprobe.exe" : "ffprobe") : null;
+  const preferredFfprobe = [siblingFfprobe, bundledFfprobe].find((candidate) => typeof candidate === "string" && fssync.existsSync(candidate)) || bundledFfprobe;
+  return { ffmpeg: preferredFfmpeg, ffprobe: preferredFfprobe };
 }
 
 const MB = 1024 * 1024;
