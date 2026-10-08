@@ -774,7 +774,7 @@
   const FOLLOW_TEXT = /^(\+\s*)?(팔로우|팔로우하기|follow|follow back|구독|구독하기|subscribe|关注|關注|加关注|フォロー|フォローする|seguir|suivre|abonnieren|segui|takip et|ikuti)$/i;
   // 사이트별 팔로우·구독 단추 위치(영상과 떨어져 있는 경우: 유튜브 보기 화면 등). 영상에서 가장 가까운 것을 누른다.
   const SITE_FOLLOW = {
-    youtube: ['ytd-subscribe-button-renderer button', '#subscribe-button button', 'yt-subscribe-button-view-model button', 'ytd-reel-player-overlay-renderer #subscribe-button button'],
+    youtube: ['ytd-reel-video-renderer[is-active] yt-subscribe-button-view-model button', 'ytd-reel-video-renderer[is-active] #subscribe-button button', 'ytd-subscribe-button-renderer button', '#subscribe-button button', 'yt-subscribe-button-view-model button', 'ytd-reel-player-overlay-renderer #subscribe-button button', 'yt-reel-channel-bar-view-model button', 'reel-channel-bar-view-model button'],
     tiktok: ['[data-e2e="follow-button"]', '[data-e2e="feed-follow"]', '[data-e2e="browse-follow"]'],
     instagram: ['header button', 'article header [role="button"]', '[role="dialog"] header button'],
     facebook: ['[aria-label="팔로우"]', '[aria-label="Follow"]'],
@@ -948,6 +948,17 @@
         }
       }
       near.sort((x, y) => x[0] - y[0]).forEach(([, x]) => cands.push(x));
+      // 같은 자리 단추가 이미 '구독중·팔로잉'이면 이미 팔로우 중
+      if (!cands.length) {
+        for (const sel of SITE_FOLLOW[adapter.id] || []) {
+          for (const x of document.querySelectorAll(sel)) {
+            const r = x.getBoundingClientRect();
+            if (r.width < 4 || r.height < 4) continue;
+            const d = Math.hypot(Math.max(0, r.left - vr.right, vr.left - r.right), Math.max(0, r.top - vr.bottom, vr.top - r.bottom));
+            if (d < innerHeight * 1.5 && (FOLLOWING_TEXT.test(btnText(x)) || /^(구독 취소|unsubscribe)/i.test(x.getAttribute('aria-label') || ''))) already = true;
+          }
+        }
+      }
     }
     if (already) return report({ who, already: true });
     // 작성자 프로필 링크 옆 단추를 먼저 고른다
@@ -976,11 +987,56 @@
     }, 4500);
   }
 
-  function autoFollow(el) {
-    if (settings.autoFollow === false) return;
+  // 유튜브: @아이디 → 채널 번호(resolve_url) → 구독(subscription/subscribe). 로그인 쿠키로 만든 인증 값은 요청에만 쓰고 저장·기록하지 않는다
+  async function ytSubscribe(handle) {
+    const who = `@${handle}`;
+    const sap = (document.cookie.match(/(?:^|; )(?:SAPISID|__Secure-3PAPISID)=([^;]+)/) || [])[1];
+    if (!sap) return { who, error: { step: '로그인 확인', reason: '유튜브 로그인 정보를 찾지 못했습니다', action: '유튜브에 로그인한 뒤 새로고침(F5)하세요.' } };
+    const ts = Math.floor(Date.now() / 1000);
+    const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(`${ts} ${sap} ${location.origin}`));
+    const hash = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    const headers = { 'content-type': 'application/json', authorization: `SAPISIDHASH ${ts}_${hash}`, 'x-origin': location.origin, 'x-goog-authuser': '0' };
+    const context = { client: { clientName: 'WEB', clientVersion: '2.20250925.01.00', hl: 'ko', gl: 'KR' } };
+    const post = async (path, body, step) => {
+      let r;
+      try {
+        r = await fetch(`/youtubei/v1/${path}?prettyPrint=false`, { method: 'POST', credentials: 'include', headers, body: JSON.stringify({ context, ...body }) });
+      } catch (err) {
+        throw { step, reason: `유튜브에 연결하지 못했습니다 (${err?.message || err})`, action: '인터넷 연결을 확인한 뒤 다시 시도하세요.' };
+      }
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.error) throw { step, reason: `유튜브가 요청을 받아들이지 않았습니다 (HTTP ${r.status}${j.error?.message ? ` · ${j.error.message}` : ''})`, action: r.status === 401 || r.status === 403 ? '유튜브에 다시 로그인한 뒤 새로고침(F5)하세요.' : '채널 화면에서 구독 단추를 직접 누르세요.' };
+      return j;
+    };
+    try {
+      const j = await post('navigation/resolve_url', { url: `https://www.youtube.com/@${handle}` }, '채널 찾기');
+      const id = j?.endpoint?.browseEndpoint?.browseId || '';
+      if (!/^UC[\w-]{20,}$/.test(id)) return { who, error: { step: '채널 찾기', reason: `@${handle} 의 채널 번호를 찾지 못했습니다`, action: '채널 화면에서 구독 단추를 직접 누르세요.' } };
+      await post('subscription/subscribe', { channelIds: [id] }, '구독 요청');
+      return { who, ok: true };
+    } catch (err) {
+      return { who, error: err?.step ? err : { step: '구독 요청', reason: String(err?.message || err), action: '채널 화면에서 구독 단추를 직접 누르세요.' } };
+    }
+  }
+
+  function autoFollow(el, force = false) {
+    if (settings.autoFollow === false && !force) return;
     const detail = { el, handled: false, report: followToast };
     document.dispatchEvent(new CustomEvent('smd:auto-follow', { detail }));
     if (detail.handled || NO_DOM_FOLLOW.has(adapter.id)) return;
+    if (adapter.id === 'youtube') {
+      // ① 화면의 구독 단추 ② 단추가 없으면(홈 목록·검색 등) 유튜브 웹이 쓰는 구독 요청으로
+      domFollow(el, (res) => {
+        if (!res.error || res.error.step !== '팔로우 단추 찾기') return followToast(res);
+        let handle = '';
+        try {
+          handle = postAuthor(el, {}).handle || '';
+        } catch {}
+        if (!handle) return followToast(res);
+        ytSubscribe(handle).then(followToast, (err) => followToast({ who: `@${handle}`, error: { step: '구독 요청', reason: String(err?.message || err), action: '채널 화면에서 구독 단추를 직접 누르세요.' } }));
+      });
+      return;
+    }
     if (adapter.id === 'instagram') {
       // ① 페이지 데이터에 계정 번호가 있으면 인스타 웹 요청 ② 없으면 화면 팔로우 단추 ③ 단추도 못 찾으면 계정 번호를 물어봐서 요청
       const viaLookup = (res) => igFollow(el, true).then((r2) => followToast(r2 || res), () => followToast(res));
@@ -992,6 +1048,11 @@
     }
     domFollow(el, followToast);
   }
+
+  // 떠 있는 팔로우 버튼(float-tools.js): 설정과 관계없이 지금 보이는 게시물 작성자를 팔로우
+  globalThis.__SMD_FOLLOW_NOW = (el) => autoFollow(el, true);
+  globalThis.__SMD_SITE_ID = adapter.id;
+  globalThis.__SMD_POST_SEL = POST_SEL;
 
   async function start(entry) {
     const video = entry.el;
@@ -1163,7 +1224,36 @@
     }
   });
 
-  // ───────────── X: 사진 확대 보기에서 사진을 누르면 닫기 ─────────────
+  // ───────────── 사진 확대 보기에서 사진을 누르면 닫기 (X 는 전용 처리, 그 밖의 사이트는 확대 창·게시물 창 공용 처리) ─────────────
+  if (adapter.id !== 'x' && window.top === window) {
+    document.addEventListener(
+      'click',
+      (ev) => {
+        if (settings.xPhotoTapClose !== true) return;
+        const t = ev.target;
+        if (!(t instanceof HTMLImageElement) || ev.composedPath().some((n) => /^SMD-/.test(n?.tagName || ''))) return;
+        const modal = t.closest('[aria-modal="true"], [role="dialog"]');
+        if (!modal) return;
+        // 확대된 큰 사진만(목록 창의 프로필 사진·작은 그림은 제외)
+        const r = t.getBoundingClientRect();
+        if (r.width * r.height < innerWidth * innerHeight * 0.12) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        const close = [...modal.querySelectorAll('[aria-label="Close"], [aria-label="close"], [aria-label="닫기"], [aria-label="关闭"], [aria-label="閉じる"], [data-testid*="close" i]')].find((b) => b.getBoundingClientRect().width > 0) ||
+          [...document.querySelectorAll('[aria-label="Close"], [aria-label="닫기"], [aria-label="关闭"]')].find((b) => b.getBoundingClientRect().width > 0 && !b.closest('smd-float'));
+        if (close) (close.closest('button, [role="button"]') || close).click();
+        else {
+          const k = { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true };
+          (document.activeElement || document.body).dispatchEvent(new KeyboardEvent('keydown', k));
+          document.dispatchEvent(new KeyboardEvent('keydown', k));
+        }
+        setTimeout(() => {
+          if (modal.isConnected && modal.getBoundingClientRect().width > 0) followToast({ error: { step: '사진 확대 창 닫기', reason: '닫기 단추를 찾지 못했고 Esc 키로도 창이 닫히지 않았습니다', action: '창 바깥이나 닫기(X) 단추를 직접 누르세요. 이 사이트에서 계속 안 되면 팝업 \'이 사이트\'에서 \'사진 누르면 닫기\'를 끄세요.' } });
+        }, 600);
+      },
+      true,
+    );
+  }
   if (adapter.id === 'x') {
     document.addEventListener(
       'click',

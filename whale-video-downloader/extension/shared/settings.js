@@ -17,10 +17,13 @@ export const DEFAULT_SETTINGS = {
   autoFollow: true, // 다운로드 누르면 그 게시물 작성자 자동 팔로우(팔로우 기능이 있는 사이트)
   aiLabel: true, // AI 영상·사진 표시 + 파일 이름 [AI]
   downloadedMark: true, // 받은 적 있는 영상·사진 버튼 초록 표시
-  xPhotoTapClose: true, // X 사진 확대 보기에서 사진 누르면 닫기
+  xPhotoTapClose: false, // 사진 확대 보기에서 사진 누르면 닫기(모든 사이트 기본값 끔, X 는 사이트별 기본값으로 켬)
+  videoSmall: false, // 영상 화면 크기 줄이기(모든 사이트 기본값 끔, 유튜브는 사이트별 기본값으로 켬)
+  videoScale: 70, // 줄인 크기(%)
   ytShortsStats: true, // 유튜브 쇼츠 오른쪽 위에 조회수·구독자 수
-  seekBar: true, // 인스타그램 영상 아래 재생바(재생 위치 이동)
-  ytLikeFloat: true, // 유튜브 보기·쇼츠 화면 오른쪽 아래 좋아요 플로팅 버튼
+  seekBar: true, // 영상 아래 재생바(재생 위치 이동). 자체 재생바가 있는 사이트는 사이트별 기본값으로 끔
+  ytLikeFloat: true, // 모든 사이트: 화면 오른쪽 아래 좋아요 플로팅 버튼(보고 있는 게시물)
+  followFloat: true, // 모든 사이트: 화면 오른쪽 아래 팔로우 플로팅 버튼(보고 있는 게시물 작성자)
   xFollowButtons: true, // X 피드 작성자 옆 팔로우/팔로잉 버튼
   followAllButton: true, // 블루스카이·X 팔로우 목록 화면에 '이 목록 전부 팔로우' 버튼
   bskyFollowButtons: true, // 블루스카이 피드 게시물에 팔로우/팔로잉 버튼
@@ -62,11 +65,27 @@ export async function getSettings() {
     s.siteFolderV = 2;
   }
   // v1.25.0: 기능을 사이트마다 켜고 끌 수 있게 됨. X·블루스카이는 자동재생 끄기를 처음부터 켬
-  if (s.siteSettingsV !== 1) {
+  if (!(s.siteSettingsV >= 1)) {
     const ss = { ...(s.siteSettings || {}) };
     for (const id of ['x', 'bluesky']) ss[id] = { noAutoplay: true, ...(ss[id] || {}) };
     s.siteSettings = ss;
     s.siteSettingsV = 1;
+  }
+  // v1.27.0: 사이트 전용 기능을 모든 사이트로 넓힘. 사진 누르면 닫기는 X 만 켠 채로, 재생바는 자체 재생바가 있는 사이트에서 끈 채로 시작
+  if (!(s.siteSettingsV >= 2)) {
+    const ss = { ...(s.siteSettings || {}) };
+    ss.x = { xPhotoTapClose: s.xPhotoTapClose !== false, ...(ss.x || {}) };
+    s.xPhotoTapClose = false;
+    for (const id of ['youtube', 'x', 'bluesky', 'tiktok', 'douyin', 'facebook', 'bilibili', 'weibo', 'vimeo', 'dailymotion', 'naver']) ss[id] = { seekBar: false, ...(ss[id] || {}) };
+    s.siteSettings = ss;
+    s.siteSettingsV = 2;
+  }
+  // v1.27.0: 영상 화면 크기 줄이기 — 유튜브는 70% 로 켠 채로 시작(사용자 요청)
+  if (!(s.siteSettingsV >= 3)) {
+    const ss = { ...(s.siteSettings || {}) };
+    ss.youtube = { videoSmall: true, videoScale: 70, ...(ss.youtube || {}) };
+    s.siteSettings = ss;
+    s.siteSettingsV = 3;
   }
   // 삭제한 기능의 설정은 지운다(광고 차단, 마우스 올리면 재생, 소리 자동 켜기, 영상 정지 막기)
   for (const k of ['adBlock', 'hoverPlay', 'xHoverPlay', 'bskyAutoSound', 'xAutoSound', 'xAutoPlay', 'keepScroll', 'noClickPause', 'xWideLayout', 'xKeepControls', 'xThickBar', 'xHighQuality', 'playLock']) delete s[k];
@@ -125,12 +144,14 @@ export const SITE_FEATURES = [
   { key: 'noAutoplay', group: '재생', name: '자동재생 끄기', desc: '사이트가 스스로 영상을 틀지 못하게 합니다. 직접 누른 영상만 재생 (바꾼 뒤 새로고침)' },
   { key: 'potPlayer', group: '재생', name: '재생 버튼 → 팟플레이어로 재생', desc: '재생을 누르면 웨일 대신 팟플레이어로 원본을 엽니다 (처음에 웨일이 묻는 "외부 프로그램 열기" 허용 · 바꾼 뒤 새로고침)' },
   { key: 'pauseOffscreen', group: '재생', name: '화면 밖 영상 정지', desc: '스크롤로 화면에서 벗어난 영상은 멈춥니다' },
-  { key: 'autoFollow', group: '팔로우', name: '다운로드하면 작성자 자동 팔로우', desc: '저장 버튼을 누른 게시물의 작성자를 팔로우합니다', sites: ['x', 'bluesky', 'instagram', 'tiktok', 'youtube', 'threads', 'douyin', 'weibo', 'bilibili', 'xiaohongshu', 'pinterest', 'kuaishou', 'facebook', 'generic'] },
-  { key: 'followAllButton', group: '팔로우', name: '팔로우 목록 전부 팔로우 버튼', desc: '팔로워·팔로잉 목록 화면에 버튼을 띄웁니다', sites: ['x', 'bluesky', 'instagram', 'threads', 'tiktok', 'douyin', 'weibo', 'bilibili', 'xiaohongshu', 'pinterest', 'kuaishou'] },
-  { key: 'xFollowButtons', group: '팔로우', name: '피드 작성자 옆 팔로우 버튼', desc: '피드 게시물에 팔로우/팔로잉 상태 버튼', sites: ['x'] },
-  { key: 'bskyFollowButtons', group: '팔로우', name: '피드 게시물 팔로우 버튼', desc: '피드 게시물에 팔로우/팔로잉 상태 버튼', sites: ['bluesky'] },
-  { key: 'xPhotoTapClose', group: '보기', name: '사진 확대 보기에서 누르면 닫기', desc: '크게 본 사진을 누르면 닫힙니다', sites: ['x'] },
-  { key: 'ytShortsStats', group: '보기', name: '쇼츠 조회수·구독자 표시', desc: '쇼츠 오른쪽 위에 조회수·구독자 수', sites: ['youtube'] },
-  { key: 'seekBar', group: '보기', name: '영상 재생바', desc: '영상 아래에 재생바와 시간을 띄웁니다. 누르거나 끌어서 원하는 위치로 이동', sites: ['instagram'] },
-  { key: 'ytLikeFloat', group: '보기', name: '좋아요 플로팅 버튼', desc: '영상·쇼츠 화면 오른쪽 아래에 떠 있는 좋아요 버튼', sites: ['youtube'] },
+  { key: 'autoFollow', group: '팔로우', name: '다운로드하면 작성자 자동 팔로우', desc: '저장 버튼을 누른 게시물의 작성자를 팔로우(유튜브는 구독)합니다' },
+  { key: 'followFloat', group: '팔로우', name: '팔로우 플로팅 버튼', desc: '화면 오른쪽 아래에 떠 있는 팔로우 버튼 — 지금 보고 있는 게시물 작성자를 팔로우' },
+  { key: 'followAllButton', group: '팔로우', name: '팔로우 목록 전부 팔로우 버튼', desc: '팔로워·팔로잉 목록 화면(창)에 버튼을 띄웁니다' },
+  { key: 'xFollowButtons', group: '팔로우', name: '피드 작성자 옆 팔로우 버튼', desc: '피드 게시물에 팔로우/팔로잉 상태 버튼 (다른 사이트는 팔로우 플로팅 버튼 사용)', sites: ['x'] },
+  { key: 'bskyFollowButtons', group: '팔로우', name: '피드 게시물 팔로우 버튼', desc: '피드 게시물에 팔로우/팔로잉 상태 버튼 (다른 사이트는 팔로우 플로팅 버튼 사용)', sites: ['bluesky'] },
+  { key: 'ytLikeFloat', group: '보기', name: '좋아요 플로팅 버튼', desc: '화면 오른쪽 아래에 떠 있는 좋아요 버튼 — 지금 보고 있는 게시물에 좋아요' },
+  { key: 'seekBar', group: '보기', name: '영상 재생바', desc: '재생바가 없는 영상 아래에 재생바와 시간을 띄웁니다. 누르거나 끌어서 위치 이동' },
+  { key: 'xPhotoTapClose', group: '보기', name: '사진 확대 보기에서 누르면 닫기', desc: '크게 본 사진(확대 창)을 누르면 닫힙니다' },
+  { key: 'videoSmall', group: '보기', name: '영상 화면 크기 줄이기', desc: '영상 플레이어를 아래에서 고른 크기로 줄입니다 (전체 화면은 그대로)', scaleKey: 'videoScale' },
+  { key: 'ytShortsStats', group: '보기', name: '쇼츠 조회수·구독자 표시', desc: '쇼츠 오른쪽 위에 조회수·구독자 수 (유튜브 데이터로만 가능)', sites: ['youtube'] },
 ];

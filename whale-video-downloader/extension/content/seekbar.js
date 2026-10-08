@@ -1,13 +1,12 @@
-// 재생바(인스타그램): 인스타 영상에는 재생 위치를 옮기는 바가 없어서, 영상 아래쪽에 재생바와 시간을 띄운다.
+// 재생바(모든 사이트): 재생 위치를 옮기는 바가 없는 영상(인스타 등) 아래쪽에 재생바와 시간을 띄운다.
+//  - 브라우저 기본 재생 막대(controls)가 있는 영상은 건너뛴다. 자체 재생바가 있는 사이트(유튜브·X 등)는 처음에 꺼 둠
 //  - 바를 누르거나 끌면 그 위치로 이동. 마우스를 올리면 바가 두꺼워진다.
 //  - 사이트 화면 밖(페이지 맨 위)에 띄워 사이트의 투명 막·클릭 처리에 가려지지 않게 한다.
 //  - 팝업 '이 사이트'에서 켜고 끄기(seekBar, 기본 켬)
 (() => {
   'use strict';
   if (globalThis.__SMD_SEEKBAR || window.top !== window) return;
-  const SITES = { instagram: /(^|\.)instagram\.com$/ };
-  const site = Object.keys(SITES).find((k) => SITES[k].test(location.hostname));
-  if (!site) return;
+  const site = globalThis.__SMD_SITE_ID || globalThis.__SMD_SITES?.pick?.(location.hostname)?.id || 'generic';
   globalThis.__SMD_SEEKBAR = true;
 
   const effOf = (s, id) => ({ ...(s || {}), ...(((s || {}).siteSettings || {})[id] || {}) });
@@ -19,9 +18,12 @@
       return false;
     }
   };
-  chrome.storage.local.get('settings').then((r) => (on = effOf(r.settings, site).seekBar !== false), () => {});
+  // 자체 재생바가 있는 사이트는 이 사이트에서 직접 켰을 때만(사이트 재생 단추를 가리지 않게)
+  const NATIVE_BAR = new Set(['youtube', 'x', 'bluesky', 'tiktok', 'douyin', 'facebook', 'bilibili', 'weibo', 'vimeo', 'dailymotion', 'naver']);
+  const want = (s) => (NATIVE_BAR.has(site) ? ((s || {}).siteSettings || {})[site]?.seekBar === true : effOf(s, site).seekBar !== false);
+  chrome.storage.local.get('settings').then((r) => (on = want(r.settings)), () => {});
   chrome.storage.onChanged.addListener((c, area) => {
-    if (area === 'local' && c.settings) on = effOf(c.settings.newValue, site).seekBar !== false;
+    if (area === 'local' && c.settings) on = want(c.settings.newValue);
   });
 
   const CSS = `
@@ -105,7 +107,7 @@
         continue;
       }
       const r = v.getBoundingClientRect();
-      const show = on && r.width >= 200 && r.height >= 150 && r.bottom > 30 && r.top < innerHeight - 10 && Number.isFinite(v.duration) && v.duration > 0 && getComputedStyle(v).visibility !== 'hidden';
+      const show = on && !v.controls && !v.closest('smd-anchor') && r.width >= 200 && r.height >= 150 && r.bottom > 30 && r.top < innerHeight - 10 && Number.isFinite(v.duration) && v.duration > 0 && getComputedStyle(v).visibility !== 'hidden';
       e.w.hidden = !show;
       if (!show) continue;
       // 영상 맨 아래(화면 밖으로 잘리면 화면 안쪽 끝)에 붙인다

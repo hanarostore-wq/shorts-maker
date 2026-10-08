@@ -186,11 +186,11 @@
           <input type="checkbox" id="imageButtons" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
-          <div><b>X·블루스카이 재생 버튼 → 팟플레이어로 재생</b><small>재생 버튼을 누르면 웨일 대신 팟플레이어(C:\Program Files\DAUM\PotPlayer)로 원본 영상을 엽니다. 처음에 웨일이 "외부 프로그램 열기"를 물으면 허용하세요 (바꾼 뒤 페이지 새로고침)</small></div>
+          <div><b>재생 버튼 → 팟플레이어로 재생 (모든 사이트 기본값)</b><small>재생 버튼을 누르면 웨일 대신 팟플레이어(C:\Program Files\DAUM\PotPlayer)로 원본 영상을 엽니다. 처음에 웨일이 "외부 프로그램 열기"를 물으면 허용하세요 (바꾼 뒤 페이지 새로고침)</small></div>
           <input type="checkbox" id="potPlayer" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
-          <div><b>X·블루스카이 자동재생 끄기</b><small>스크롤할 때 영상이 저절로 재생되지 않습니다. 재생 버튼을 직접 누른 영상만 재생됩니다 (바꾼 뒤 페이지 새로고침)</small></div>
+          <div><b>자동재생 끄기 (모든 사이트 기본값)</b><small>스크롤할 때 영상이 저절로 재생되지 않습니다. 재생 버튼을 직접 누른 영상만 재생됩니다 (바꾼 뒤 페이지 새로고침)</small></div>
           <input type="checkbox" id="noAutoplay" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
@@ -218,15 +218,34 @@
           <input type="checkbox" id="downloadedMark" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
+          <div><b>영상 화면 크기 줄이기 (모든 사이트 기본값)</b><small>영상 플레이어를 아래에서 고른 크기로 줄입니다 (전체 화면은 그대로). 처음에는 유튜브만 70% 로 켜져 있고, 사이트마다 '이 사이트' 탭에서 켜기·크기를 따로 정할 수 있습니다</small></div>
+          <input type="checkbox" id="videoSmall" /><span class="sw"><i></i></span>
+        </label>
+        <div class="seg" id="videoScale" style="margin:-2px 0 8px">
+          <button data-v="50">50%</button><button data-v="60">60%</button><button data-v="70">70%</button><button data-v="80">80%</button><button data-v="90">90%</button>
+        </div>
+        <label class="row-toggle">
           <div><b>유튜브 쇼츠 조회수·구독자 표시</b><small>재생 중인 쇼츠 오른쪽 위에 조회수와 구독자 수를 띄웁니다</small></div>
           <input type="checkbox" id="ytShortsStats" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>좋아요 플로팅 버튼 (모든 사이트)</b><small>화면 오른쪽 아래에 좋아요 버튼이 떠 있습니다. 누르면 지금 화면 가운데에 보고 있는 게시물의 좋아요를 대신 누르고, 눌렸는지 확인합니다</small></div>
+          <input type="checkbox" id="ytLikeFloat" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>팔로우 플로팅 버튼 (모든 사이트)</b><small>좋아요 버튼 위에 팔로우 버튼이 떠 있습니다. 누르면 지금 보고 있는 게시물 작성자를 팔로우(유튜브는 구독)합니다</small></div>
+          <input type="checkbox" id="followFloat" /><span class="sw"><i></i></span>
+        </label>
+        <label class="row-toggle">
+          <div><b>영상 재생바 (모든 사이트)</b><small>재생바가 없는 영상 아래에 재생바와 시간을 띄웁니다. 유튜브·X 등 자체 재생바가 있는 사이트는 처음에 꺼져 있습니다('이 사이트' 탭에서 켜기)</small></div>
+          <input type="checkbox" id="seekBar" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
           <div><b>X 팔로우 버튼</b><small>X 홈·탐색 피드의 작성자 이름 옆에 팔로우 / 팔로잉 상태를 보여 주고 눌러서 팔로우합니다</small></div>
           <input type="checkbox" id="xFollowButtons" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
-          <div><b>X 사진 확대 보기에서 사진 누르면 닫기</b><small>사진을 크게 본 상태에서 사진을 누르면 확대 창이 닫힙니다</small></div>
+          <div><b>사진 확대 보기에서 사진 누르면 닫기 (모든 사이트 기본값)</b><small>사진을 크게 본 상태에서 사진을 누르면 확대 창이 닫힙니다. 처음에는 X 에서만 켜져 있고, 다른 사이트는 '이 사이트' 탭에서 켜세요</small></div>
           <input type="checkbox" id="xPhotoTapClose" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">

@@ -15,9 +15,9 @@
     ['tiktok', /(^|\.)tiktok\.com$/], ['douyin', /(^|\.)douyin\.com$/], ['weibo', /(^|\.)weibo\.(com|cn)$/], ['bilibili', /(^|\.)bilibili\.com$/],
     ['xiaohongshu', /(^|\.)xiaohongshu\.com$/], ['pinterest', /(^|\.)pinterest\./], ['kuaishou', /(^|\.)kuaishou\.com$/],
   ];
-  const site = SITE_OF.find(([, re]) => re.test(H))?.[0] || '';
-  if (!site) return;
-  const sid = site === 'bsky' ? 'bluesky' : site;
+  // 목록에 없는 사이트(유튜브·페이스북·그 밖)도 팔로워·팔로잉 목록 창이 열리면 같은 방식(화면 버튼을 한 명씩)으로 한다
+  const site = SITE_OF.find(([, re]) => re.test(H))?.[0] || 'other';
+  const sid = site === 'bsky' ? 'bluesky' : site === 'other' ? globalThis.__SMD_SITES?.pick?.(H)?.id || 'generic' : site;
   const effOf = (s, site) => ({ ...(s || {}), ...(((s || {}).siteSettings || {})[site] || {}) }); // 사이트별로 바꾼 값이 우선
 
   // 확장프로그램을 업데이트(다시 시작)하면 이미 열려 있던 페이지의 이 스크립트는 확장과 연결이 끊긴다
@@ -213,7 +213,7 @@
       pathLock: true,
     },
   };
-  const DIALOG_SITE = { instagram: ['인스타그램', 150, [8000, 12000]], threads: ['스레드', 150, [8000, 12000]], tiktok: ['틱톡', 200, [5000, 8000]], douyin: ['더우인', 200, [5000, 8000]], weibo: ['웨이보', 200, [5000, 8000]], bilibili: ['빌리빌리', 200, [4000, 7000]], xiaohongshu: ['샤오홍슈', 150, [6000, 10000]], pinterest: ['핀터레스트', 200, [4000, 7000]], kuaishou: ['콰이쇼우', 200, [5000, 8000]] };
+  const DIALOG_SITE = { instagram: ['인스타그램', 150, [8000, 12000]], threads: ['스레드', 150, [8000, 12000]], tiktok: ['틱톡', 200, [5000, 8000]], douyin: ['더우인', 200, [5000, 8000]], weibo: ['웨이보', 200, [5000, 8000]], bilibili: ['빌리빌리', 200, [4000, 7000]], xiaohongshu: ['샤오홍슈', 150, [6000, 10000]], pinterest: ['핀터레스트', 200, [4000, 7000]], kuaishou: ['콰이쇼우', 200, [5000, 8000]], other: ['이 사이트', 150, [6000, 10000]] };
   for (const [id, [name, cap, gap]] of Object.entries(DIALOG_SITE)) {
     CLICK[id] = {
       name, cap, gap,
@@ -234,7 +234,7 @@
   }
   const cfg = CLICK[site];
 
-  const dayKey = `followAllDay_${site}`;
+  const dayKey = `followAllDay_${site === 'other' ? H : site}`;
   // 하루 팔로우 수: 확장 저장소(연결이 끊기면 페이지 저장소)에 기록. 기록 실패가 팔로우를 막지 않게 한다.
   const lsKey = `smd_${dayKey}`;
   const readLs = () => {

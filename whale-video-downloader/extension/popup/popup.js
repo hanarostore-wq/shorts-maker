@@ -149,7 +149,7 @@ async function renderFolder() {
   renderPreview();
 }
 renderFolder();
-for (const id of ['captionOnMedia', 'captionCover', 'captionIntro', 'captionKeepOriginal', 'translateCaption', 'ytShortsStats', 'xFollowButtons', 'pauseOffscreen', 'preventDuplicates', 'autoFollow', 'aiLabel', 'downloadedMark', 'xPhotoTapClose', 'bskyFollowButtons', 'followAllButton', 'noAutoplay', 'captionAuthor', 'alwaysShowButtons']) {
+for (const id of ['captionOnMedia', 'captionCover', 'captionIntro', 'captionKeepOriginal', 'translateCaption', 'ytShortsStats', 'xFollowButtons', 'pauseOffscreen', 'preventDuplicates', 'autoFollow', 'aiLabel', 'downloadedMark', 'xPhotoTapClose', 'bskyFollowButtons', 'followAllButton', 'noAutoplay', 'captionAuthor', 'alwaysShowButtons', 'ytLikeFloat', 'followFloat', 'seekBar']) {
   $(`#${id}`).checked = settings[id] !== false;
   $(`#${id}`).addEventListener('change', (e) => save({ [id]: e.target.checked }));
 }
@@ -164,6 +164,9 @@ $('#countryFolders').addEventListener('change', (e) => save({ countryFolders: e.
 $('#flagPrefix').checked = settings.flagPrefix !== false;
 $('#flagPrefix').addEventListener('change', (e) => save({ flagPrefix: e.target.checked }));
 seg($('#flagStyle'), settings.flagStyle || 'name', (v) => save({ flagStyle: v }));
+$('#videoSmall').checked = settings.videoSmall === true;
+$('#videoSmall').addEventListener('change', (e) => save({ videoSmall: e.target.checked }));
+seg($('#videoScale'), String(settings.videoScale || 70), (v) => save({ videoScale: Number(v) }));
 $('#imageButtons').checked = settings.imageButtons !== false;
 $('#imageButtons').addEventListener('change', (e) => save({ imageButtons: e.target.checked }));
 
@@ -271,6 +274,20 @@ function renderSitePanel(id) {
       await save({ siteSettings: ss });
       renderSitePanel(id);
     }));
+    // 크기(%) 고르기 — 이 사이트만 따로
+    if (f.scaleKey) {
+      const sel = document.createElement('div');
+      sel.className = 'seg sp-scale';
+      sel.style.margin = '0 0 8px';
+      sel.innerHTML = [40, 50, 60, 70, 80, 90].map((n) => `<button type="button" data-v="${n}">${n}%</button>`).join('');
+      seg(sel, String(eff[f.scaleKey] || 70), async (v) => {
+        const ss = { ...(settings.siteSettings || {}) };
+        ss[id] = { ...(ss[id] || {}), [f.scaleKey]: Number(v) };
+        await save({ siteSettings: ss });
+        renderSitePanel(id);
+      });
+      box.appendChild(sel);
+    }
   }
 }
 $('#spReset').addEventListener('click', async () => {

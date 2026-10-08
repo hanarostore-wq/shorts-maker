@@ -232,7 +232,7 @@ const scenarios = [
 
 console.log(`확장프로그램 ID: ${extId}\n`);
 // 일반 시나리오는 원본 그대로 저장되는지 보므로 요약 글자 넣기는 끄고, 아래 전용 테스트에서 켠다.
-await setSettings({ captionOnMedia: false, preventDuplicates: false, siteFolders: false, noAutoplay: false, alwaysShowButtons: false, siteSettings: {}, siteSettingsV: 1, siteFolderV: 2 }); // 사이트별 기능 설정은 전용 테스트에서 확인. 저장 버튼 항상 표시는 전용 테스트에서 확인(다른 테스트는 마우스를 올린 사진의 버튼을 누름). 자동재생 끄기는 전용 테스트에서 확인. 사이트별 폴더는 전용 테스트에서 확인. 같은 페이지를 여러 번 받는 시나리오가 많아 중복 막기는 전용 테스트에서만 켠다
+await setSettings({ captionOnMedia: false, preventDuplicates: false, siteFolders: false, noAutoplay: false, alwaysShowButtons: false, siteSettings: {}, siteSettingsV: 3, siteFolderV: 2 }); // 사이트별 기능 설정은 전용 테스트에서 확인. 저장 버튼 항상 표시는 전용 테스트에서 확인(다른 테스트는 마우스를 올린 사진의 버튼을 누름). 자동재생 끄기는 전용 테스트에서 확인. 사이트별 폴더는 전용 테스트에서 확인. 같은 페이지를 여러 번 받는 시나리오가 많아 중복 막기는 전용 테스트에서만 켠다
 for (const s of scenarios) await scenario(s);
 
 // ── 저장 위치: 하위 폴더 설정 반영 ──
@@ -333,6 +333,72 @@ if (!only || only === 'folder') {
     record('[인스타] 재생바', false, { note: err.message.split('\n')[0] });
   } finally {
     await setSettings({ siteSettings: {} });
+    await page.close();
+  }
+}
+
+// ── 모든 사이트: 떠 있는 좋아요·팔로우 버튼 ──
+{
+  const page = await ctx.newPage();
+  const sh = (sel) => `document.querySelector('smd-float').shadowRoot.querySelector('${sel}')`;
+  try {
+    await setSettings({ siteSettings: {}, autoFollow: false });
+    await page.goto('https://www.example-videos.com/float', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => document.getElementById('fp2').scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(1600);
+    const vis = await page.evaluate(`({ host: !!document.querySelector('smd-float') && getComputedStyle(document.querySelector('smd-float')).display !== 'none', like: !${sh('button.like')}.hidden, follow: !${sh('button.follow')}.hidden })`);
+    await page.evaluate(`${sh('button.like')}.click()`);
+    await page.waitForTimeout(1300);
+    const r = await page.evaluate(`({ lk1: window.__lk1 || 0, lk2: window.__lk2 || 0, clk: window.__clk || 0, label: document.getElementById('lk2').getAttribute('aria-label'), on: ${sh('button.like')}.classList.contains('on'), msg: ${sh('.msg')}.textContent })`);
+    record('[모든 사이트] 좋아요 플로팅: 보고 있는 게시물(가운데)의 좋아요만 눌림·댓글 하트 안 눌림·버튼 켜짐', vis.host && vis.like && r.lk2 === 1 && r.lk1 === 0 && r.clk === 0 && r.label === '좋아요 취소' && r.on, { note: JSON.stringify({ ...vis, ...r }) });
+    await page.evaluate(`${sh('button.follow')}.click()`);
+    await page.waitForTimeout(5200);
+    const f = await page.evaluate(() => ({ f1: window.__fol1 || 0, f2: window.__fol2 || 0, toast: document.querySelector('smd-toast')?.dataset.history || '' }));
+    record('[모든 사이트] 팔로우 플로팅: 보고 있는 게시물 작성자 팔로우 + 결과 알림', f.f2 === 1 && f.f1 === 0 && /팔로우했습니다/.test(f.toast), { note: JSON.stringify(f) });
+    // 오류 경로: 눌러도 상태가 안 바뀌는 좋아요
+    await page.goto('https://www.example-videos.com/float?stuck=1', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => document.getElementById('fp2').scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(1600);
+    await page.evaluate(`${sh('button.like')}.click()`);
+    await page.waitForTimeout(1300);
+    const m = await page.evaluate(`${sh('.msg')}.textContent`);
+    record('[모든 사이트] (오류 경로) 좋아요가 안 바뀌면 단계·원인·조치 안내', /단계: 좋아요 누르기/.test(m) && /원인:/.test(m) && /조치:/.test(m), { note: m.replace(/\n/g, ' / ') });
+    await setSettings({ siteSettings: { generic: { ytLikeFloat: false, followFloat: false } } });
+    await page.waitForTimeout(1200);
+    const hidden = await page.evaluate(() => getComputedStyle(document.querySelector('smd-float')).display === 'none');
+    record('[모든 사이트] 이 사이트에서 좋아요·팔로우 플로팅 끄면 숨김', hidden, { note: hidden ? '숨김' : '보임' });
+  } catch (err) {
+    record('[모든 사이트] 좋아요·팔로우 플로팅', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ siteSettings: {}, autoFollow: true });
+    await page.close();
+  }
+}
+
+// ── 모든 사이트: 재생바(기본 재생 막대가 있는 영상은 건너뜀) ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ siteSettings: {} });
+    await page.goto('https://www.example-videos.com/seek', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2000);
+    const r = await page.evaluate(() => {
+      const out = {};
+      for (const id of ['sv', 'sc']) {
+        const vr = document.getElementById(id).getBoundingClientRect();
+        out[id] = [...document.querySelectorAll('smd-seek')].some((h) => {
+          const w = h.shadowRoot.querySelector('.w');
+          if (w.hidden) return false;
+          const b = w.getBoundingClientRect();
+          return b.top >= vr.top && b.bottom <= vr.bottom + 2 && Math.abs(b.left - vr.left) < 2;
+        });
+      }
+      return out;
+    });
+    record('[모든 사이트] 재생바: 재생바 없는 영상에만 표시', r.sv && !r.sc, { note: JSON.stringify(r) });
+  } catch (err) {
+    record('[모든 사이트] 재생바', false, { note: err.message.split('\n')[0] });
+  } finally {
     await page.close();
   }
 }
@@ -474,6 +540,49 @@ for (const [SITE, URL_] of [['틱톡', 'https://www.tiktok.com/ttguard'], ['샤�
   }
 }
 
+// ── 영상 화면 크기 줄이기(모든 사이트, 켜기·끄기·사이트별 %) ──
+{
+  const page = await ctx.newPage();
+  try {
+    // 처음 설치 값: 유튜브만 70% 로 켬(마이그레이션)
+    await setSettings({ siteSettingsV: 2, siteSettings: {} });
+    const mig = await (async () => {
+      const p = await ctx.newPage();
+      await p.goto(`chrome-extension://${extId}/popup/popup.html`);
+      await p.waitForTimeout(800);
+      const r = await p.evaluate(async () => (await chrome.storage.local.get('settings')).settings.siteSettings.youtube);
+      await p.close();
+      return r;
+    })();
+    await page.goto('https://www.youtube.com/watch?v=YTwatch0001', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const f = document.createElement('ytd-watch-flexy');
+      f.innerHTML = '<div id="primary-inner"><div id="player" style="width:800px;height:450px"><video src="https://cdn.example-videos.com/preview.webm" muted style="width:800px;height:450px"></video></div></div>';
+      document.body.prepend(f);
+    });
+    await page.waitForTimeout(1500);
+    const zy = () => page.evaluate(() => getComputedStyle(document.querySelector('ytd-watch-flexy #player')).zoom);
+    const z70 = await zy();
+    // 그 밖의 사이트: 기본값은 끔 → 이 사이트만 50% 로 켬 → 끔
+    await page.goto('https://www.example-videos.com/seek', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    const w = () => page.evaluate(() => Math.round(document.getElementById('sv').getBoundingClientRect().width));
+    const g0 = await w();
+    await setSettings({ siteSettings: { generic: { videoSmall: true, videoScale: 50 } } });
+    await page.waitForTimeout(1600);
+    const g50 = await w();
+    await setSettings({ siteSettings: { generic: { videoSmall: false } } });
+    await page.waitForTimeout(800);
+    const goff = await w();
+    record('[모든 사이트] 영상 화면 크기: 유튜브 70% 기본·다른 사이트 50% 켜기/끄기', mig?.videoSmall === true && mig?.videoScale === 70 && z70 === '0.7' && g0 === 640 && g50 === 320 && goff === 640, { note: JSON.stringify({ 유튜브기본: mig, z70, 일반끔: g0, 일반50: g50, 다시끔: goff }) });
+  } catch (err) {
+    record('[모든 사이트] 영상 화면 크기', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ siteSettings: {}, siteSettingsV: 3 });
+    await page.close();
+  }
+}
+
 // ── 유튜브 좋아요 플로팅 버튼 ──
 {
   const page = await ctx.newPage();
@@ -481,21 +590,21 @@ for (const [SITE, URL_] of [['틱톡', 'https://www.tiktok.com/ttguard'], ['샤�
     await setSettings({ siteSettings: {} });
     await page.goto('https://www.youtube.com/watch?v=YTlike00001', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1800);
-    const shown = await page.evaluate(() => getComputedStyle(document.querySelector('smd-ytlike') || document.body).display !== 'none' && !!document.querySelector('smd-ytlike'));
-    await page.evaluate(() => document.querySelector('smd-ytlike').shadowRoot.querySelector('button').click());
+    const shown = await page.evaluate(() => getComputedStyle(document.querySelector('smd-float') || document.body).display !== 'none' && !!document.querySelector('smd-float'));
+    await page.evaluate(() => document.querySelector('smd-float').shadowRoot.querySelector('button.like').click());
     await page.waitForTimeout(1200);
-    const r = await page.evaluate(() => ({ liked: window.__liked || 0, pressed: document.getElementById('ytlike').getAttribute('aria-pressed'), on: document.querySelector('smd-ytlike').shadowRoot.querySelector('button').classList.contains('on') }));
+    const r = await page.evaluate(() => ({ liked: window.__liked || 0, pressed: document.getElementById('ytlike').getAttribute('aria-pressed'), on: document.querySelector('smd-float').shadowRoot.querySelector('button.like').classList.contains('on') }));
     record('[유튜브] 좋아요 플로팅 버튼: 누르면 유튜브 좋아요가 눌리고 버튼이 켜짐', shown && r.liked === 1 && r.pressed === 'true' && r.on, { note: JSON.stringify({ 보임: shown, ...r }) });
     await page.goto('https://www.youtube.com/watch?v=YTwatch0001', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1500);
-    await page.evaluate(() => document.querySelector('smd-ytlike').shadowRoot.querySelector('button').click());
+    await page.evaluate(() => document.querySelector('smd-float').shadowRoot.querySelector('button.like').click());
     await page.waitForTimeout(500);
-    const m = await page.evaluate(() => document.querySelector('smd-ytlike').shadowRoot.querySelector('.msg').textContent);
+    const m = await page.evaluate(() => document.querySelector('smd-float').shadowRoot.querySelector('.msg').textContent);
     record('[유튜브] (오류 경로) 좋아요 단추가 없으면 단계·원인·조치 안내', /단계: 좋아요 단추 찾기/.test(m) && /조치:/.test(m), { note: m.replace(/\n/g, ' / ') });
     await setSettings({ siteSettings: { youtube: { ytLikeFloat: false } } });
     await page.waitForTimeout(1200);
-    const hidden = await page.evaluate(() => getComputedStyle(document.querySelector('smd-ytlike')).display === 'none');
-    record('[유튜브] 좋아요 플로팅 버튼 끄면 숨김', hidden, { note: hidden ? '숨김' : '보임' });
+    const hidden = await page.evaluate(() => getComputedStyle(document.querySelector('smd-float')).display === 'none' || document.querySelector('smd-float').shadowRoot.querySelector('button.like').hidden);
+    record('[유튜브] 좋아요 플로팅 버튼 끄면 숨김(팔로우 버튼은 따로)', hidden, { note: hidden ? '숨김' : '보임' });
   } catch (err) {
     record('[유튜브] 좋아요 플로팅', false, { note: err.message.split('\n')[0] });
   } finally {
@@ -676,10 +785,42 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── 모든 사이트: 사진 확대 창에서 사진을 누르면 닫힘(켠 사이트만) ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ siteSettings: { generic: { xPhotoTapClose: true } }, alwaysShowButtons: false });
+    await page.goto('https://www.example-videos.com/photomodal', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1200);
+    await page.locator('[role="dialog"] img').click();
+    await page.waitForTimeout(800);
+    const ok = await page.evaluate(() => window.__mclosed === true);
+    await page.goto('https://www.example-videos.com/photomodal?noclose=1', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1200);
+    await page.locator('[role="dialog"] img').click();
+    await page.waitForTimeout(1200);
+    const err = await page.evaluate(() => document.querySelector('smd-toast')?.dataset.history || '');
+    await setSettings({ siteSettings: {} });
+    await page.goto('https://www.example-videos.com/photomodal', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1200);
+    await page.locator('[role="dialog"] img').click();
+    await page.waitForTimeout(800);
+    const offKept = await page.evaluate(() => window.__mclosed !== true);
+    record('[모든 사이트] 사진 확대 창: 사진 누르면 닫힘 / 끈 사이트는 그대로', ok && offKept, { note: JSON.stringify({ 닫힘: ok, 끔: offKept }) });
+    record('[모든 사이트] (오류 경로) 확대 창이 안 닫히면 단계·원인·조치', /단계: 사진 확대 창 닫기/.test(err) && /조치:/.test(err), { note: err.slice(0, 160) });
+  } catch (err) {
+    record('[모든 사이트] 사진 확대 창 닫기', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ siteSettings: {} });
+    await page.close();
+  }
+}
+
 // ── X 사진 확대 보기: 사진을 누르면 닫힘 ──
 {
   const page = await ctx.newPage();
   try {
+    await setSettings({ siteSettings: { x: { xPhotoTapClose: true } } });
     await page.goto('https://x.com/tester/status/1790000000000000003/photo/1', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1500);
     const ib = await page.locator('[role="dialog"] img').boundingBox();
@@ -922,6 +1063,27 @@ if (!only || only === 'place' || '배치'.includes(only)) {
       await page.waitForTimeout(1500);
       const sub2 = await page.evaluate(() => window.__subscribed || 0);
       record('[자동 팔로우] 유튜브: 다운로드 누르면 떨어진 구독 단추도 눌러 구독(이미 구독 중이면 안 누름)', sub.n === 1 && sub.label === '구독중' && sub2 === 0, { note: `구독 ${sub.n}회(${sub.label}) · 이미 구독 중 페이지 ${sub2}회` });
+    }
+
+    // 유튜브: 화면에 구독 단추가 없으면 유튜브 구독 요청으로(로그인 없으면 단계·원인·조치)
+    {
+      const reqs = () => log.filter((x) => /resolve_url|subscription/.test(x.path || ''));
+      const n0 = reqs().length;
+      await page.goto('https://www.youtube.com/watch?v=YTnosub0001', { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      await page.locator('smd-anchor .btn.show').first().click();
+      await page.waitForTimeout(2500);
+      const errToast = await page.evaluate(() => document.querySelector('smd-toast')?.dataset.history || '');
+      await ctx.addCookies([{ name: 'SAPISID', value: 'testsapisid', domain: '.youtube.com', path: '/', secure: true }]);
+      await page.goto('https://www.youtube.com/watch?v=YTnosub0001', { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      await page.locator('smd-anchor .btn.show').first().click();
+      await page.waitForTimeout(2500);
+      const okToast = await page.evaluate(() => document.querySelector('smd-toast')?.dataset.history || '');
+      const sent = reqs().slice(n0);
+      await ctx.clearCookies({ name: 'SAPISID' });
+      record('[자동 팔로우] (오류 경로) 유튜브 구독 단추 없음 + 로그인 없음 → 로그인 확인 안내', /단계: 로그인 확인/.test(errToast) && /조치:/.test(errToast), { note: errToast.slice(0, 160) });
+      record('[자동 팔로우] 유튜브: 구독 단추가 없으면 @아이디로 채널을 찾아 구독 요청', sent.some((x) => /resolve_url/.test(x.path) && /@Jackson-xxz$/.test(x.url) && x.auth) && sent.some((x) => /subscribe/.test(x.path) && x.channelIds?.[0] === 'UCabcdefghijklmnopqrstuv' && x.auth) && /@Jackson-xxz 팔로우했습니다/.test(okToast), { note: `${JSON.stringify(sent)} · ${okToast.slice(-80)}` });
     }
 
     // 첫 클릭에 바로 다운로드(팔로우 버튼이 로그인 창을 띄워도)
@@ -1310,9 +1472,10 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     const info = await pp.evaluate(() => ({ title: document.getElementById('spTitle').textContent, items: [...document.querySelectorAll('#spList .row-toggle b')].map((b) => b.textContent) }));
     await pp.screenshot({ path: path.join(SHOTS, 'popup-site-bluesky.png'), fullPage: true });
     const hasBsky = info.items.some((t) => /피드 게시물 팔로우 버튼/.test(t));
-    const hasX = info.items.some((t) => /사진 확대 보기에서 누르면 닫기|피드 작성자 옆/.test(t));
+    const hasX = info.items.some((t) => /피드 작성자 옆/.test(t));
     const hasYt = info.items.some((t) => /쇼츠/.test(t));
-    record('[팝업] 이 사이트: 블루스카이에서 열면 블루스카이 기능만(X·유튜브 전용 기능 없음)', /블루스카이 기능/.test(info.title) && hasBsky && !hasX && !hasYt, { note: `${info.title} · ${info.items.length}개` });
+    const shared = ['좋아요 플로팅', '팔로우 플로팅', '영상 재생바', '사진 확대 보기에서 누르면 닫기', '영상 화면 크기'].every((k) => info.items.some((t) => t.includes(k)));
+    record('[팝업] 이 사이트: 블루스카이에서 열면 공용 기능 + 블루스카이 기능(X·유튜브 데이터 전용 기능 없음)', /블루스카이 기능/.test(info.title) && hasBsky && shared && !hasX && !hasYt, { note: `${info.title} · ${info.items.length}개 · 공용 ${shared}` });
     await pp.locator('#spList .row-toggle', { hasText: '자동재생 끄기' }).click();
     await pp.waitForTimeout(500);
     const st = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings);

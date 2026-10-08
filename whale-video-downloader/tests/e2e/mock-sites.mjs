@@ -218,6 +218,21 @@ const handlers = {
     if (u.pathname === '/watch') {
       return html(res, page('일반 사이트 영상', `<div class="card"><h3>일반 사이트</h3><video src="https://cdn.example-videos.com/progressive_1080p_land.mp4" controls muted style="width:640px;height:360px;background:#000"></video></div>`));
     }
+    if (u.pathname === '/float') {
+      // 떠 있는 좋아요·팔로우: 게시물 2개(가운데 큰 게시물 = 두 번째). 첫 게시물 좋아요는 눌러도 상태가 안 바뀜(오류 경로)
+      const post = (i, stuck) => `<article style="margin:40px 0;width:520px"><div><a href="/user${i}">작성자${i}</a> <button class="fb" onclick="window.__fol${i}=(window.__fol${i}||0)+1;this.textContent='팔로잉'">팔로우</button></div>
+        <img id="fp${i}" src="https://cdn.example-videos.com/img/photo.jpg" style="width:480px;height:${i === 2 ? 520 : 200}px;object-fit:cover;display:block">
+        <button id="lk${i}" aria-label="좋아요" style="width:32px;height:32px" onclick="window.__lk${i}=(window.__lk${i}||0)+1;${stuck ? '' : "this.setAttribute('aria-label', this.getAttribute('aria-label')==='좋아요'?'좋아요 취소':'좋아요')"}">♥</button>
+        <div class="comment"><button aria-label="좋아요" style="width:12px;height:12px" onclick="window.__clk=(window.__clk||0)+1">♡</button></div></article>`;
+      return html(res, page('떠 있는 버튼', `${post(1, u.searchParams.get('stuck') === '1')}${post(2, u.searchParams.get('stuck') === '1')}<div style="height:600px"></div>`));
+    }
+    if (u.pathname === '/photomodal') {
+      const btn = u.searchParams.get('noclose') === '1' ? '' : `<button aria-label="닫기" onclick="window.__mclosed=true;this.closest('[role=dialog]').remove()">✕</button>`;
+      return html(res, page('사진 확대 창', `<div role="dialog" aria-modal="true" style="position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center">${btn}<img src="https://cdn.example-videos.com/img/photo.jpg" style="width:700px;height:520px;object-fit:cover"></div>`));
+    }
+    if (u.pathname === '/seek') {
+      return html(res, page('재생바 없는 영상', `<div class="card"><video id="sv" src="https://cdn.example-videos.com/long_95s.webm" muted preload="metadata" style="width:640px;height:360px;background:#000"></video><video id="sc" controls src="https://cdn.example-videos.com/long_95s.webm" muted preload="metadata" style="width:640px;height:360px;background:#000"></video></div>`));
+    }
     if (u.pathname === '/afollow') {
       // 일반 사이트: 게시물 안 '팔로우' 버튼 + 다른 곳의 '팔로잉'(이미 팔로우) 버튼
       return html(res, page('팔로우 테스트', `<article style="width:520px"><div><b>작성자</b> <button id="fb" onclick="window.__followed = (window.__followed || 0) + 1; this.textContent = '팔로잉'">팔로우</button></div>
@@ -352,6 +367,7 @@ const handlers = {
       // 보기 화면: 구독 단추는 플레이어와 떨어진 곳(제목 아래)에 있다
       const sub = u.searchParams.get('v') === 'YTsubbed001' ? '구독중' : '구독';
       const likeBtn = u.searchParams.get('v') === 'YTlike00001' ? `<ytd-watch-metadata><like-button-view-model><button id="ytlike" aria-pressed="false" onclick="window.__liked = (window.__liked || 0) + 1; this.setAttribute('aria-pressed', this.getAttribute('aria-pressed') === 'true' ? 'false' : 'true')">좋아요</button></like-button-view-model></ytd-watch-metadata>` : '';
+      if (u.searchParams.get('v') === 'YTnosub0001') return html(res, ytPage('YTnosub0001', false).replace('</body>', `<ytd-watch-metadata><div id="owner"><a href="/@Jackson-xxz">Jackson</a></div></ytd-watch-metadata></body>`));
       return html(res, ytPage(u.searchParams.get('v'), false).replace('</body>', `${likeBtn}<div id="below" style="margin-top:40px"><ytd-channel-name>테스트 채널</ytd-channel-name> <ytd-subscribe-button-renderer><button id="subbtn" onclick="window.__subscribed = (window.__subscribed || 0) + 1; this.textContent = '구독중'">${sub}</button></ytd-subscribe-button-renderer></div></body>`));
     }
     if (u.pathname === '/adsfeed') {
@@ -362,6 +378,19 @@ const handlers = {
           <button class="ytp-skip-ad-button" onclick="window.__skipped = true; document.getElementById('pl').classList.remove('ad-showing')">건너뛰기</button></div></body></html>`);
     }
     if (u.pathname.startsWith('/shorts/')) return html(res, ytPage(u.pathname.split('/')[2], true));
+    if (u.pathname === '/youtubei/v1/navigation/resolve_url' || u.pathname === '/youtubei/v1/subscription/subscribe') {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        const b = JSON.parse(body || '{}');
+        const auth = /^SAPISIDHASH \d+_[0-9a-f]{40}$/.test(req.headers.authorization || '');
+        log.push({ host: 'www.youtube.com', path: u.pathname, url: b.url, channelIds: b.channelIds, auth });
+        res.writeHead(auth ? 200 : 401, { 'content-type': 'application/json' });
+        if (!auth) return res.end(JSON.stringify({ error: { code: 401, message: 'auth' } }));
+        res.end(JSON.stringify(u.pathname.endsWith('resolve_url') ? { endpoint: { browseEndpoint: { browseId: 'UCabcdefghijklmnopqrstuv' } } } : { actions: [] }));
+      });
+      return;
+    }
     if (u.pathname === '/youtubei/v1/next') {
       let body = '';
       req.on('data', (c) => (body += c));
