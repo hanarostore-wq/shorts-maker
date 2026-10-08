@@ -15,6 +15,7 @@ export type AgentTool =
   | "sourcingManagement"
   | "tradingEvidence"
   | "tradingAnalytics"
+  | "tradingCollaboration"
   | "coinTrading"
   | "stockTrading"
   | "assetManagement"
@@ -31,6 +32,12 @@ export type AgentTool =
 export const AGENT_TOOLS: Record<string, AgentTool> = {
   c_analytics: "tradingAnalytics",
   t_analytics: "tradingAnalytics",
+  c_trade_analyst: "tradingCollaboration",
+  c_gemini: "tradingCollaboration",
+  c_claude: "tradingCollaboration",
+  c_grok: "tradingCollaboration",
+  c_manus: "tradingCollaboration",
+  c_gpt: "tradingCollaboration",
   o5: "storage",
   s1: "sourcingWorker",
   s11: "sourcingManagement",

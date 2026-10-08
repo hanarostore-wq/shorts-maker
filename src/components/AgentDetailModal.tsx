@@ -18,6 +18,7 @@ import { UpbitReportDashboard } from "./UpbitReportDashboard";
 import { AssetManagementPanel, LiveTradingPanel, ProfitRealizationPanel } from "./TradingAccountPanels";
 import { TradingEvidencePanel } from "./TradingEvidencePanel";
 import { TradingRolePanel } from "./TradingRolePanel";
+import { TradingCollaborationPanel } from "./TradingCollaborationPanel";
 
 export function AgentDetailModal({
   agent,
@@ -34,7 +35,7 @@ export function AgentDetailModal({
   const tool = getAgentTool(agent.id);
   const width = ["c7", "c13", "t7", "t13"].includes(agent.id)
     ? "max-w-[1600px]"
-    : ["tradingEvidence", "tradingAnalytics"].includes(tool || "")
+    : ["tradingEvidence", "tradingAnalytics", "tradingCollaboration"].includes(tool || "")
       ? "max-w-5xl"
       : ["naverBlog", "threads", "videoConcat"].includes(tool || "")
         ? "max-w-3xl"
@@ -57,6 +58,7 @@ export function AgentDetailModal({
         {tool === "sourcingManagement" && <SourcingManagementPanel />}
         {tool === "tradingAnalytics" && <TradingAnalyticsPanel asset={agent.id.startsWith("c") ? "coin" : "stock"} />}
         {tool === "tradingEvidence" && <TradingEvidencePanel asset={agent.id.startsWith("c") ? "coin" : "stock"} category={agent.id.split("_")[1]} />}
+        {tool === "tradingCollaboration" && <TradingCollaborationPanel agent={agent} />}
         {tool === "coinTrading" && <TradingRolePanel kind="coin" agent={agent} />}
         {agent.id === "c8" && <UpbitReportDashboard />}
         {tool === "stockTrading" && <TradingRolePanel kind="stock" agent={agent} />}
