@@ -213,6 +213,7 @@ function getConcatWorkerLaunch() {
       token: parsed.searchParams.get("token"),
       processingMode: parsed.searchParams.get("mode") === "copy" ? "copy" : "normalize",
       outputQuality: ["720p", "1080p"].includes(parsed.searchParams.get("quality")) ? parsed.searchParams.get("quality") : "source",
+      acceleration: ["cpu", "nvidia", "intel", "amd"].includes(parsed.searchParams.get("accelerator")) ? parsed.searchParams.get("accelerator") : "auto",
     };
   } catch {
     return {};

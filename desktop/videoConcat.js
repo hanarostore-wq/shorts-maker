@@ -10,6 +10,64 @@ function resolveBinaries() {
   return { ffmpeg: require("ffmpeg-static"), ffprobe: require("ffprobe-static").path };
 }
 
+const MB = 1024 * 1024;
+const GB = 1024 * MB;
+
+function capture(executable, args) {
+  return new Promise((resolve, reject) => {
+    let child;
+    try { child = spawn(executable, args, { windowsHide: true }); }
+    catch (error) { reject(error); return; }
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+    child.once("error", reject);
+    child.once("close", (code) => code === 0 ? resolve(`${stdout}\n${stderr}`) : reject(new Error(stderr.trim() || `${executable} 종료 코드: ${code}`)));
+  });
+}
+
+function unique(values) { return [...new Set(values.filter(Boolean))]; }
+
+const hardwareEncoders = [
+  { id: "nvidia", encoder: "h264_nvenc", label: "NVIDIA NVENC", args: ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "19", "-b:v", "0", "-pix_fmt", "yuv420p"] },
+  { id: "intel", encoder: "h264_qsv", label: "Intel Quick Sync", args: ["-c:v", "h264_qsv", "-global_quality", "20", "-look_ahead", "0", "-pix_fmt", "nv12"] },
+  { id: "amd", encoder: "h264_amf", label: "AMD AMF", args: ["-c:v", "h264_amf", "-quality", "balanced", "-rc", "cqp", "-qp_i", "20", "-qp_p", "22", "-pix_fmt", "yuv420p"] },
+];
+
+async function encoderWorks(ffmpeg, plan) {
+  try {
+    await capture(ffmpeg, ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=64x64:r=30:d=0.1", "-frames:v", "1", ...plan.args, "-f", "null", "-"]);
+    return true;
+  } catch { return false; }
+}
+
+async function selectEncoderPlan(binaries, acceleration) {
+  const requested = acceleration || "auto";
+  if (requested === "cpu") return { id: "cpu", label: "CPU 고화질", ffmpeg: binaries.ffmpeg, hardware: false, args: ["-c:v", "libx264", "-crf", "18", "-preset", "veryfast", "-pix_fmt", "yuv420p"] };
+  const candidates = unique([
+    process.env.MONEYOS_FFMPEG_PATH,
+    process.platform === "win32" ? path.join(__dirname, "tools", "ffmpeg", "bin", "ffmpeg.exe") : null,
+    "ffmpeg",
+    binaries.ffmpeg,
+  ]);
+  for (const ffmpeg of candidates) {
+    let encoders = "";
+    try { encoders = await capture(ffmpeg, ["-hide_banner", "-encoders"]); }
+    catch { continue; }
+    const plans = requested === "auto" ? hardwareEncoders : hardwareEncoders.filter((plan) => plan.id === requested);
+    for (const plan of plans) {
+      if (!encoders.includes(plan.encoder)) continue;
+      if (await encoderWorks(ffmpeg, plan)) return { ...plan, ffmpeg, hardware: true };
+    }
+  }
+  if (requested !== "auto") {
+    const label = hardwareEncoders.find((plan) => plan.id === requested)?.label ?? requested;
+    throw new Error(`${label} 하드웨어 인코더를 사용할 수 없습니다. 드라이버와 GPU 지원 FFmpeg를 확인하거나 가속 옵션을 자동·CPU로 바꾸세요.`);
+  }
+  return { id: "cpu", label: "CPU 고화질", ffmpeg: binaries.ffmpeg, hardware: false, args: ["-c:v", "libx264", "-crf", "18", "-preset", "veryfast", "-pix_fmt", "yuv420p"] };
+}
+
 function readableProcessError(error, toolName) {
   if (error?.code === "ENAMETOOLONG") {
     return new Error(`${toolName} 명령줄이 너무 깁니다. 파일 수와 경로를 묶음 처리해야 합니다.`);
@@ -187,7 +245,15 @@ async function inspectSources(inputPaths, binaries = resolveBinaries()) {
     const absolutePath = path.resolve(String(filePath));
     if (!SUPPORTED_EXTENSIONS.has(path.extname(absolutePath).toLowerCase())) throw new Error(`${path.basename(absolutePath)}: MP4 원본만 지원합니다.`);
     if (!fssync.existsSync(absolutePath)) throw new Error(`파일을 찾을 수 없습니다: ${absolutePath}`);
-    const metadata = await probe(absolutePath, binaries);
+    let metadata;
+    try { metadata = await probe(absolutePath, binaries); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/moov atom not found|invalid data found/i.test(message)) {
+        throw new Error(`${path.basename(absolutePath)}: MP4 헤더를 읽을 수 없습니다. 이전 작업이 중단되어 남은 미완성 파일일 수 있으니 선택에서 제외하고 삭제한 뒤 원본 MP4만 다시 고르세요.`);
+      }
+      throw new Error(`${path.basename(absolutePath)}: 영상 정보를 읽지 못했습니다. ${message.split("\n").at(-1) || ""}`.trim());
+    }
     sources.push({ filePath: absolutePath, duration: safeDuration(metadata.format?.duration), signature: streamSignature({ ...metadata, filePath: absolutePath }) });
   }
   return { sources, streamCopyCompatible: sources.every((source) => sameSignature(source.signature, sources[0].signature)) };
@@ -227,7 +293,7 @@ async function streamCopyConcat(sources, outputPath, binaries, onProgress, workD
   await joinSegmentList(segments, outputPath, binaries, onProgress, expectedDuration, "원본 비트스트림 그대로 이어붙이는 중", 0.9, 0.1, signal);
 }
 
-async function normalizeConcat(sources, outputPath, binaries, onProgress, expectedDuration, workDir, signal, outputQuality) {
+async function normalizeConcat(sources, outputPath, binaries, onProgress, expectedDuration, workDir, signal, outputQuality, encoderPlan) {
   const canvas = outputCanvas(sources, outputQuality);
   const canvasWidth = canvas.width;
   const canvasHeight = canvas.height;
@@ -238,9 +304,14 @@ async function normalizeConcat(sources, outputPath, binaries, onProgress, expect
   }
 
   // Windows에는 FFmpeg 명령줄 길이 제한이 있다. 한 파일씩 임시 MP4를 만든 뒤
-  // 목록 파일로 합치되, CPU 코어 여유가 있을 때만 제한된 개수로 병렬 처리한다.
+  // 목록 파일로 합치되, 여유 RAM과 해상도에 맞춰 병렬 수를 제한한다.
   const cpuCount = Math.max(1, os.cpus().length || 1);
-  const parallelism = cpuCount >= 12 ? 3 : cpuCount >= 6 ? 2 : 1;
+  const cpuParallelism = cpuCount >= 12 ? 3 : cpuCount >= 6 ? 2 : 1;
+  const estimatedMemoryPerJob = Math.max(512 * MB, canvasWidth * canvasHeight * 80);
+  const reservedMemory = Math.max(Math.floor(os.totalmem() * 0.15), 1536 * MB);
+  const usableMemory = Math.max(estimatedMemoryPerJob, os.freemem() - reservedMemory);
+  const memoryParallelism = Math.max(1, Math.floor(usableMemory / estimatedMemoryPerJob));
+  const parallelism = encoderPlan.hardware ? 1 : Math.max(1, Math.min(cpuParallelism, memoryParallelism));
   const threadsPerJob = Math.max(1, Math.floor(cpuCount / parallelism));
   const normalizedSegments = new Array(sources.length);
   const sourceProgress = new Array(sources.length).fill(0);
@@ -270,17 +341,18 @@ async function normalizeConcat(sources, outputPath, binaries, onProgress, expect
     }
     const args = ["-hide_banner", "-nostdin", "-y", "-progress", "pipe:2", "-i", source.filePath, "-filter_complex", filters.join(";"), "-map", "[v]"];
     for (let trackIndex = 0; trackIndex < audioTrackCount; trackIndex += 1) args.push("-map", `[a${trackIndex}]`);
-    args.push("-c:v", "libx264", "-crf", "18", "-preset", "veryfast", "-threads", String(threadsPerJob), "-pix_fmt", "yuv420p");
+    args.push(...encoderPlan.args);
+    if (!encoderPlan.hardware) args.push("-threads", String(threadsPerJob));
     if (audioTrackCount > 0) args.push("-c:a", "aac", "-b:a", "192k");
     args.push(segmentPath);
-    updateProgress(index, 0, `자동 규격 맞춤 ${canvas.label} · ${parallelism}개 동시 처리 중`);
-    await run(binaries.ffmpeg, args, {
+    updateProgress(index, 0, `${encoderPlan.label} · ${canvas.label} · ${parallelism}개 동시 처리 중`);
+    await run(encoderPlan.ffmpeg, args, {
       totalDuration: keptDuration,
       signal,
-      onProgress: (details) => updateProgress(index, details.progress ?? 0, `자동 규격 맞춤 ${canvas.label} · ${parallelism}개 동시 처리 중`),
+      onProgress: (details) => updateProgress(index, details.progress ?? 0, `${encoderPlan.label} · ${canvas.label} · ${parallelism}개 동시 처리 중`),
     });
     normalizedSegments[index] = segmentPath;
-    updateProgress(index, 1, `자동 규격 맞춤 ${canvas.label} · ${parallelism}개 동시 처리 중`);
+    updateProgress(index, 1, `${encoderPlan.label} · ${canvas.label} · ${parallelism}개 동시 처리 중`);
   };
   let nextIndex = 0;
   const normalized = await Promise.allSettled(Array.from({ length: Math.min(parallelism, sources.length) }, async () => {
@@ -296,7 +368,7 @@ async function normalizeConcat(sources, outputPath, binaries, onProgress, expect
   await joinSegmentList(normalizedSegments, outputPath, binaries, onProgress, expectedDuration, "규격을 맞춘 MP4 묶음을 이어붙이는 중", 0.9, 0.1, signal);
 }
 
-async function concatOriginalQuality(inputPaths, outputPath = null, { onProgress = () => {}, binaries = resolveBinaries(), processingMode = "normalize", outputQuality = "source", signal } = {}) {
+async function concatOriginalQuality(inputPaths, outputPath = null, { onProgress = () => {}, binaries = resolveBinaries(), processingMode = "normalize", outputQuality = "source", acceleration = "auto", signal } = {}) {
   if (signal?.aborted) throw cancellationError();
   const { sources, streamCopyCompatible } = await inspectSources(inputPaths, binaries);
   const shouldNormalize = processingMode === "normalize" && (!streamCopyCompatible || outputQuality !== "source");
@@ -310,7 +382,11 @@ async function concatOriginalQuality(inputPaths, outputPath = null, { onProgress
   let completed = false;
   try {
     const expectedDuration = sources.reduce((total, source) => total + source.duration - 2, 0);
-    if (shouldNormalize) await normalizeConcat(sources, stagedOutput, binaries, onProgress, expectedDuration, workDir, signal, outputQuality);
+    const encoderPlan = shouldNormalize ? await selectEncoderPlan(binaries, acceleration) : null;
+    if (shouldNormalize) {
+      onProgress({ phase: "normalize", current: 0, total: sources.length, progress: 0, message: `${encoderPlan.label} 인코더 준비 완료` });
+      await normalizeConcat(sources, stagedOutput, binaries, onProgress, expectedDuration, workDir, signal, outputQuality, encoderPlan);
+    }
     else await streamCopyConcat(sources, stagedOutput, binaries, onProgress, workDir, expectedDuration, signal);
     const metadata = await probe(stagedOutput, binaries);
     const signature = streamSignature({ ...metadata, filePath: stagedOutput });
@@ -318,7 +394,7 @@ async function concatOriginalQuality(inputPaths, outputPath = null, { onProgress
     await fs.rename(stagedOutput, absoluteOutput);
     completed = true;
     onProgress({ phase: "done", current: sources.length, total: sources.length, progress: 1, etaSeconds: 0, message: "제작완료" });
-    return { outputPath: absoluteOutput, sourceCount: sources.length, keptDuration: expectedDuration, outputQuality, mode: shouldNormalize ? "normalized-mp4" : "source-stream-copy", signature };
+    return { outputPath: absoluteOutput, sourceCount: sources.length, keptDuration: expectedDuration, outputQuality, acceleration: encoderPlan?.id ?? "source-copy", mode: shouldNormalize ? "normalized-mp4" : "source-stream-copy", signature };
   } finally {
     if (!completed) await fs.rm(stagedOutput, { force: true });
     await fs.rm(workDir, { recursive: true, force: true });

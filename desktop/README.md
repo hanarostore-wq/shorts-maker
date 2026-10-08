@@ -37,6 +37,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\Ma
 
 작은 원본은 업스케일하거나 크롭하지 않습니다. 같은 규격의 복사 모드는 화질을 전혀 바꾸지 않으며, 키프레임 기준으로 컷 위치가 소폭 달라질 수 있습니다. 서로 다른 규격은 화질·음성 손실 없이 호환되는 MKV로 저장합니다.
 
+### GPU 가속과 대용량 안전 처리
+
+- 이어붙이기는 기본으로 NVIDIA NVENC, Intel Quick Sync, AMD AMF를 실제 인코딩 시험으로 확인한 뒤 사용 가능한 GPU 인코더를 고릅니다.
+- GPU가 없거나 GPU 지원 FFmpeg를 찾지 못하면 CPU 고화질 모드로 안전 전환합니다.
+- Windows에서 GPU 지원 FFmpeg를 준비하려면 아래 명령을 실행한 뒤 관제 브라우저를 다시 시작합니다.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\desktop\install-gpu-ffmpeg.ps1"
+```
+
+- 대용량·4K 입력은 남은 RAM과 출력 해상도에 따라 동시 CPU 인코딩 수를 자동으로 낮춥니다. GPU 인코딩은 VRAM 부족을 막기 위해 한 파일씩 처리합니다.
+- `moov atom not found`는 중단된 작업의 미완성 MP4가 선택된 경우입니다. 해당 `이어붙임_...mp4` 파일은 원본 목록에서 빼고, 필요 없으면 삭제합니다.
+
 ## 원본 앱별 설정
 
 | 앱 | 원본 안에서 직접 설정할 항목 |

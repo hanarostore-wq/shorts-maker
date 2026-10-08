@@ -107,7 +107,7 @@ async function openProgressWindow() {
   return workerWindow;
 }
 
-async function runLocalConcatWorker({ jobId = null, token = null, processingMode = "normalize", outputQuality = "source" } = {}) {
+async function runLocalConcatWorker({ jobId = null, token = null, processingMode = "normalize", outputQuality = "source", acceleration = "auto" } = {}) {
   const job = jobId && token ? { id: jobId, token } : null;
   const selection = await dialog.showOpenDialog({ title: "이어붙일 원본 MP4 선택", properties: ["openFile", "multiSelections"], filters: [{ name: "MP4 파일", extensions: ["mp4"] }] });
   if (selection.canceled || selection.filePaths.length < 2) {
@@ -145,10 +145,10 @@ async function runLocalConcatWorker({ jobId = null, token = null, processingMode
     await openProgressWindow();
     isRunning = true;
     startedAt = Date.now();
-    await queueStatus("working", { sourceBytes, progress: 0, stage: `${selection.filePaths.length}개 원본 · ${outputQuality === "source" ? "원본 최대" : outputQuality} 확인 중` });
+    await queueStatus("working", { sourceBytes, progress: 0, stage: `${selection.filePaths.length}개 원본 · ${outputQuality === "source" ? "원본 최대" : outputQuality} · 그래픽 가속 확인 중` });
     stopCancellationWatch = watchCancellation(job, cancelController);
     if (cancelController.signal.aborted) throw cancellationError();
-    const output = await concatOriginalQuality(selection.filePaths, undefined, { onProgress: reportProgress, processingMode: processingMode === "normalize" ? "normalize" : "copy", outputQuality, signal: cancelController.signal });
+    const output = await concatOriginalQuality(selection.filePaths, undefined, { onProgress: reportProgress, processingMode: processingMode === "normalize" ? "normalize" : "copy", outputQuality, acceleration, signal: cancelController.signal });
     const outputBytes = (await fs.stat(output.outputPath)).size;
     publish({ phase: "done", current: output.sourceCount, total: output.sourceCount, progress: 1, etaSeconds: 0, message: "제작완료 · 작업자가 자동으로 종료됩니다." });
     await statusQueue;
