@@ -15,7 +15,7 @@ $requiredApps = @(
     (Join-Path $desktop 'apps\naverblog-extention\package.json'),
     (Join-Path $desktop 'apps\threads-auto\package.json')
 )
-if (($requiredApps | Where-Object { -not (Test-Path $_) }).Count -gt 0) {
+if (@($requiredApps | Where-Object { -not (Test-Path $_) }).Count -gt 0) {
     Write-Host 'Installing the two complete upstream apps and the MoneyOS visual overlay once.'
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $desktop 'install-full-source.ps1')
     if ($LASTEXITCODE -ne 0) { throw 'Original application installation failed.' }
