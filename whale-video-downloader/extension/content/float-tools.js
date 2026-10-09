@@ -216,6 +216,21 @@
   }
   const DEAD = '단계: 확장프로그램 연결 확인\n원인: 확장프로그램이 업데이트(또는 다시 시작)되어 이 페이지와 연결이 끊겼습니다\n조치: 페이지를 새로고침(F5)한 뒤 다시 누르세요.';
 
+  // 게시물 아래 '좋아요' 버튼(core.js 의 팔로우·차단·좋아요 줄)에서 쓴다: 그 사진·영상 게시물의 사이트 좋아요를 누르고 결과를 돌려준다
+  globalThis.__SMD_LIKE_NOW = (media) =>
+    new Promise((resolve) => {
+      if (!alive()) return resolve({ error: { step: '확장프로그램 연결 확인', reason: '확장프로그램이 업데이트되어 이 페이지와 연결이 끊겼습니다', action: '페이지를 새로고침(F5)한 뒤 다시 누르세요.' } });
+      const b = media && likeButtonFor(media);
+      if (!b) return resolve({ error: { step: '좋아요 단추 찾기', reason: '이 게시물 근처에서 사이트의 좋아요 단추를 찾지 못했습니다', action: '게시물을 눌러 연 화면에서 다시 누르거나, 사이트의 좋아요를 직접 누르세요.' } });
+      const before = liked(b);
+      b.click();
+      setTimeout(() => {
+        const after = liked(b.isConnected ? b : likeButtonFor(media));
+        if (before !== null && after === before) resolve({ error: { step: '좋아요 누르기', reason: '눌렀지만 좋아요 상태가 바뀌지 않았습니다(로그인이 필요하거나 사이트가 막음)', action: '사이트에 로그인했는지 확인하고, 게시물의 좋아요를 직접 눌러 보세요.' } });
+        else resolve({ ok: true, liked: after });
+      }, 900);
+    });
+
   function onLike() {
     if (!alive()) return say(`좋아요 실패\n${DEAD}`, true);
     const ytPage = site === 'youtube' && (/^\/shorts\//.test(location.pathname) || location.pathname === '/watch');
@@ -247,12 +262,18 @@
     globalThis.__SMD_FOLLOW_NOW(media);
   }
 
+  const FLOAT_REMOVED = true;
   function tick() {
     if (document.hidden || globalThis.__SMD_PERF?.navigating()) return;
     const P = globalThis.__SMD_PERF;
     return P ? P.time('좋아요·팔로우 플로팅', tickNow) : tickNow();
   }
   function tickNow() {
+    // 떠 있는 좋아요·팔로우 버튼은 없앰(사용자 요청 — 게시물 아래 팔로우·차단·좋아요 버튼으로 대신)
+    if (FLOAT_REMOVED) {
+      host?.remove();
+      return;
+    }
     if (!alive()) {
       host?.remove();
       return;

@@ -8,12 +8,12 @@
   let followOn = true;
   const effOf = (s, site) => ({ ...(s || {}), ...(((s || {}).siteSettings || {})[site] || {}) }); // 사이트별로 바꾼 값이 우선
   chrome.storage.local.get('settings').then((r) => {
-    followOn = effOf(r.settings, 'bluesky').bskyFollowButtons !== false;
+    followOn = false; // 피드 팔로우 버튼은 없앰(사용자 요청 — 게시물 아래 팔로우·차단·좋아요 버튼으로 대신)
     scanFollow();
   }, () => {});
   chrome.storage.onChanged.addListener((c, area) => {
     if (area === 'local' && c.settings) {
-      followOn = effOf(c.settings.newValue, 'bluesky').bskyFollowButtons !== false;
+      followOn = false;
       if (!followOn) {
         document.querySelectorAll('smd-bfollow').forEach((e) => e.remove());
         items.clear();
@@ -203,6 +203,33 @@
         r = await toggle(e, true);
       }
       d.report?.({ ...(r || { ok: true }), who: `@${handle}` });
+    })();
+  });
+
+  // 게시물 아래 '차단' 버튼(core.js 의 팔로우·차단·좋아요 줄): 블루스카이 차단 기록을 만든다
+  document.addEventListener('smd:block', (ev) => {
+    const d = ev.detail;
+    if (!d?.el) return;
+    d.handled = true;
+    const s = session();
+    const item = d.el.closest('[data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]') || globalThis.__SMD_SITES?.bskyItemOf?.(d.el) || null;
+    const handle = (item?.dataset.testid.replace(/^(feedItem|postThreadItem)-by-/, '') || /^\/profile\/([^/]+)\/post\//.exec(location.pathname)?.[1] || '').toLowerCase();
+    if (!s) return d.report?.({ error: { step: '로그인 확인', reason: '블루스카이 로그인 정보를 찾지 못했습니다', action: '블루스카이에 로그인한 뒤 새로고침하세요.' } });
+    if (!handle) return d.report?.({ error: { step: '작성자 찾기', reason: '이 사진·영상의 게시물 작성자를 찾지 못했습니다', action: '게시물을 눌러 연 화면에서 다시 누르세요.' } });
+    if (handle === s.handle || handle === s.did) return d.report?.({ error: { step: '작성자 확인', reason: '내 계정은 차단할 수 없습니다', action: '' } });
+    (async () => {
+      try {
+        let did = users.get(handle)?.did;
+        if (!did) {
+          const j = await xrpc(s, 'GET', 'app.bsky.actor.getProfiles', { params: `actors=${encodeURIComponent(handle)}`, proxy: true });
+          did = j.profiles?.[0]?.did;
+          if (!did) throw { reason: `@${handle} 계정 정보를 찾지 못했습니다`, action: '페이지를 새로고침한 뒤 다시 누르세요.' };
+        }
+        await xrpc(s, 'POST', 'com.atproto.repo.createRecord', { body: { repo: s.did, collection: 'app.bsky.graph.block', record: { $type: 'app.bsky.graph.block', subject: did, createdAt: new Date().toISOString() } } });
+        d.report?.({ ok: true, who: `@${handle}` });
+      } catch (err) {
+        d.report?.({ who: `@${handle}`, error: { step: '차단 요청', reason: err?.reason || String(err), action: err?.action || '잠시 후 다시 누르세요.' } });
+      }
     })();
   });
 

@@ -25,6 +25,7 @@ export const DEFAULT_SETTINGS = {
   ytShortsStats: true, // 유튜브 쇼츠 오른쪽 위에 조회수·구독자 수
   seekBar: true, // 영상 아래 재생바(재생 위치 이동). 자체 재생바가 있는 사이트는 사이트별 기본값으로 끔
   hideTextPosts: true, // 피드에서 글만 있는(사진·영상 없는) 게시물 숨기기(X·블루스카이·스레드·페이스북·웨이보·유튜브 커뮤니티)
+  postActions: true, // 사진·영상 다운로드 버튼 아래 팔로우 · 차단 · 좋아요 버튼
   ytLikeFloat: true, // 모든 사이트: 화면 오른쪽 아래 좋아요 플로팅 버튼(보고 있는 게시물)
   followFloat: true, // 모든 사이트: 화면 오른쪽 아래 팔로우 플로팅 버튼(보고 있는 게시물 작성자)
   xFollowButtons: true, // X 피드 작성자 옆 팔로우/팔로잉 버튼
@@ -155,13 +156,10 @@ export const SITE_FEATURES = [
   { key: 'noAutoplay', group: '재생', name: '자동재생 끄기', desc: '사이트가 스스로 영상을 틀지 못하게 합니다. 직접 누른 영상만 재생 (바꾼 뒤 새로고침)' },
   { key: 'potPlayer', group: '재생', name: '재생 버튼 → 팟플레이어로 재생', desc: '재생을 누르면 웨일 대신 팟플레이어로 원본을 엽니다 (처음에 웨일이 묻는 "외부 프로그램 열기" 허용 · 바꾼 뒤 새로고침)' },
   { key: 'pauseOffscreen', group: '재생', name: '화면 밖 영상 정지', desc: '스크롤로 화면에서 벗어난 영상은 멈춥니다' },
+  { key: 'postActions', group: '버튼', name: '팔로우 · 차단 · 좋아요 버튼', desc: '사진·영상 다운로드 버튼 아래에 작성자 팔로우·차단, 게시물 좋아요 버튼 (차단은 X·블루스카이·인스타그램)' },
   { key: 'autoFollow', group: '팔로우', name: '다운로드하면 작성자 자동 팔로우', desc: '저장 버튼을 누른 게시물의 작성자를 팔로우(유튜브는 구독)합니다' },
-  { key: 'followFloat', group: '팔로우', name: '팔로우 플로팅 버튼', desc: '화면 오른쪽 아래에 떠 있는 팔로우 버튼 — 지금 보고 있는 게시물 작성자를 팔로우' },
   { key: 'followAllButton', group: '팔로우', name: '팔로우 목록 전부 팔로우 버튼', desc: '팔로워·팔로잉 목록 화면(창)에 버튼을 띄웁니다' },
-  { key: 'xFollowButtons', group: '팔로우', name: '피드 작성자 옆 팔로우 버튼', desc: '피드 게시물에 팔로우/팔로잉 상태 버튼 (다른 사이트는 팔로우 플로팅 버튼 사용)', sites: ['x'] },
-  { key: 'bskyFollowButtons', group: '팔로우', name: '피드 게시물 팔로우 버튼', desc: '피드 게시물에 팔로우/팔로잉 상태 버튼 (다른 사이트는 팔로우 플로팅 버튼 사용)', sites: ['bluesky'] },
   { key: 'hideTextPosts', group: '보기', name: '글만 있는 피드 숨기기', desc: '피드에서 사진·영상이 없는 게시물을 가립니다 (게시물을 연 화면은 그대로)' },
-  { key: 'ytLikeFloat', group: '보기', name: '좋아요 플로팅 버튼', desc: '화면 오른쪽 아래에 떠 있는 좋아요 버튼 — 지금 보고 있는 게시물에 좋아요' },
   { key: 'seekBar', group: '보기', name: '영상 재생바', desc: '재생바가 없는 영상 아래에 재생바와 시간을 띄웁니다. 누르거나 끌어서 위치 이동' },
   { key: 'xPhotoTapClose', group: '보기', name: '사진 확대 보기에서 누르면 닫기', desc: '크게 본 사진(확대 창)을 누르면 닫힙니다' },
   { key: 'videoSmall', group: '보기', name: '영상 화면 크기 줄이기', desc: '영상 플레이어를 아래에서 고른 크기로 줄입니다 (전체 화면은 그대로)', scaleKey: 'videoScale' },

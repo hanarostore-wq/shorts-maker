@@ -91,6 +91,12 @@ const XMENU = `
       });
       else add('@' + sn + ' 님 팔로우하기', () => { window.__fol[sn] = true; xreq('create', sn); });
     }
+    add('@' + sn + ' 님 차단하기', () => {
+      const sh = document.createElement('div'); sh.className = 'xsheet';
+      sh.innerHTML = '<button data-testid="confirmationSheetConfirm">차단</button>';
+      sh.querySelector('button').onclick = () => { closeX(); window.__blocked = sn; };
+      document.body.appendChild(sh);
+    });
     add('게시물 신고하기', () => {});
     document.body.appendChild(m);
   });
@@ -689,6 +695,18 @@ const handlers = {
       return html(res, page('X 자동재생', `<div style="position:relative;width:480px;height:270px"><video id="av" src="https://cdn.example-videos.com/preview.webm" muted loop playsinline style="width:100%;height:100%;background:#000"></video>
         <div id="cover" style="position:absolute;inset:0" onclick="document.getElementById('av').play()"></div></div>`,
         `setTimeout(() => document.getElementById('av').play().catch((e) => (window.__apErr = e.name)), 600);`));
+    }
+    if (u.pathname === '/recycler/following') {
+      // X 처럼 스크롤하면 같은 칸(같은 버튼 요소)을 다른 계정에 다시 쓴다: 1001·1002 를 다 누른 뒤 스크롤하면 그 버튼이 2001·2002 로 바뀜
+      const cell = (n) => `<div data-testid="cellInnerDiv" style="height:200px"><div data-testid="UserCell"><a href="/u${n}" role="link"><span>u${n}</span></a><button data-testid="${n}-follow" onclick="const id=this.getAttribute('data-testid').split('-')[0]; window.__xClicks=(window.__xClicks||[]).concat(id); setTimeout(()=>{this.setAttribute('data-testid', id+'-unfollow'); this.textContent='팔로잉';}, 300)">팔로우</button></div></div>`;
+      return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>X</title><script>document.cookie = 'twid=u%3D1; path=/';</script></head><body style="background:#000;color:#eee">
+        <div data-testid="primaryColumn" style="width:600px;padding-bottom:3000px">${cell(1001)}${cell(1002)}</div>
+        <script>let used = false; addEventListener('scroll', () => {
+          const bs = [...document.querySelectorAll('[data-testid$="-follow"], [data-testid$="-unfollow"]')];
+          if (used || bs.some((b) => b.getAttribute('data-testid').endsWith('-follow'))) return;
+          used = true;
+          bs.forEach((b, i) => { b.setAttribute('data-testid', (2001 + i) + '-follow'); b.textContent = '팔로우'; b.parentElement.querySelector('a').setAttribute('href', '/u' + (2001 + i)); });
+        });</script></body></html>`);
     }
     if (u.pathname === '/spacestar/following' || u.pathname === '/limited/following') {
       // X 팔로잉 목록: 셀마다 팔로우 버튼(누르면 0.3초 뒤 '팔로잉'), 비공개 계정은 '요청됨', 오른쪽 '팔로우 추천'은 목록 밖

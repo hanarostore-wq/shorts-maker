@@ -66,6 +66,7 @@
   let host = null;
   let ui = null;
   let run = null; // { stop: bool }
+  let holdUntil = 0;
   function ensure() {
     if (host?.isConnected) return;
     host = document.createElement('smd-followall');
@@ -92,12 +93,13 @@
   };
   function tick() {
     const lp = on && (site === 'bsky' ? listPage() : cfg.active());
-    if (!lp && !run) {
+    // 끝난 뒤 결과·오류 안내는 목록 창이 닫혀도 15초 동안 남겨 둔다(읽기 전에 사라지지 않게)
+    if (!lp && !run && !(on && host?.isConnected && ui?.msg.textContent && performance.now() < holdUntil)) {
       host?.remove();
       return;
     }
     ensure();
-    ui.go.hidden = !!run;
+    ui.go.hidden = !!run || !lp;
     ui.stop.hidden = !run;
   }
 
@@ -117,6 +119,7 @@
       say(`전부 팔로우 실패\n단계: ${err.step || '진행'}\n원인: ${err.reason || err.message || err}\n조치: ${err.action || '페이지를 새로고침한 뒤 다시 누르세요.'}`, true);
     } finally {
       run = null;
+      holdUntil = performance.now() + 15000;
       tick();
     }
   }
@@ -174,7 +177,18 @@
   const LIMIT_TXT = /unable to follow|try again later|limit|we restrict|action blocked|제한|나중에 다시|팔로우할 수 없|더 이상 팔로우|操作频繁|频繁|稍后再试|上限/i;
   const txt = (el) => (el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim();
   const visibleEl = (el) => !!el && el.isConnected && (el.offsetParent || el.getClientRects().length) && !el.closest('smd-followall');
-  const textButtons = (root) => [...root.querySelectorAll('button, [role="button"]')].filter((b) => FOLLOW_TXT.test(txt(b)) && visibleEl(b) && !b.dataset.smdTried);
+  // 이미 누른 계정: 버튼 요소가 아니라 계정으로 기억한다(X 처럼 스크롤하면 같은 칸을 다른 계정에 다시 쓰는 목록에서
+  //   요소에 붙인 표시가 남아 새 계정을 건너뛰고 '팔로우할 계정이 없습니다'로 멈추던 문제)
+  const tried = new Set();
+  const keyOf = (b) => {
+    const id = b.getAttribute('data-testid') || '';
+    if (/^\d+-follow$/.test(id)) return id; // X: '<계정 번호>-follow'
+    const cell = b.closest('li, [role="listitem"], [data-testid="UserCell"]') || b.parentElement?.parentElement || b.parentElement;
+    const link = cell?.querySelector('a[href]')?.getAttribute('href') || '';
+    return `${link}|${txt(cell).slice(0, 60)}`;
+  };
+  const isTried = (b) => tried.has(keyOf(b));
+  const textButtons = (root) => [...root.querySelectorAll('button, [role="button"]')].filter((b) => FOLLOW_TXT.test(txt(b)) && visibleEl(b) && !isTried(b));
   // 팔로우 버튼이 2개 이상 든 창(목록 창)
   const listDialog = () => [...document.querySelectorAll('[role="dialog"], [aria-modal="true"]')].reverse().find((d) => visibleEl(d) && textButtons(d).length + d.querySelectorAll('[data-smd-tried]').length >= 2) || null;
   const scrollerIn = (root) => {
@@ -206,7 +220,7 @@
     x: {
       name: 'X', cap: 400, gap: [3000, 5000],
       active: () => !!listPage(),
-      buttons: () => [...xCol().querySelectorAll('[data-testid="UserCell"] [data-testid$="-follow"], [data-testid="cellInnerDiv"] [data-testid$="-follow"]')].filter((b) => !b.dataset.smdTried && visibleEl(b)),
+      buttons: () => [...xCol().querySelectorAll('[data-testid="UserCell"] [data-testid$="-follow"], [data-testid="cellInnerDiv"] [data-testid$="-follow"]')].filter((b) => !isTried(b) && visibleEl(b)),
       cell: (b) => b.closest('[data-testid="UserCell"], [data-testid="cellInnerDiv"]'),
       done: (b, cell) => !!cell?.querySelector('[data-testid$="-unfollow"], [data-testid$="-cancel"]'),
       scroll: () => scrollBy(0, innerHeight * 0.85),
@@ -292,6 +306,7 @@
           continue;
         }
         idleScrolls = 0;
+        tried.add(keyOf(b));
         b.dataset.smdTried = '1';
         const cell = cfg.cell(b);
         const name = (cell?.querySelector('a[href] span, a[href]')?.textContent || '').trim().slice(0, 40);

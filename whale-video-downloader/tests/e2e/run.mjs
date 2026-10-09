@@ -337,103 +337,62 @@ if (!only || only === 'folder') {
   }
 }
 
-// ── 모든 사이트: 떠 있는 좋아요·팔로우 버튼 ──
+// 사진·영상 버튼 아래 팔로우·차단·좋아요 줄에서 하나 누르기(그 요소 근처에 뜬 줄)
+const clickAct = (page, sel, cls) => page.evaluate(([sel, cls]) => {
+  const el = document.querySelector(sel);
+  if (!el) return 'no-el';
+  const r = el.getBoundingClientRect();
+  for (const h of document.querySelectorAll('smd-anchor')) {
+    const a = h.shadowRoot?.querySelector('.acts.show');
+    if (!a) continue;
+    const ar = a.getBoundingClientRect();
+    // 그 사진·영상과 겹치거나 바로 위·아래(40px 안)에 있는 줄
+    if (ar.width && ar.right > r.left && ar.left < r.right && ar.top >= r.top - 40 && ar.bottom <= r.bottom + 40) {
+      a.querySelector(`.act.${cls}`).click();
+      return 'ok';
+    }
+  }
+  return 'no-acts';
+}, [sel, cls]);
+const toastHist = (page) => page.evaluate(() => document.querySelector('smd-toast')?.dataset.history || '');
+
+// ── 모든 사이트: 사진·영상 아래 팔로우 · 차단 · 좋아요 버튼 ──
 {
   const page = await ctx.newPage();
-  const sh = (sel) => `document.querySelector('smd-float').shadowRoot.querySelector('${sel}')`;
   try {
-    await setSettings({ siteSettings: {}, autoFollow: false });
+    await setSettings({ siteSettings: {}, autoFollow: false, alwaysShowButtons: true, postActions: true });
     await page.goto('https://www.example-videos.com/float', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => document.getElementById('fp2').scrollIntoView({ block: 'center' }));
-    await page.waitForTimeout(1600);
-    const vis = await page.evaluate(`({ host: !!document.querySelector('smd-float') && getComputedStyle(document.querySelector('smd-float')).display !== 'none', like: !${sh('button.like')}.hidden, follow: !${sh('button.follow')}.hidden })`);
-    await page.evaluate(`${sh('button.like')}.click()`);
+    await page.waitForTimeout(2000);
+    const floats = await page.evaluate(() => document.querySelectorAll('smd-float').length);
+    const c1 = await clickAct(page, '#fp2', 'l');
     await page.waitForTimeout(1300);
-    const r = await page.evaluate(`({ lk1: window.__lk1 || 0, lk2: window.__lk2 || 0, clk: window.__clk || 0, label: document.getElementById('lk2').getAttribute('aria-label'), on: ${sh('button.like')}.classList.contains('on'), msg: ${sh('.msg')}.textContent })`);
-    record('[모든 사이트] 좋아요 플로팅: 보고 있는 게시물(가운데)의 좋아요만 눌림·댓글 하트 안 눌림·버튼 켜짐', vis.host && vis.like && r.lk2 === 1 && r.lk1 === 0 && r.clk === 0 && r.label === '좋아요 취소' && r.on, { note: JSON.stringify({ ...vis, ...r }) });
-    await page.evaluate(`${sh('button.follow')}.click()`);
+    const like = await page.evaluate(() => ({ lk1: window.__lk1 || 0, lk2: window.__lk2 || 0, clk: window.__clk || 0, label: document.getElementById('lk2').getAttribute('aria-label') }));
+    record('[팔로우·차단·좋아요] 좋아요: 그 게시물 좋아요만 눌림(댓글 하트·다른 게시물 안 눌림), 떠 있는 버튼 없음', c1 === 'ok' && like.lk2 === 1 && like.lk1 === 0 && like.clk === 0 && like.label === '좋아요 취소' && floats === 0, { note: JSON.stringify({ c1, floats, ...like }) });
+    const c2 = await clickAct(page, '#fp2', 'f');
     await page.waitForTimeout(5200);
-    const f = await page.evaluate(() => ({ f1: window.__fol1 || 0, f2: window.__fol2 || 0, toast: document.querySelector('smd-toast')?.dataset.history || '' }));
-    record('[모든 사이트] 팔로우 플로팅: 보고 있는 게시물 작성자 팔로우 + 결과 알림', f.f2 === 1 && f.f1 === 0 && /팔로우했습니다/.test(f.toast), { note: JSON.stringify(f) });
-    // 오류 경로: 눌러도 상태가 안 바뀌는 좋아요
+    const f = await page.evaluate(() => ({ f1: window.__fol1 || 0, f2: window.__fol2 || 0 }));
+    const t2 = await toastHist(page);
+    record('[팔로우·차단·좋아요] 팔로우: 그 게시물 작성자만 팔로우 + 결과 알림', c2 === 'ok' && f.f2 === 1 && f.f1 === 0 && /팔로우했습니다/.test(t2), { note: JSON.stringify({ c2, ...f, toast: t2.slice(-80) }) });
+    await clickAct(page, '#fp2', 'b');
+    await page.waitForTimeout(600);
+    const t3 = await toastHist(page);
+    record('[팔로우·차단·좋아요] (오류 경로) 차단 미지원 사이트는 단계·원인·조치 안내', /차단 실패/.test(t3) && /단계: 차단 지원 확인/.test(t3) && /조치:/.test(t3), { note: t3.slice(-160) });
     await page.goto('https://www.example-videos.com/float?stuck=1', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => document.getElementById('fp2').scrollIntoView({ block: 'center' }));
-    await page.waitForTimeout(1600);
-    await page.evaluate(`${sh('button.like')}.click()`);
+    await page.waitForTimeout(2000);
+    await clickAct(page, '#fp2', 'l');
     await page.waitForTimeout(1300);
-    const m = await page.evaluate(`${sh('.msg')}.textContent`);
-    record('[모든 사이트] (오류 경로) 좋아요가 안 바뀌면 단계·원인·조치 안내', /단계: 좋아요 누르기/.test(m) && /원인:/.test(m) && /조치:/.test(m), { note: m.replace(/\n/g, ' / ') });
-    await setSettings({ siteSettings: { generic: { ytLikeFloat: false, followFloat: false } } });
-    await page.waitForTimeout(1200);
-    const hidden = await page.evaluate(() => getComputedStyle(document.querySelector('smd-float')).display === 'none');
-    record('[모든 사이트] 이 사이트에서 좋아요·팔로우 플로팅 끄면 숨김', hidden, { note: hidden ? '숨김' : '보임' });
+    const t4 = await toastHist(page);
+    record('[팔로우·차단·좋아요] (오류 경로) 좋아요가 안 바뀌면 단계·원인·조치', /좋아요 실패/.test(t4) && /단계: 좋아요 누르기/.test(t4), { note: t4.slice(-160) });
+    await setSettings({ postActions: false });
+    await page.waitForTimeout(800);
+    const shown = await page.evaluate(() => [...document.querySelectorAll('smd-anchor')].some((h) => h.shadowRoot?.querySelector('.acts.show')));
+    record('[팔로우·차단·좋아요] 끄면 숨김', !shown, { note: shown ? '보임' : '숨김' });
   } catch (err) {
-    record('[모든 사이트] 좋아요·팔로우 플로팅', false, { note: err.message.split('\n')[0] });
+    record('[팔로우·차단·좋아요]', false, { note: err.message.split('\n')[0] });
   } finally {
-    await setSettings({ siteSettings: {}, autoFollow: true });
-    await page.close();
-  }
-}
-
-// ── 떠 있는 버튼 끌어서 옮기기(위치 기억·처음으로) ──
-{
-  const page = await ctx.newPage();
-  try {
-    await setSettings({ siteSettings: {} });
-    await (async () => {
-      const p = await extPage();
-      await p.evaluate(() => chrome.storage.local.remove('floatPos'));
-      await p.close();
-    })();
-    await page.goto('https://www.example-videos.com/float', { waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => document.getElementById('fp2').scrollIntoView({ block: 'center' }));
-    await page.waitForTimeout(1600);
-    const rect = () => page.evaluate(() => {
-      const r = document.querySelector('smd-float').getBoundingClientRect();
-      return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
-    });
-    const r0 = await rect();
-    const lb = await page.evaluate(() => {
-      const r = document.querySelector('smd-float').shadowRoot.querySelector('button.like').getBoundingClientRect();
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-    });
-    await page.mouse.move(lb.x, lb.y);
-    await page.mouse.down();
-    for (let i = 1; i <= 10; i++) await page.mouse.move(lb.x - 30 * i, lb.y - 20 * i);
-    await page.mouse.up();
-    await page.waitForTimeout(500);
-    const r1 = await rect();
-    const lk = await page.evaluate(() => window.__lk2 || 0);
-    const saved = await (async () => {
-      const p = await extPage();
-      const v = await p.evaluate(async () => (await chrome.storage.local.get('floatPos')).floatPos);
-      await p.close();
-      return v;
-    })();
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => document.getElementById('fp2').scrollIntoView({ block: 'center' }));
-    await page.waitForTimeout(1600);
-    const r2 = await rect();
-    // 끌지 않고 누르면 좋아요가 그대로 눌림
-    await page.evaluate(() => document.querySelector('smd-float').shadowRoot.querySelector('button.like').click());
-    await page.waitForTimeout(1200);
-    const lkAfter = await page.evaluate(() => window.__lk2 || 0);
-    // 팝업 '이 사이트' → 처음으로
-    const pp = await extPage();
-    const tabId = await pp.evaluate(async () => (await chrome.tabs.query({ url: 'https://www.example-videos.com/float*' }))[0]?.id);
-    await pp.goto(`chrome-extension://${extId}/popup/popup.html?tabId=${tabId}`);
-    await pp.click('.tab[data-tab="site"]');
-    await pp.waitForTimeout(800);
-    await pp.click('.sp-floatreset');
-    await pp.waitForTimeout(500);
-    await pp.close();
-    await page.waitForTimeout(600);
-    const r3 = await rect();
-    const moved = r1.x < r0.x - 250 && r1.y < r0.y - 150;
-    record('[떠 있는 버튼] 끌어서 옮기기: 끌면 이동·좋아요 안 눌림, 새로고침해도 위치 유지, 그냥 누르면 동작, 처음으로 되돌리기', moved && lk === 0 && !!saved?.generic?.float && Math.abs(r2.x - r1.x) < 3 && Math.abs(r2.y - r1.y) < 3 && lkAfter === 1 && Math.abs(r3.x - r0.x) < 3 && Math.abs(r3.y - r0.y) < 3, { note: JSON.stringify({ 처음: r0, 끈뒤: r1, 새로고침: r2, 처음으로: r3, 끌때좋아요: lk, 누른뒤좋아요: lkAfter, 저장: saved?.generic }) });
-  } catch (err) {
-    record('[떠 있는 버튼] 끌어서 옮기기', false, { note: err.message.split('\n')[0] });
-  } finally {
+    await setSettings({ siteSettings: {}, autoFollow: true, alwaysShowButtons: false, postActions: true });
     await page.close();
   }
 }
@@ -781,36 +740,30 @@ for (const [SITE, URL_] of [['틱톡', 'https://www.tiktok.com/ttguard'], ['샤�
   }
 }
 
-// ── 유튜브 좋아요 플로팅 버튼 ──
+// ── 유튜브: 영상 아래 좋아요 버튼(팔로우·차단·좋아요 줄) ──
 {
   const page = await ctx.newPage();
   try {
-    await setSettings({ siteSettings: {} });
+    await setSettings({ siteSettings: {}, postActions: true, autoFollow: false });
     await page.goto('https://www.youtube.com/watch?v=YTlike00001', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1800);
-    const shown = await page.evaluate(() => getComputedStyle(document.querySelector('smd-float') || document.body).display !== 'none' && !!document.querySelector('smd-float'));
-    await page.evaluate(() => document.querySelector('smd-float').shadowRoot.querySelector('button.like').click());
-    await page.waitForTimeout(1200);
-    const r = await page.evaluate(() => ({ liked: window.__liked || 0, pressed: document.getElementById('ytlike').getAttribute('aria-pressed'), on: document.querySelector('smd-float').shadowRoot.querySelector('button.like').classList.contains('on') }));
-    record('[유튜브] 좋아요 플로팅 버튼: 누르면 유튜브 좋아요가 눌리고 버튼이 켜짐', shown && r.liked === 1 && r.pressed === 'true' && r.on, { note: JSON.stringify({ 보임: shown, ...r }) });
+    await page.waitForTimeout(2000);
+    const c = await clickAct(page, 'video', 'l');
+    await page.waitForTimeout(1300);
+    const r = await page.evaluate(() => ({ liked: window.__liked || 0, pressed: document.getElementById('ytlike').getAttribute('aria-pressed') }));
+    record('[유튜브] 영상 아래 좋아요 → 유튜브 좋아요가 눌림', c === 'ok' && r.liked === 1 && r.pressed === 'true', { note: JSON.stringify({ c, ...r }) });
     await page.goto('https://www.youtube.com/watch?v=YTwatch0001', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1500);
-    await page.evaluate(() => document.querySelector('smd-float').shadowRoot.querySelector('button.like').click());
-    await page.waitForTimeout(500);
-    const m = await page.evaluate(() => document.querySelector('smd-float').shadowRoot.querySelector('.msg').textContent);
-    record('[유튜브] (오류 경로) 좋아요 단추가 없으면 단계·원인·조치 안내', /단계: 좋아요 단추 찾기/.test(m) && /조치:/.test(m), { note: m.replace(/\n/g, ' / ') });
-    await setSettings({ siteSettings: { youtube: { ytLikeFloat: false } } });
-    await page.waitForTimeout(1200);
-    const hidden = await page.evaluate(() => getComputedStyle(document.querySelector('smd-float')).display === 'none' || document.querySelector('smd-float').shadowRoot.querySelector('button.like').hidden);
-    record('[유튜브] 좋아요 플로팅 버튼 끄면 숨김(팔로우 버튼은 따로)', hidden, { note: hidden ? '숨김' : '보임' });
+    await page.waitForTimeout(2000);
+    await clickAct(page, 'video', 'l');
+    await page.waitForTimeout(600);
+    const m = await toastHist(page);
+    record('[유튜브] (오류 경로) 좋아요 단추가 없으면 단계·원인·조치', /좋아요 실패/.test(m) && /단계: 좋아요 단추 찾기/.test(m) && /조치:/.test(m), { note: m.slice(-160) });
   } catch (err) {
-    record('[유튜브] 좋아요 플로팅', false, { note: err.message.split('\n')[0] });
+    record('[유튜브] 영상 아래 좋아요', false, { note: err.message.split('\n')[0] });
   } finally {
-    await setSettings({ siteSettings: {} });
+    await setSettings({ siteSettings: {}, autoFollow: true });
     await page.close();
   }
 }
-
 // ── 저장 버튼 항상 표시: 마우스를 올리거나 재생하지 않아도 사진·영상 버튼이 보임 ──
 {
   const page = await ctx.newPage();
@@ -1139,44 +1092,24 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
-// ── 블루스카이 팔로우 버튼 ──
+// ── 블루스카이: 사진 아래 차단 버튼 ──
 {
   const page = await ctx.newPage();
-  let unfollowAsks = 0; // 언팔로우 확인 창(확장이 띄우면 안 됨)
-  page.on('dialog', (d) => { if (/팔로우를 취소/.test(d.message())) unfollowAsks++; d.accept(); });
   try {
-    await page.goto('https://bsky.app/feedfollow', { waitUntil: 'domcontentloaded' });
+    await setSettings({ siteSettings: {}, postActions: true, alwaysShowButtons: true, autoFollow: false });
+    await page.goto('https://bsky.app/afollow', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2000);
-    const state = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-testid^="feedItem-by-"]')].map((el) => {
-      const h = el.querySelector('smd-bfollow');
-      const b = h?.shadowRoot.querySelector('button');
-      const r = b?.getBoundingClientRect();
-      const visible = !!r && r.width > 10 && document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === h;
-      return [el.id.slice(2), b ? `${b.textContent}${visible ? '' : '(가려짐)'}` : '(없음)'];
-    })));
-    const s0 = await state();
-    record('[블루스카이] 피드 팔로우 상태 표시 (팔로잉/팔로우/내 계정 제외)', s0.alice === '팔로잉' && s0.bob === '팔로우' && s0.me === '(없음)', { note: JSON.stringify(s0) });
-    const l1 = log.length;
-    await page.locator('#b-bob smd-bfollow button').click();
-    await page.mouse.move(5, 5);
-    await page.waitForTimeout(800);
-    const s1 = await state();
-    const r1 = log.slice(l1).find((l) => l.bskyFollow === 'create');
-    record('[블루스카이] 팔로우 누르기 → 팔로잉', s1.bob === '팔로잉' && r1?.subject === 'did:plc:bob' && r1.repo === 'did:plc:me' && r1.collection === 'app.bsky.graph.follow' && r1.auth, { note: `${s1.bob} · ${JSON.stringify(r1)}` });
-    const l2 = log.length;
-    await page.locator('#b-alice smd-bfollow button').click();
-    await page.mouse.move(5, 5);
-    await page.waitForTimeout(800);
-    const s2 = await state();
-    const r2 = log.slice(l2).find((l) => l.bskyFollow === 'delete');
-    record('[블루스카이] 팔로잉 누르기 → 확인 창 없이 바로 언팔로우', s2.alice === '팔로우' && r2?.rkey === '3kalice' && unfollowAsks === 0, { note: `${s2.alice} · 확인 창 ${unfollowAsks}번 · ${JSON.stringify(r2)}` });
-    await page.locator('#b-expired smd-bfollow button').click();
-    await page.waitForTimeout(800);
-    const err = await page.locator('#b-expired smd-bfollow').evaluate((h) => h.shadowRoot.querySelector('.err')?.textContent || '');
-    record('[블루스카이] 로그인 만료 시 단계·원인·조치 안내', /팔로우 실패/.test(err) && /만료/.test(err) && /새로고침/.test(err), { note: err });
+    const feedBtns = await page.evaluate(() => document.querySelectorAll('smd-bfollow').length);
+    const l = log.length;
+    const c = await clickAct(page, '#pic', 'b');
+    await page.waitForTimeout(1500);
+    const r = log.slice(l).find((x) => x.bskyFollow === 'create');
+    const t = await toastHist(page);
+    record('[블루스카이] 사진 아래 차단 → 차단 기록(app.bsky.graph.block) + 알림, 피드 팔로우 버튼 없음', c === 'ok' && r?.collection === 'app.bsky.graph.block' && /carol/.test(r.subject || '') && r.auth && /차단: @carol\.test 완료/.test(t) && feedBtns === 0, { note: JSON.stringify({ c, feedBtns, r, t: t.slice(-80) }) });
   } catch (err) {
-    record('[블루스카이] 팔로우 버튼', false, { note: err.message.split('\n')[0] });
+    record('[블루스카이] 차단', false, { note: err.message.split('\n')[0] });
   } finally {
+    await setSettings({ alwaysShowButtons: false, autoFollow: true });
     await page.close();
   }
 }
@@ -1746,10 +1679,10 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await pp.waitForTimeout(800);
     const info = await pp.evaluate(() => ({ title: document.getElementById('spTitle').textContent, items: [...document.querySelectorAll('#spList .row-toggle b')].map((b) => b.textContent) }));
     await pp.screenshot({ path: path.join(SHOTS, 'popup-site-bluesky.png'), fullPage: true });
-    const hasBsky = info.items.some((t) => /피드 게시물 팔로우 버튼/.test(t));
+    const hasBsky = !info.items.some((t) => /피드 게시물 팔로우 버튼/.test(t)); // 피드 팔로우 버튼은 없앰
     const hasX = info.items.some((t) => /피드 작성자 옆/.test(t));
     const hasYt = info.items.some((t) => /쇼츠/.test(t));
-    const shared = ['좋아요 플로팅', '팔로우 플로팅', '영상 재생바', '사진 확대 보기에서 누르면 닫기', '영상 화면 크기'].every((k) => info.items.some((t) => t.includes(k)));
+    const shared = ['팔로우 · 차단 · 좋아요', '영상 재생바', '사진 확대 보기에서 누르면 닫기', '영상 화면 크기'].every((k) => info.items.some((t) => t.includes(k)));
     record('[팝업] 이 사이트: 블루스카이에서 열면 공용 기능 + 블루스카이 기능(X·유튜브 데이터 전용 기능 없음)', /블루스카이 기능/.test(info.title) && hasBsky && shared && !hasX && !hasYt, { note: `${info.title} · ${info.items.length}개 · 공용 ${shared}` });
     await pp.locator('#spList .row-toggle', { hasText: '자동재생 끄기' }).click();
     await pp.waitForTimeout(500);
@@ -1864,14 +1797,6 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     const cr = log.slice(l).find((e) => e.bskyFollow === 'create');
     const t = await page.evaluate(() => document.querySelector('smd-toast')?.shadowRoot.querySelector('.t')?.textContent || '');
     record('[블루스카이] 저장된 토큰이 만료돼도 앱의 최신 토큰으로 자동 팔로우', cr?.subject === 'did:plc:stale2' && cr.auth && /팔로우했습니다/.test(t), { note: `${JSON.stringify(cr || '요청 없음')} · ${t}` });
-    // 피드 팔로우 버튼도 같은 토큰으로
-    const l2 = log.length;
-    page.once('dialog', (d) => d.accept());
-    await page.locator('smd-bfollow button').first().click();
-    await page.waitForTimeout(1200);
-    const fb = await page.locator('smd-bfollow button').first().textContent();
-    const cr2 = log.slice(l2).find((e) => e.bskyFollow);
-    record('[블루스카이] 피드 팔로우 버튼(팔로잉 → 언팔로우)도 최신 토큰으로 동작', cr2?.bskyFollow === 'delete' && cr2.auth, { note: `${fb} · ${JSON.stringify(cr2 || '요청 없음')}` });
   } catch (err) {
     record('[블루스카이] 최신 토큰', false, { note: err.message.split('\n')[0] });
   } finally {
@@ -1896,7 +1821,7 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.goto('https://bsky.app/profile/spacestar.test/follows', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('smd-followall', { timeout: 8000 });
     await go();
-    await page.waitForFunction(() => /완료/.test(document.querySelector('smd-followall').shadowRoot.querySelector('.msg').textContent), null, { timeout: 30000 });
+    await page.waitForFunction(() => /완료/.test(document.querySelector('smd-followall')?.shadowRoot.querySelector('.msg').textContent || ''), null, { timeout: 30000 });
     const subs = log.slice(l).filter((e) => e.bskyFollow === 'create').map((e) => e.subject);
     record('[전부 팔로우] 블루스카이: 목록 전체(여러 쪽)에서 안 한 계정만 팔로우', subs.join(',') === 'did:plc:b1,did:plc:b2,did:plc:b3', { note: `${subs.join(', ')} · ${await msg()}` });
     // 오류 경로: 로그인 만료 → 바로 멈추고 단계·원인·조치
@@ -1904,7 +1829,7 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.goto('https://bsky.app/profile/errlist.test/follows', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('smd-followall', { timeout: 8000 });
     await go();
-    await page.waitForFunction(() => /단계:/.test(document.querySelector('smd-followall').shadowRoot.querySelector('.msg').textContent), null, { timeout: 30000 });
+    await page.waitForFunction(() => /단계:/.test(document.querySelector('smd-followall')?.shadowRoot.querySelector('.msg').textContent || ''), null, { timeout: 30000 });
     const subs2 = log.slice(l).filter((e) => e.bskyFollow === 'create').map((e) => e.subject);
     const m2 = await msg();
     record('[전부 팔로우] (오류 경로) 블루스카이 로그인 만료 시 멈추고 단계·원인·조치 안내', subs2.join(',') === 'did:plc:c1,did:plc:expired' && /단계/.test(m2) && /만료/.test(m2) && /새로고침/.test(m2), { note: `${subs2.join(', ')} · ${m2.replace(/\n/g, ' / ')}` });
@@ -1918,15 +1843,23 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.goto('https://x.com/spacestar/following', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('smd-followall', { timeout: 8000 });
     await go();
-    await page.waitForFunction(() => /완료/.test(document.querySelector('smd-followall').shadowRoot.querySelector('.msg').textContent), null, { timeout: 90000 });
+    await page.waitForFunction(() => /완료/.test(document.querySelector('smd-followall')?.shadowRoot.querySelector('.msg').textContent || ''), null, { timeout: 90000 });
     const xr = await page.evaluate(() => ({ clicks: window.__xClicks || [], suggest: !!window.__suggestClicked }));
     const xm = await msg();
     record('[전부 팔로우] X: 목록 아래로 내려가며 안 한 계정만 팔로우(추천 칸 제외)', xr.clicks.join(',') === 'user_a,user_b,locked_one,user_c,user_d' && !xr.suggest && /5명/.test(xm), { note: `${xr.clicks.join(', ')} · 추천 누름=${xr.suggest} · ${xm}` });
+    // X 는 스크롤하면 같은 칸을 다른 계정에 다시 쓴다 → 다시 쓰인 칸의 새 계정도 이어서 팔로우
+    await page.goto('https://x.com/recycler/following', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('smd-followall', { timeout: 8000 });
+    await go();
+    await page.waitForFunction(() => /완료|없습니다|단계:/.test(document.querySelector('smd-followall')?.shadowRoot.querySelector('.msg').textContent || ''), null, { timeout: 90000 });
+    const rc = await page.evaluate(() => window.__xClicks || []);
+    const rm = await msg();
+    record('[전부 팔로우] X: 스크롤로 다시 쓰인 칸(같은 버튼, 새 계정)도 이어서 팔로우', rc.join(',') === '1001,1002,2001,2002' && /4명/.test(rm), { note: `${rc.join(',')} · ${rm.replace(/\n/g, ' / ')}` });
     // 오류 경로: X 가 제한 알림을 띄우면 바로 멈춤
     await page.goto('https://x.com/limited/following', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('smd-followall', { timeout: 8000 });
     await go();
-    await page.waitForFunction(() => /단계:/.test(document.querySelector('smd-followall').shadowRoot.querySelector('.msg').textContent), null, { timeout: 30000 });
+    await page.waitForFunction(() => /단계:/.test(document.querySelector('smd-followall')?.shadowRoot.querySelector('.msg').textContent || ''), null, { timeout: 30000 });
     const lc = await page.evaluate(() => (window.__xClicks || []).length);
     const lm = await msg();
     record('[전부 팔로우] (오류 경로) X 제한 알림이 뜨면 바로 멈추고 원인·조치 안내', lc === 1 && /막았습니다/.test(lm) && /unable to follow/.test(lm) && /기다린/.test(lm), { note: `누른 수 ${lc} · ${lm.replace(/\n/g, ' / ')}` });
@@ -1946,7 +1879,7 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.goto('https://www.instagram.com/spacestar/followers/', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('smd-followall', { timeout: 8000 });
     await go();
-    await page.waitForFunction(() => /완료/.test(document.querySelector('smd-followall').shadowRoot.querySelector('.msg').textContent), null, { timeout: 90000 });
+    await page.waitForFunction(() => /완료/.test(document.querySelector('smd-followall')?.shadowRoot.querySelector('.msg').textContent || ''), null, { timeout: 90000 });
     const ig = await page.evaluate(() => window.__igClicks || []);
     record('[전부 팔로우] 인스타그램: 목록 창 안을 내려가며 안 한 계정만 팔로우', ig.join(',') === 'ig_a,ig_b,ig_c', { note: `${ig.join(', ')} · ${await msg()}` });
     // 틱톡: 팔로워 창을 열면 버튼이 뜨고, 창 안 Follow 를 모두 누름
@@ -1956,7 +1889,7 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.locator('#openFollowers').click();
     await page.waitForSelector('smd-followall', { timeout: 8000 });
     await go();
-    await page.waitForFunction(() => /완료/.test(document.querySelector('smd-followall').shadowRoot.querySelector('.msg').textContent), null, { timeout: 60000 });
+    await page.waitForFunction(() => /완료/.test(document.querySelector('smd-followall')?.shadowRoot.querySelector('.msg').textContent || ''), null, { timeout: 60000 });
     const tt = await page.evaluate(() => window.__ttClicks || []);
     record('[전부 팔로우] 틱톡: 팔로워 창이 열렸을 때만 버튼, 창 안 계정 모두 팔로우', !before && tt.join(',') === 'tt_a,tt_b', { note: `창 열기 전 버튼=${before} · ${tt.join(', ')} · ${await msg()}` });
     // 오류 경로: 틱톡 제한 알림 → 바로 멈춤
@@ -1964,7 +1897,7 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.locator('#openFollowers').click();
     await page.waitForSelector('smd-followall', { timeout: 8000 });
     await go();
-    await page.waitForFunction(() => /단계:/.test(document.querySelector('smd-followall').shadowRoot.querySelector('.msg').textContent), null, { timeout: 30000 });
+    await page.waitForFunction(() => /단계:/.test(document.querySelector('smd-followall')?.shadowRoot.querySelector('.msg').textContent || ''), null, { timeout: 30000 });
     const tl = await page.evaluate(() => (window.__ttClicks || []).length);
     const tm = await msg();
     record('[전부 팔로우] (오류 경로) 틱톡 제한 알림이 뜨면 바로 멈추고 원인·조치 안내', tl === 1 && /틱톡에서 팔로우를 막았습니다/.test(tm) && !/tt_b/.test(tm) && /Try again later/.test(tm), { note: `누른 수 ${tl} · ${tm.replace(/\n/g, ' / ')}` });
@@ -2058,27 +1991,14 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
-// ── X 팔로우 버튼 + 소리 자동 켜기 ──
+// ── X: 사진 아래 차단(⋯ 메뉴로 실제 차단) + 자동 팔로우 ──
 if (!only || only === 'x' || '팔로우'.includes(only)) {
   const page = await ctx.newPage();
-  let unfollowAsks = 0; // 언팔로우 확인 창(확장이 띄우면 안 됨)
-  page.on('dialog', (d) => { if (/팔로우를 취소/.test(d.message())) unfollowAsks++; d.accept(); });
   try {
+    await setSettings({ postActions: true });
     await page.goto('https://x.com/explore', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2500);
-    // 버튼이 실제로 화면에 보이는지(잘리거나 가려지지 않았는지)
-    const vis = await page.evaluate(() => [...document.querySelectorAll('article')].filter((a) => a.id !== 't-me_account').map((a) => {
-      const h = a.querySelector('smd-follow');
-      const b = h?.shadowRoot.querySelector('button')?.getBoundingClientRect();
-      if (!b || b.width < 10) return false;
-      return document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2) === h;
-    }));
-    record('[X] 팔로우 버튼이 잘리지 않고 화면에 보임', vis.length > 0 && vis.every(Boolean), { note: JSON.stringify(vis) });
-    const state = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('article')].map((a) => [a.id.slice(2), a.querySelector('smd-follow')?.shadowRoot.querySelector('button')?.textContent || '(없음)'])));
-    const s0 = await state();
-    record('[X] 팔로우 상태 표시 (팔로잉/팔로우/React 데이터/내 계정 제외)', s0.followed_user === '팔로잉' && s0.new_user === '팔로우' && s0.react_user === '팔로잉' && s0.me_account === '(없음)', { note: JSON.stringify(s0) });
-    await page.screenshot({ path: path.join(SHOTS, 'x-follow.png') });
-
+    const feedBtns = await page.evaluate(() => document.querySelectorAll('smd-follow').length);
     // 자동 팔로우: 이미 팔로우 중인 사람의 사진을 받으면 팔로우 요청을 보내지 않음
     {
       const lf = log.length;
@@ -2090,36 +2010,19 @@ if (!only || only === 'x' || '팔로우'.includes(only)) {
       const req = log.slice(lf).filter((l) => l.follow);
       record('[자동 팔로우] X: 이미 팔로우 중이면 아무 요청도 안 함', req.length === 0, { note: req.length ? JSON.stringify(req) : '요청 없음' });
     }
-    const logStart = log.length;
-    await page.locator('#t-new_user smd-follow button').click();
-    await page.mouse.move(5, 5); // 마우스가 버튼 위에 있으면 '언팔로우'로 보이므로 치운다
-    await page.waitForTimeout(800);
-    const s1 = await state();
-    const req1 = log.slice(logStart).find((l) => l.follow === 'create');
-    record('[X] 팔로우 누르기 → X ⋯ 메뉴로 실제 팔로우(보안 값 포함) → 팔로잉', s1.new_user === '팔로잉' && req1?.ok && req1.user_id === '2002' && req1.tx === 'PAGE-TX', { note: `${s1.new_user} · 요청 ${JSON.stringify(req1)}` });
-
-    const logStart2 = log.length;
-    await page.locator('#t-followed_user smd-follow button').click();
-    await page.mouse.move(5, 5);
-    await page.waitForTimeout(800);
-    const s2 = await state();
-    const req2 = log.slice(logStart2).find((l) => l.follow === 'destroy');
-    record('[X] 팔로잉 누르기 → 확인 창 없이 X 메뉴로 실제 언팔로우', s2.followed_user === '팔로우' && req2?.ok && req2.user_id === '1001' && req2.tx === 'PAGE-TX' && unfollowAsks === 0, { note: `${s2.followed_user} · 확인 창 ${unfollowAsks}번 · 요청 ${JSON.stringify(req2)}` });
-
-    // 쿠키가 없으면 단계·원인·해결 안내
-    await page.evaluate(() => (document.cookie = 'ct0=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'));
-    await page.locator('#t-react_user smd-follow button').click();
+    await page.locator('#fpic').hover();
     await page.waitForTimeout(500);
-    const err = await page.locator('#t-react_user smd-follow').evaluate((h) => h.shadowRoot.querySelector('.err')?.textContent || '');
-    record('[X] 로그인 쿠키 없을 때 오류 안내', /로그인/.test(err) && /새로고침/.test(err), { note: err });
-
+    const c = await clickAct(page, '#fpic', 'b');
+    await page.waitForTimeout(1500);
+    const blocked = await page.evaluate(() => window.__blocked || '');
+    const t = await toastHist(page);
+    record('[X] 사진 아래 차단 → ⋯ 메뉴 · 확인으로 실제 차단 + 알림, 피드 팔로우 버튼 없음', c === 'ok' && blocked === 'followed_user' && /차단: @followed_user 완료/.test(t) && feedBtns === 0, { note: JSON.stringify({ c, blocked, feedBtns, t: t.slice(-80) }) });
   } catch (err) {
-    record('[X] 팔로우 버튼', false, { note: err.message.split('\n')[0] });
+    record('[X] 차단', false, { note: err.message.split('\n')[0] });
   } finally {
     await page.close();
   }
 }
-
 // ── 받은 적 있는 영상은 버튼이 초록 체크로 ──
 if (!only || only === 'x' || '받은'.includes(only)) {
   const page = await ctx.newPage();
