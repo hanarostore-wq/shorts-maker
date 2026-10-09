@@ -1,7 +1,7 @@
-import { $, $$, bus, S, connect, disconnect, api, setToken, fmtInt, fmtPct, toast, tradeNotice } from './core.js?v=1.10.92';
-import { initExchange } from './exchange.js?v=1.10.92';
-import { initPages, onRoute, toggleAuto } from './pages.js?v=1.10.92';
-import { initMainBoard, onMainRoute } from './mainboard.js?v=1.10.92';
+import { $, $$, bus, S, connect, disconnect, api, setToken, fmtInt, fmtPct, toast, tradeNotice } from './core.js?v=1.10.97';
+import { initExchange } from './exchange.js?v=1.10.97';
+import { initPages, onRoute, toggleAuto } from './pages.js?v=1.10.97';
+import { initMainBoard, onMainRoute } from './mainboard.js?v=1.10.97';
 
 const ROUTES = ['main', 'exchange', 'auto', 'investments', 'settings'];
 // This is the owner's active YuJin Traders conversation. Opening the named popup at
@@ -61,7 +61,7 @@ function renderChips() {
   updateTopMeta();
   applyTheme();
   const st = S.status || {};
-  const up = $('#chipBinance');
+  const up = $('#chipUpbit');
   up.className = `chip ${S.connected && st.binance ? 'ok' : 'bad'}`;
   up.title = S.connected ? (st.binance ? 'Binance 실시간 시세 수신 중' : 'Binance 연결 재시도 중') : '서버 연결 끊김';
   const m = S.summary;

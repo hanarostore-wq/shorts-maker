@@ -182,7 +182,10 @@ export function connect() {
   if (es) es.close();
   es = new EventSource(authUrl(`/api/stream?cid=${S.cid}&market=${S.market}`), { withCredentials: true });
   const on = (ev, fn) => es.addEventListener(ev, (e) => { try { fn(JSON.parse(e.data)); } catch (err) { console.error(ev, err); } });
+  const stream = es;
+  let initialReceived = false;
   on('init', (d) => {
+    initialReceived = true;
     S.markets = d.markets;
     S.marketMap = new Map(d.markets.map((m) => [m.code, m]));
     const heldMarket = d.summary?.positions?.[0]?.market;
@@ -235,7 +238,16 @@ export function connect() {
     const now = Date.now();
     if (now - errSince > 5000) { errSince = now; api('/api/auth').then((a) => { if (a.required && !a.ok) bus.emit('auth-required'); }).catch(() => {}); }
   };
-  es.onopen = () => { S.connected = true; bus.emit('conn', true); };
+  es.onopen = () => {
+    S.connected = true; bus.emit('conn', true);
+    // SSE 첫 상태 이벤트가 누락되는 로컬 브라우저는 일반 API 응답으로 동일한 init 이벤트를 재생한다.
+    setTimeout(() => {
+      if (es !== stream || initialReceived) return;
+      api('/api/state').then((state) => {
+        if (es === stream && !initialReceived) es.dispatchEvent(new MessageEvent('init', { data: JSON.stringify(state) }));
+      }).catch(() => {});
+    }, 1200);
+  };
 }
 
 export async function setMarket(code) {

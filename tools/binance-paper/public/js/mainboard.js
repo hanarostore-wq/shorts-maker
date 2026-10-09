@@ -1,6 +1,6 @@
-import { toggleAuto } from './pages.js?v=1.10.69';
-import { $, $$, bus, S, api, esc, fmtDur, fmtInt, fmtKrw, fmtPct, fmtPrice, fmtQty, fmtTime, nameOf, sym, setMarket, toast, upDown, coinIcon } from './core.js?v=1.10.69';
-import { parseKrwAmount } from './amount.js?v=1.10.69';
+import { toggleAuto } from './pages.js?v=1.10.97';
+import { $, $$, bus, S, api, esc, fmtDur, fmtInt, fmtKrw, fmtPct, fmtPrice, fmtQty, fmtTime, nameOf, sym, setMarket, toast, upDown, coinIcon } from './core.js?v=1.10.97';
+import { parseKrwAmount } from './amount.js?v=1.10.97';
 
 // =====================================================================================
 // Left Binance Chart in Mainboard

@@ -1,4 +1,4 @@
-import { $, $$, h, esc, fmtPrice, fmtKrw, fmtInt, fmtPct, fmtSigned, fmtQty, fmtMillion, fmtDur, fmtTime, ago, upDown, sym, bus, S, saveFavs, nameOf, api, setMarket, toast, orderNotice, coinIcon, refreshLiveAccount } from './core.js?v=1.10.69';
+import { $, $$, h, esc, fmtPrice, fmtKrw, fmtInt, fmtPct, fmtSigned, fmtQty, fmtMillion, fmtDur, fmtTime, ago, upDown, sym, bus, S, saveFavs, nameOf, api, setMarket, toast, orderNotice, coinIcon, refreshLiveAccount } from './core.js?v=1.10.97';
 
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const posOf = (code) => S.config?.mode === 'live'
