@@ -2,113 +2,215 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="dark">
-  <title>Binance 로컬 트레이딩 터미널</title>
-  <link rel="stylesheet" href="/app.css?v=2.1.1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YuJin Traders · Binance 자동매매</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23093687'/%3E%3Ctext x='16' y='22' font-size='15' font-weight='900' font-style='italic' text-anchor='middle' fill='white' font-family='Arial'%3EJ%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/css/app.css?v=1.10.56">
+  <script src="/vendor/lightweight-charts.standalone.production.js"></script>
 </head>
-<body>
-  <div id="app" class="terminal">
-    <header class="topbar">
-      <div class="brand"><img src="https://bin.bnbstatic.com/static/images/common/favicon.ico" alt="Binance"><b>BINANCE</b><span class="brand-divider"></span><strong id="terminalTitle">현물</strong><span class="local-badge">BLACK PC LOCAL</span></div>
-      <nav class="top-nav" aria-label="주요 메뉴"><button class="active">거래</button><button data-open-settings>자동매매</button><button data-open-settings>지갑</button><button data-open-settings>주문</button><button data-open-slots>전략 슬롯</button></nav>
-      <div class="top-actions"><span class="connection" id="connection">시세 연결 중</span><button class="mode-chip" id="modeChip" data-open-settings>PAPER</button><button class="settings-trigger" data-open-settings title="API·투자금·자동매매 설정">⚙ 설정</button></div>
-    </header>
+<body class="dark">
+  <header class="gnb">
+    <div class="gnb-inner">
+      <a class="logo" href="#/main"><span class="logo-mark">YuJin</span><span class="logo-text">Traders</span></a>
+      <nav class="gnb-menu"></nav>
+      <div class="gnb-right">
+        <span class="chip chip-mode" id="chipMode"><i class="dot"></i><span class="lbl">모의투자</span></span>
+        <button class="header-action" id="capitalHeader" type="button"><i class="dot"></i><span class="lbl">투자금액</span></button>
+        <button class="header-action" id="voiceHeader" type="button"><i class="dot"></i><span class="lbl">음성</span></button>
+        <button class="header-action" id="slotHeader" type="button"><i class="dot"></i><span class="lbl">슬롯 관리</span></button>
+        <span class="chip" id="chipUpbit"><i class="dot"></i><span class="lbl">Binance 실시간</span></span>
+        <button class="chip" id="chipJev" title="Jev 도움 판단 또는 순수 규칙 판단 전환" type="button"><i class="dot"></i><span class="t">순수 규칙</span></button>
+        <button class="header-action manuscript" id="manusLauncher" type="button" title="Whale 소형 창에서 Manus 대화 열기" aria-label="Manus 대화 소형 창 열기"><i class="dot manus-notify-badge" id="manusNotifyBadge" aria-label="Manus 대화 사용 가능"></i><span class="lbl">Manus 대화</span></button>
+        <button class="header-action auto-toggle" id="autoToggle" title="자동매매 켜기/끄기"><i class="dot"></i><span class="lbl">자동매매</span></button>
+        <div class="gnb-meta" id="gnbMeta" title="클라이언트·서버 버전 및 네트워크 지연 시간">
+          <span class="meta-item" id="metaLatency">수신 대기</span>
+          <span class="meta-item" id="metaVersion">v1.10.56</span>
+          <span class="meta-item" id="metaClock">2026.10.01 00:00:00</span>
+        </div>
+      </div>
+    </div>
+  </header>
+  <div class="conn-lost" id="connLost">서버 연결이 끊겼습니다 · 자동으로 다시 연결하는 중…</div>
 
-    <section class="market-strip">
-      <button class="symbol-picker" id="symbolPicker" title="거래 종목 선택"><span class="star">☆</span><span><b id="symbolText">BTC/USDT</b><small id="marketType">현물</small></span><span class="chev">⌄</span></button>
-      <div class="price-box"><b id="lastPrice">-</b><small id="lastPriceUsd">-</small></div>
-      <div class="change-box"><b id="changePct">-</b><small>24시간 변동</small></div>
-      <div class="ticker-stat"><span>24시간 고가</span><b id="high24">-</b></div>
-      <div class="ticker-stat"><span>24시간 저가</span><b id="low24">-</b></div>
-      <div class="ticker-stat"><span>24시간 거래대금</span><b id="volume24">-</b></div>
-      <div class="ticker-stat futures-only"><span>펀딩비 <i title="선물 롱과 숏 사이에 주고받는 정산 비율">?</i></span><b id="fundingRate">-</b></div>
-      <div class="ticker-stat futures-only"><span>미결제약정 <i title="아직 끝나지 않은 선물 계약 수">?</i></span><b id="openInterest">-</b></div>
-      <div class="ticker-stat"><span>수신 간격</span><b id="receiveGap">-</b></div>
-    </section>
-
-    <main class="terminal-grid">
-      <aside class="markets-panel panel">
-        <div class="panel-title"><b>마켓</b><span id="marketCount">USDT</span></div>
-        <div class="market-tabs"><button class="active">즐겨찾기</button><button>USDT</button><button>보유</button></div>
-        <label class="search"><span>⌕</span><input id="marketSearch" placeholder="코인 검색"></label>
-        <div class="market-head"><span>마켓</span><span>현재가</span><span>24시간</span></div>
-        <div id="marketList" class="market-list"></div>
-        <div class="market-foot">실시간 Binance WebSocket 수신</div>
-      </aside>
-
-      <section class="chart-column">
-        <section class="chart-panel panel">
-          <header class="chart-head"><div class="chart-tabs"><button class="active">차트</button><button>정보</button><button>분석</button></div><div class="chart-actions"><button class="interval active" data-interval="1m">1분</button><button class="interval" data-interval="3m">3분</button><button class="interval" data-interval="5m">5분</button><button class="interval" data-interval="15m">15분</button><button class="interval" data-interval="1h">1시간</button><button class="interval" data-interval="4h">4시간</button><button class="interval" data-interval="1d">일</button><span class="toolbar-sep"></span><button id="chartZoomOut">−</button><button id="chartZoomIn">＋</button></div></header>
-          <div class="chart-meta"><span id="chartSymbol">BTCUSDT</span><span>시가 <b id="candleOpen">-</b></span><span>고가 <b class="up" id="candleHigh">-</b></span><span>저가 <b class="down" id="candleLow">-</b></span><span>종가 <b id="candleClose">-</b></span><span>거래량 <b id="candleVolume">-</b></span></div>
-          <div class="chart-wrap"><canvas id="priceChart" width="1000" height="480" aria-label="실시간 캔들 차트"></canvas><div id="chartEmpty" class="chart-empty">실시간 캔들 수신 중</div></div>
-          <div class="chart-bottom"><span><i class="signal-dot online"></i> Binance 가격·캔들 실시간 수신</span><span id="chartUpdated">-</span></div>
-        </section>
-
-        <section class="bottom-workspace panel">
-          <div class="workspace-tabs" id="workspaceTabs"><button class="active" data-tab="positions">포지션</button><button data-tab="openOrders">미체결 주문</button><button data-tab="history">거래 내역</button><button data-tab="assets">자산</button><button data-tab="events">실시간 알림</button></div>
-          <div id="workspaceContent" class="workspace-content"></div>
-        </section>
-      </section>
-
-      <aside class="right-column">
-        <section class="orderbook panel">
-          <div class="panel-title"><b>호가창</b><span class="book-mode">20단계</span></div>
-          <div class="book-head"><span>가격(USDT)</span><span>수량</span><span>누적</span></div>
-          <div id="asks" class="book-list asks"></div>
-          <div class="spread"><b id="spreadPrice">-</b><small id="spreadKrw">-</small><span id="spreadPct">-</span></div>
-          <div id="bids" class="book-list bids"></div>
-          <div class="book-foot"><span>매수 힘 <b id="bidPower">-</b></span><span>매도 힘 <b id="askPower">-</b></span></div>
-        </section>
-
-        <section class="recent-trades panel">
-          <div class="panel-title"><b>최근 체결</b><span>실시간</span></div>
-          <div class="trade-head"><span>가격(USDT)</span><span>수량</span><span>시간</span></div>
-          <div id="recentTrades" class="recent-list"></div>
-        </section>
-
-        <section class="order-panel panel">
-          <div class="order-tabs"><button class="active buy" data-action="buy">매수</button><button class="sell" data-action="sell">매도</button><button class="short futures-only" data-action="short">숏</button><button class="close-pos futures-only" data-action="close">정리</button></div>
-          <div class="order-inner">
-            <div class="order-type"><button class="active" data-order-type="market">시장가</button><button data-order-type="limit">지정가</button></div>
-            <label class="field limit-field hidden"><span>주문 가격 <i title="원하는 가격을 정해 주문합니다">?</i></span><div><input id="limitPrice" inputmode="decimal" placeholder="현재가"><em>USDT</em></div></label>
-            <label class="field"><span id="amountLabel">주문 금액</span><div><input id="orderAmount" inputmode="numeric" placeholder="0"><em>KRW</em></div></label>
-            <div class="quick-amount"><button data-ratio="0.1">10%</button><button data-ratio="0.25">25%</button><button data-ratio="0.5">50%</button><button data-ratio="1">최대</button></div>
-            <label class="field leverage-field futures-only"><span>레버리지 <i title="같은 돈으로 더 큰 금액을 거래하는 배수이며 손실도 커집니다">?</i></span><div><input id="leverage" inputmode="numeric" value="1"><em>배</em></div></label>
-            <div class="order-summary"><span>예상 수수료</span><b id="feeEstimate">-</b><span>주문 후 남는 원화</span><b id="afterOrder">-</b></div>
-            <button class="order-submit buy" id="orderSubmit">PAPER 매수</button>
-            <div class="futures-split-actions futures-only" aria-label="선물 롱 숏 주문">
-              <button id="futuresLong" class="futures-long"><small>PAPER 시장가</small><b>롱 진입</b></button>
-              <button id="futuresShort" class="futures-short"><small>PAPER 시장가</small><b>숏 진입</b></button>
-            </div>
-            <p class="order-guide" id="orderGuide">모의투자입니다 · 가상 원화로 주문을 연습합니다</p>
+  <main id="app">
+    <!-- ======================================================== 단일 메인 관제 -->
+    <section class="view" id="view-main"></section>
+    <!-- ======================================================== 거래소 -->
+    <section class="view" id="view-exchange">
+      <div class="ex-wrap">
+        <div class="ex-main">
+          <div class="box notice">
+            <span class="nt">공지</span>
+            <span id="noticeText">모의투자 모드입니다 · 실제 Binance 주문은 나가지 않습니다</span>
+            <button class="btn sm mobile-list-btn" id="mobileListBtn" style="margin-left:auto">코인 목록</button>
           </div>
-        </section>
-      </aside>
-    </main>
-  </div>
 
-  <dialog id="settingsDialog" class="settings-dialog">
-    <form method="dialog" class="settings-card" id="settingsForm">
-      <header><div><b>Binance 로컬 설정</b><small>모든 설정은 BLACK PC에만 저장됩니다</small></div><button value="cancel" class="icon-close" aria-label="닫기">✕</button></header>
-      <section class="setting-group"><h3>투자 모드</h3><div class="mode-switch"><button type="button" data-mode="paper">PAPER 모의계좌</button><button type="button" data-mode="live">LIVE 실계좌</button></div><p class="setting-note">LIVE는 API 키를 입력해도 주문 확인창을 한 번 더 통과해야 실제 주문이 전송됩니다</p></section>
-      <section class="setting-grid"><label><span>PAPER 시작 금액</span><input id="paperInitial" inputmode="numeric" placeholder="100000000"><em>KRW</em></label><label><span>PAPER 한 번 주문 금액</span><input id="paperOrder" inputmode="numeric" placeholder="1000000"><em>KRW</em></label><label class="futures-only"><span>선물 기본 레버리지</span><input id="futuresLeverage" inputmode="numeric" placeholder="1"><em>배</em></label><label><span>자동매매</span><select id="autoTrading"><option value="false">꺼짐 · 수동 주문만</option><option value="true">켜짐 · 적용 슬롯 규칙 사용</option></select></label><label><span>적용 슬롯</span><select id="activeSlot"><option value="1">1번 슬롯</option><option value="2">2번 슬롯</option><option value="3">3번 슬롯</option><option value="4">4번 슬롯</option><option value="5">5번 슬롯</option></select></label></section>
-      <section class="setting-group api-group"><h3>Binance API 연결</h3><p class="setting-note">API Key와 Secret Key는 이 로컬 서버의 보호된 폴더에만 보관됩니다. 채팅·GitHub·관제실 로그에는 저장되지 않습니다</p><label><span>API Key</span><input id="apiKey" autocomplete="off" placeholder="입력한 키는 화면에 다시 표시하지 않습니다"></label><label><span>Secret Key</span><input id="secretKey" type="password" autocomplete="new-password" placeholder="새 키를 입력할 때만 작성"></label><div id="apiStatus" class="api-status">연결 상태 확인 중</div></section>
-      <footer><button type="button" id="paperReset" class="danger-lite">PAPER 계좌 완전 초기화</button><button value="save" class="save-settings">설정 저장</button></footer>
-    </form>
-  </dialog>
+          <div class="box coin-head">
+            <div class="ch-top">
+              <div class="ch-title">
+                <img id="coinIcon" alt="" onerror="this.style.visibility='hidden'">
+                <strong id="coinName">-</strong>
+                <span class="sy" id="coinSym">-</span>
+                <span id="coinBadges"></span>
+              </div>
+              <div class="ch-tabs">
+                <a class="on" data-ctab="chart">시세</a>
+                <a data-ctab="jev" id="ctabJev">Jev 판단</a>
+              </div>
+            </div>
+            <div class="ch-body">
+              <div class="ch-price">
+                <div class="big"><span id="pPrice" class="num">-</span><em>KRW</em></div>
+                <div class="chg"><span id="pRate">-</span> <span id="pDiff"></span></div>
+              </div>
+              <div class="ch-stats">
+                <dl><dt>고가</dt><dd id="sHigh" class="up">-</dd></dl>
+                <dl><dt>거래량(24H)</dt><dd id="sVol">-</dd></dl>
+                <dl><dt>저가</dt><dd id="sLow" class="down">-</dd></dl>
+                <dl><dt>거래대금(24H)</dt><dd id="sAmt">-</dd></dl>
+              </div>
+            </div>
+          </div>
 
-  <dialog id="slotsDialog" class="slots-dialog">
-    <section class="slots-card">
-      <header><div><b>Binance 전략 슬롯</b><small>이 사이트 전용 1~5번 슬롯 · 최초 구성만 업비트 현재 설정을 복사</small></div><button class="icon-close" data-close-slots aria-label="닫기">✕</button></header>
-      <div id="slotSummary" class="slot-summary">슬롯 정보를 불러오는 중</div>
-      <div id="slotList" class="slot-list"></div>
-      <footer><span>선택한 슬롯을 적용하면 해당 슬롯의 고정 주문금액도 함께 반영됩니다</span><button data-close-slots>닫기</button></footer>
+          <div class="box chart-box">
+            <div class="chart-tools" id="chartTools">
+              <button data-unit="1" class="on">1분</button>
+              <button data-unit="3">3분</button>
+              <button data-unit="5">5분</button>
+              <button data-unit="15">15분</button>
+              <button data-unit="30">30분</button>
+              <button data-unit="60">1시간</button>
+              <button data-unit="240">4시간</button>
+              <button data-unit="D">일</button>
+              <button data-unit="W">주</button>
+              <button data-unit="M">월</button>
+              <span class="sep"></span>
+              <button id="toggleMarks" class="on" title="자동매매 체결 위치 표시">매매표시</button>
+              <div class="legend" id="maLegend"></div>
+            </div>
+            <div class="chart" id="chart"></div>
+            <div class="chart-loading" id="chartLoading">차트 불러오는 중…</div>
+          </div>
+
+          <div class="ex-bottom">
+            <div class="box ob-box">
+              <div class="tabs"><a class="on">일반호가</a><a class="muted" style="cursor:default">누적호가</a></div>
+              <div class="ob-wrap" id="obWrap">
+                <div class="ob-grid" id="obAsks"></div>
+                <div class="ob-grid" id="obBids"></div>
+              </div>
+              <div class="ob-foot"><span id="obTas">-</span><span>수량</span><span id="obTbs">-</span></div>
+            </div>
+
+            <aside class="box ex-side" id="side">
+              <button class="side-close" id="sideClose" type="button">닫기</button>
+              <div class="search">
+                <input id="mSearch" placeholder="코인명/심볼검색" autocomplete="off">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              </div>
+              <div class="side-tabs" id="mTabs">
+                <a data-mtab="krw">원화</a>
+                <a data-mtab="hold">보유<em id="holdCnt"></em></a>
+                <a class="on" data-mtab="auto">자동<em id="autoCnt"></em></a>
+                <a data-mtab="fav">관심</a>
+              </div>
+              <div class="mhead" id="mHead">
+                <span></span>
+                <span data-sort="name">한글명</span>
+                <span data-sort="price">현재가</span>
+                <span data-sort="rate">전일대비</span>
+                <span data-sort="amt" class="sort">거래대금</span>
+              </div>
+              <div class="mlist" id="mList"></div>
+            </aside>
+          </div>
+
+          <div class="box">
+            <div class="tabs left" id="btabs">
+              <a class="on" data-btab="trades">체결</a>
+              <a data-btab="days">일별</a>
+              <a data-btab="jev">Jev 판단 기록</a>
+            </div>
+            <div class="btab on" id="btab-trades"><div class="scroll"><table class="mini-table" id="tradesTable"></table></div></div>
+            <div class="btab" id="btab-days"><div class="scroll"><table class="mini-table" id="daysTable"></table></div></div>
+            <div class="btab" id="btab-jev"><div class="scroll"><table class="mini-table" id="coinJevTable"></table></div></div>
+          </div>
+        </div>
+
+        <div class="box order-box">
+          <div class="tabs order-tabs">
+            <a data-otab="buy" class="buy">매수</a>
+            <a data-otab="sell" class="sell">매도</a>
+            <a data-otab="auto" class="auto on">자동매매</a>
+            <a data-otab="hist" class="hist">거래내역</a>
+          </div>
+
+          <div class="otab" id="otab-buy">
+            <div class="frow"><label>주문유형</label>
+              <div class="seg" data-order-side="buy"><button type="button" data-order-type="limit">지정가</button><button type="button" data-order-type="market" class="on">시장가</button><button type="button" data-order-type="reserve">예약가</button></div>
+            </div>
+            <div class="frow"><label id="buyPriceLabel">현재 매수 예상가</label><div class="inp quote-inp"><input id="buyPrice" inputmode="decimal" readonly><em>KRW</em></div></div>
+            <div class="order-quote-guide" id="buyPriceGuide"></div>
+            <div class="frow"><label>주문가능</label><div class="val"><span id="buyAvail">-</span><i>KRW</i></div></div>
+            <div class="frow"><label>주문총액</label><div class="inp"><input id="buyKrw" inputmode="numeric" placeholder="0"><em>KRW</em></div></div>
+            <div class="pcts" data-for="buy"><button data-p="0.1">10%</button><button data-p="0.25">25%</button><button data-p="0.5">50%</button><button data-p="1">최대</button></div>
+            <div class="fee-note" id="buyFee">최소주문금액: 5,000 KRW · 수수료 0.05% · 모의 체결</div>
+            <button class="btn-big btn-buy" id="buyBtn">모의 매수</button>
+          </div>
+
+          <div class="otab" id="otab-sell">
+            <div class="frow"><label>주문유형</label>
+              <div class="seg" data-order-side="sell"><button type="button" data-order-type="limit">지정가</button><button type="button" data-order-type="market" class="on">시장가</button><button type="button" data-order-type="reserve">예약가</button></div>
+            </div>
+            <div class="frow"><label id="sellPriceLabel">현재 매도 예상가</label><div class="inp quote-inp"><input id="sellPrice" inputmode="decimal" readonly><em>KRW</em></div></div>
+            <div class="order-quote-guide" id="sellPriceGuide"></div>
+            <div class="frow"><label>주문가능</label><div class="val"><span id="sellAvail">-</span><i id="sellSym">-</i></div></div>
+            <div class="frow"><label>평가금액</label><div class="val"><span id="sellValue">-</span><i>KRW</i></div></div>
+            <div class="frow"><label>매도비율</label><div class="inp"><input id="sellRatio" inputmode="numeric" value="100"><em>%</em></div></div>
+            <div class="pcts" data-for="sell"><button data-p="10">10%</button><button data-p="25">25%</button><button data-p="50">50%</button><button data-p="100">100%</button></div>
+            <div class="fee-note" id="sellFee">시장가 모의 매도 · 수수료 0.05%</div>
+            <button class="btn-big btn-sell" id="sellBtn">모의 매도</button>
+          </div>
+
+          <div class="otab on" id="otab-auto"></div>
+          <div class="otab" id="otab-hist"><div class="scroll" style="max-height:470px"><table class="mini-table" id="histTable"></table></div></div>
+        </div>
+      </div>
     </section>
-  </dialog>
 
-  <dialog id="confirmDialog" class="confirm-dialog"><section class="confirm-card"><header><b>실계좌 주문 최종 확인</b><span>LIVE</span></header><p id="confirmText">-</p><div class="confirm-details" id="confirmDetails"></div><p class="warning">확인하면 Binance API로 실제 주문이 전송됩니다. 주문 금액과 방향을 다시 확인하세요</p><footer><button id="cancelLiveOrder">취소</button><button id="confirmLiveOrder" class="danger">실제 주문 전송</button></footer></section></dialog>
-  <div id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="/app.js?v=2.1.1"></script>
+    <!-- ======================================================== 자동매매 -->
+    <section class="view" id="view-auto"></section>
+    <!-- ======================================================== 투자내역 -->
+    <section class="view" id="view-investments"></section>
+    <!-- ======================================================== 설정 -->
+    <section class="view" id="view-settings"></section>
+  </main>
+
+  <nav class="mobile-dock" aria-label="모바일 관제 메뉴">
+    <a href="#/main" data-route="main"><b>◉</b><span>메인 관제</span></a>
+  </nav>
+
+  <div class="toast-wrap" id="toasts"></div>
+  <div class="trade-alert-wrap" id="tradeAlert" aria-live="assertive" aria-atomic="true">
+    <section class="trade-alert-card" id="tradeAlertCard">
+      <div class="ta-head"><span class="ta-brand">YuJin Traders <i>모의투자</i></span><span class="ta-count" id="taCount">5초</span></div>
+      <div class="ta-title" id="taTitle">체결 알림</div>
+      <div class="ta-coin" id="taCoin">-</div>
+      <div class="ta-grid" id="taDetails"></div>
+      <div class="ta-foot" id="taFoot">서버 체결 확정</div>
+    </section>
+  </div>
+  <div class="login-wrap" id="login">
+    <form class="login-card" id="loginForm" autocomplete="on">
+      <div class="brand">YuJin Traders <i>모의투자</i></div>
+      <p>Binance 실시간 시세 + Jev 초단타 자동매매 대시보드입니다.<br>대시보드 비밀번호를 입력하세요.</p>
+      <input type="password" id="loginPw" name="password" placeholder="비밀번호" autocomplete="current-password" required>
+      <button type="submit" id="loginBtn">로그인</button>
+      <div class="err" id="loginErr"></div>
+    </form>
+  </div>
+  <div id="mainModals"></div>
+  <script type="module" src="/js/app.js?v=1.10.62"></script>
+  <div id="reasonPopover" class="reason-floating-popover"></div>
 </body>
 </html>

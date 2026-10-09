@@ -1,0 +1,75 @@
+
+/* ---------------------------------------------------------------- dark (black) theme
+   Upbit-style dark theme variables and component overrides. */
+body.dark {
+  --navy: #1b263b;
+  --navy-2: #24344d;
+  --bg: #0d1117;
+  --card: #161b22;
+  --line: #21262d;
+  --line-2: #30363d;
+  --text: #f0f6fc;
+  --sub: #8b949e;
+  --light: #6e7681;
+  --hover: #1c2128;
+  --sel: #1c2128;
+  --ask-bg: #1c2333;
+  --ask-bar: #28354f;
+  --bid-bg: #2d1e1f;
+  --bid-bar: #4a2729;
+}
+body.dark .box { background: var(--card); border-color: var(--line); }
+body.dark .gnb { background: #11161d; border-bottom: 1px solid var(--line); }
+body.dark .gnb-menu a { color: #8b949e; }
+body.dark .gnb-menu a.on, body.dark .gnb-menu a:hover { color: #fff; }
+body.dark .tabs { border-color: var(--line); }
+body.dark .tabs > a { color: var(--sub); }
+body.dark .tabs > a.on { color: #58a6ff; border-bottom-color: #58a6ff; }
+body.dark .btn { background: #21262d; border-color: #30363d; color: var(--text); }
+body.dark .btn:hover { background: #30363d; }
+body.dark .btn.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+body.dark .ch-top { border-color: var(--line); }
+body.dark .ch-stats dl { border-color: var(--line); }
+body.dark .chart-box { background: var(--card); }
+body.dark .chart-tools { border-color: var(--line); }
+body.dark .chart-tools button { color: var(--sub); }
+body.dark .chart-tools button.on { background: #1f6feb; color: #fff; }
+body.dark .order-tabs > a.auto.on { color: #58a6ff; border-bottom-color: #58a6ff; }
+body.dark .seg { border-color: var(--line-2); }
+body.dark .seg button { background: var(--card); color: var(--sub); border-color: var(--line-2); }
+body.dark .seg button.on { outline-color: #58a6ff; color: #58a6ff; }
+body.dark .inp { background: var(--card); border-color: var(--line-2); color: var(--text); }
+body.dark .inp input { color: var(--text); }
+body.dark .pcts button { background: var(--card); border-color: var(--line-2); color: var(--sub); }
+body.dark .entry-diagnosis { background: var(--card); border-color: var(--line); }
+body.dark .entry-d-head { background: #11161d; border-color: var(--line); }
+body.dark .entry-check { border-color: #21262d; }
+body.dark .entry-check b { color: var(--text); }
+body.dark .entry-check em { color: var(--text); }
+body.dark .entry-check.pass > i { background: #0d2818; color: #3fb950; }
+body.dark .entry-check.wait > i { background: #341a00; color: #d29922; }
+body.dark .jev-card { border-color: var(--line); background: #11161d; }
+body.dark .pos-card { background: #241416; border-color: #5a2729; }
+body.dark .mini-table th { background: var(--card); border-color: var(--line); }
+body.dark .mini-table td { border-color: var(--line); }
+body.dark .side-tabs { border-color: var(--line); }
+body.dark .side-tabs a { color: var(--sub); }
+body.dark .side-tabs a.on { color: #58a6ff; border-bottom-color: #58a6ff; }
+body.dark .search { border-color: var(--line); }
+body.dark .search input { color: var(--text); }
+body.dark .mhead { border-color: var(--line); background: #11161d; }
+body.dark .mrow { border-color: #21262d; }
+body.dark .mrow.sel { background: var(--sel); }
+body.dark .mhold-row { border-color: #21262d; }
+body.dark .mhold-row.sel { background: var(--sel); }
+body.dark .panel { background: var(--card); border-color: var(--line); }
+body.dark .panel > .ph { background: #11161d; border-color: var(--line); }
+body.dark .kpi { background: var(--card); border-color: var(--line); }
+body.dark .field { border-color: var(--line); }
+body.dark .field input, body.dark .field select { background: #0d1117; border-color: var(--line-2); color: var(--text); }
+body.dark .hint { background: #11161d; border-color: var(--line); }
+body.dark .save-bar { background: #11161d; border-color: var(--line); }
+body.dark .trade-alert-card { background: #161b22; color: var(--text); border-color: var(--line-2); }
+body.dark .ta-grid { background: #11161d; border-color: var(--line); }
+body.dark .login-card { background: #161b22; color: var(--text); }
+body.dark .login-card input { background: #0d1117; border-color: var(--line-2); color: var(--text); }

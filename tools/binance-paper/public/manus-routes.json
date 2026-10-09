@@ -1,0 +1,9 @@
+{
+  "routes": [
+    { "path": "/", "title": "거래소" },
+    { "path": "/#/exchange", "title": "거래소" },
+    { "path": "/#/auto", "title": "자동매매" },
+    { "path": "/#/investments", "title": "투자내역" },
+    { "path": "/#/settings", "title": "설정" }
+  ]
+}
