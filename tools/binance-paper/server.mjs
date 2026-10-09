@@ -83,6 +83,7 @@ const defaultPaper = (initialKrw) => ({
   availableKrw: initialKrw,
   realizedKrw: 0,
   position: null,
+  positions: [],
   orders: [],
   trades: [],
   updatedAt: Date.now(),
@@ -94,7 +95,7 @@ function readJson(file, fallback) {
 }
 let config = readJson(configPath, defaultConfig);
 function saveConfig() { config.updatedAt = Date.now(); fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8'); }
-function savePaper() { paper.updatedAt = Date.now(); fs.writeFileSync(paperPath, JSON.stringify(paper, null, 2), 'utf8'); }
+function savePaper() { paperPositions(); paper.updatedAt = Date.now(); fs.writeFileSync(paperPath, JSON.stringify(paper, null, 2), 'utf8'); }
 function versionBook(slotId) { config.slotVersions ||= {}; const key=String(slotId); config.slotVersions[key] ||= { activeVersionId: null, items: [] }; return config.slotVersions[key]; }
 function versionRecord(slot, number) { return { id: `${slot.id}-${number}`, number: `${slot.id}-${number}`, name: slot.name || slot.definition?.슬롯이름 || `${slot.id}번 전략`, fileName: slot.fileName || null, definition: clone(slot.definition), enabledRuleIds: [...(slot.enabledRuleIds || [])], savedAt: Date.now() }; }
 function ensureSlotVersions() { for (const slot of config.slots.items) { if (!slot?.definition) continue; const book=versionBook(slot.id); const same=book.items.find((v)=>JSON.stringify(v.definition)===JSON.stringify(slot.definition) && JSON.stringify(v.enabledRuleIds)===JSON.stringify(slot.enabledRuleIds)); if (!same) book.items.push(versionRecord(slot, book.items.length + 1)); const current=same || book.items.at(-1); if (slot.id===config.activeSlot && !book.activeVersionId) book.activeVersionId=current.id; } }
@@ -106,7 +107,14 @@ config.activeSlot = config.slots.activeId;
 ensureSlotVersions();
 saveConfig();
 let paper = readJson(paperPath, () => defaultPaper(config.paperInitialKrw));
-
+function paperPositions() {
+  const rows = Array.isArray(paper.positions) ? paper.positions.filter(Boolean) : [];
+  if (paper.position && !rows.some((item) => item === paper.position || (item.symbol === paper.position.symbol && item.openedAt === paper.position.openedAt))) rows.unshift(paper.position);
+  paper.positions = rows;
+  paper.position = rows[0] || null;
+  return rows;
+}
+paperPositions();
 const market = {
   symbol: config.symbol,
   interval: config.interval,
@@ -422,11 +430,7 @@ function activePaperSubstitute() { const slot=activeSlot(); const ids=new Set(sl
 function orderbookBuyLead() { const bid=market.bids.reduce((sum,x)=>sum+num(x.qty),0); const ask=market.asks.reduce((sum,x)=>sum+num(x.qty),0); return ask>0?(bid/ask-1)*100:0; }
 function spreadPct() { if(!market.bid||!market.ask||!market.price)return Infinity; return (market.ask-market.bid)/market.price*100; }
 function recentPeakPullback() { const highs=market.candles.slice(-5).map(x=>num(x.h)).filter(Boolean); if(!highs.length||!market.price)return Infinity; const peak=Math.max(...highs); return (peak-market.price)/peak*100; }
-function closePaperFraction(fraction, reason) { const view=paperPositionView(); if(!view)return false; const f=Math.max(.01,Math.min(1,fraction)); const amount=view.marginKrw*f; const pnl=view.pnlKrw*f; paper.availableKrw+=amount+pnl; paper.realizedKrw+=pnl; const position=paper.position; position.marginKrw-=amount; position.qty-=view.qty*f; recordPaperTrade(f>=.999?(isFutures?'PAPER 포지션 정리':'PAPER 매도'):'PAPER 분할 익절',reason,amount+pnl,pnl); if(f>=.999||position.qty<=1e-12)paper.position=null; savePaper(); paperEvent(`${market.symbol} ${reason} · ${Math.round(pnl).toLocaleString('ko-KR')}원`); return true; }
-async function selectFullMarketCandidate() { if(autoState.selecting||paper.position||!activePaperSubstitute()||Date.now()<autoState.cooldownUntil)return; const candidate=marketCatalog.map(row=>({row,flow:flowMetrics(row.symbol),book:bookStats(row.symbol)})).filter(x=>x.row.symbol!==market.symbol&&x.flow&&x.flow.rise30>=.01&&x.flow.activity>=1.1&&x.flow.pullback<=.12&&(!isFutures||!!x.book&&x.book.lead>=5&&x.book.spread<=.07)).sort((a,b)=>(b.flow.rise30*b.row.quoteVolume)-(a.flow.rise30*a.row.quoteVolume))[0]; if(!candidate)return; autoState.selecting=true; autoState.cooldownUntil=Date.now()+1_500; try { market.symbol=candidate.row.symbol; config.symbol=market.symbol; saveConfig(); await seedMarket(); connectMarket(); autoState.initialCandidateSelected=true; paperEvent(`${market.symbol} 전수 감시 후보 선택 · 30초 상승 ${candidate.flow.rise30.toFixed(3)}%`); if(config.autoTrading&&config.mode==='paper'&&!paper.position&&market.price&&market.usdKrw){ const order=paperOrder({action:'buy',amountKrw:config.paperOrderKrw}); if(order.ok){ paper.position.auto={protected:false,peak:market.price}; autoState.cooldownUntil=Date.now()+60_000; paperEvent(`${market.symbol} PAPER 대체형 3조건 자동 매수 · 전수 후보 확정`); } } } finally { autoState.selecting=false; } }
-function autoEvaluate() { autoState.lastTick=Date.now(); try { if(!config.autoTrading||config.mode!=='paper'||!market.price||!market.usdKrw||!activePaperSubstitute())return; const position=paper.position; const view=paperPositionView(); if(position&&view){ position.auto ||= {}; const st=position.auto; if(view.pnlPct>=.3){st.protected=true;st.peak=Math.max(num(st.peak),market.price);} if(st.protected){st.peak=Math.max(num(st.peak),market.price);if((st.peak-market.price)/st.peak*100>=.15){closePaperFraction(1,'반대 강세 대리 청산');autoState.cooldownUntil=Date.now()+60_000;return;}} if(view.pnlPct<=-.25){st.dangerAt ||= Date.now();if(view.pnlPct>=-.19)delete st.dangerAt;else if(view.pnlPct<=-.4||Date.now()-st.dangerAt>=3_000){closePaperFraction(1,'손절 주의 확인 후 비상 손절');autoState.cooldownUntil=Date.now()+60_000;}} return; } if(!autoState.initialCandidateSelected||Date.now()<autoState.cooldownUntil||(isFutures&&market.candles.length<20))return; const flow=flowMetrics(market.symbol); if(!flow)return; const threeConditions=flow.rise30>=.01&&flow.activity>=1.1&&(isFutures?recentPeakPullback():flow.pullback)<=.12; const futuresExecutionOk=!isFutures||(orderbookBuyLead()>=5&&spreadPct()<=.07); if(!threeConditions||!futuresExecutionOk)return; const result=paperOrder({action:'buy',amountKrw:config.paperOrderKrw}); if(result.ok){paper.position.auto={protected:false,peak:market.price};autoState.cooldownUntil=Date.now()+60_000;paperEvent(`${market.symbol} PAPER 대체형 3조건 자동 매수 · 30초 상승 ${flow.rise30.toFixed(3)}%`);} } catch(error){paperEvent(`자동매매 판단 대기 · ${error instanceof Error?error.message:'확인 필요'}`);} }
-function paperPositionView() {
-  const position = paper.position;
+function paperPositionView(position = paperPositions()[0]) {
   if (!position) return null;
   const catalogPrice = num(marketCatalog.find((row) => row.symbol === position.symbol)?.price);
   const markPrice = catalogPrice || (position.symbol === market.symbol ? num(market.price) : 0);
@@ -436,10 +440,57 @@ function paperPositionView() {
   const pnlKrw = (markKrw - position.entryKrw) * position.qty * sign;
   return { ...position, markKrw, pnlKrw, pnlPct: position.marginKrw ? pnlKrw / position.marginKrw * 100 : 0 };
 }
+function paperPositionViews() { return paperPositions().map((position) => paperPositionView(position)).filter(Boolean); }
+function closePaperFraction(fraction, reason, symbol = market.symbol) {
+  const position = paperPositions().find((item) => item.symbol === symbol) || paperPositions()[0];
+  const view = paperPositionView(position);
+  if (!position || !view) return false;
+  const f = Math.max(.01, Math.min(1, fraction)); const amount = view.marginKrw * f; const pnl = view.pnlKrw * f;
+  paper.availableKrw += amount + pnl; paper.realizedKrw += pnl; position.marginKrw -= amount; position.qty -= view.qty * f;
+  recordPaperTrade(f >= .999 ? (isFutures ? 'PAPER 포지션 정리' : 'PAPER 매도') : 'PAPER 분할 익절', reason, amount + pnl, pnl);
+  if (f >= .999 || position.qty <= 1e-12) paper.positions = paperPositions().filter((item) => item !== position);
+  paperPositions(); savePaper(); paperEvent(`${position.symbol} ${reason} · ${Math.round(pnl).toLocaleString('ko-KR')}원`); return true;
+}
+async function selectFullMarketCandidate() {
+  const held = new Set(paperPositions().map((position) => position.symbol));
+  if (autoState.selecting || held.size >= config.maxPositions || !activePaperSubstitute() || Date.now() < autoState.cooldownUntil) return;
+  const candidate = marketCatalog.map((row) => ({ row, flow: flowMetrics(row.symbol), book: bookStats(row.symbol) }))
+    .filter((item) => !held.has(item.row.symbol) && item.flow && item.flow.rise30 >= .01 && item.flow.activity >= 1.1 && item.flow.pullback <= .12 && (!isFutures || !!item.book && item.book.lead >= 5 && item.book.spread <= .07))
+    .sort((left, right) => (right.flow.rise30 * right.row.quoteVolume) - (left.flow.rise30 * left.row.quoteVolume))[0];
+  if (!candidate) return;
+  autoState.selecting = true; autoState.cooldownUntil = Date.now() + 1_500;
+  try {
+    market.symbol = candidate.row.symbol; config.symbol = market.symbol; saveConfig(); await seedMarket(); connectMarket(); autoState.initialCandidateSelected = true;
+    paperEvent(`${market.symbol} 전수 감시 후보 선택 · 30초 상승 ${candidate.flow.rise30.toFixed(3)}%`);
+    if (config.autoTrading && config.mode === 'paper' && paperPositions().length < config.maxPositions && market.price && market.usdKrw) {
+      const order = paperOrder({ action: 'buy', amountKrw: config.paperOrderKrw });
+      if (order.ok) { const opened = paperPositions().at(-1); if (opened) opened.auto = { protected: false, peak: market.price }; autoState.cooldownUntil = Date.now() + 3_000; paperEvent(`${market.symbol} PAPER 대체형 3조건 자동 매수 · 전수 후보 확정`); }
+    }
+  } finally { autoState.selecting = false; }
+}
+function autoEvaluate() {
+  autoState.lastTick = Date.now();
+  try {
+    if (!config.autoTrading || config.mode !== 'paper' || !market.price || !market.usdKrw || !activePaperSubstitute()) return;
+    for (const position of [...paperPositions()]) {
+      const view = paperPositionView(position); if (!view) continue;
+      const price = view.markKrw / Math.max(market.usdKrw, 1); position.auto ||= {}; const st = position.auto;
+      if (view.pnlPct >= .3) { st.protected = true; st.peak = Math.max(num(st.peak), price); }
+      if (st.protected) { st.peak = Math.max(num(st.peak), price); if ((st.peak - price) / st.peak * 100 >= .15) { closePaperFraction(1, '반대 강세 대리 청산', position.symbol); autoState.cooldownUntil = Date.now() + 3_000; continue; } }
+      if (view.pnlPct <= -.25) { st.dangerAt ||= Date.now(); if (view.pnlPct >= -.19) delete st.dangerAt; else if (view.pnlPct <= -.4 || Date.now() - st.dangerAt >= 3_000) { closePaperFraction(1, '손절 주의 확인 후 비상 손절', position.symbol); autoState.cooldownUntil = Date.now() + 3_000; } }
+    }
+    if (paperPositions().length >= config.maxPositions || !autoState.initialCandidateSelected || Date.now() < autoState.cooldownUntil || (isFutures && market.candles.length < 20)) return;
+    const flow = flowMetrics(market.symbol); if (!flow) return;
+    const threeConditions = flow.rise30 >= .01 && flow.activity >= 1.1 && (isFutures ? recentPeakPullback() : flow.pullback) <= .12;
+    const futuresExecutionOk = !isFutures || (orderbookBuyLead() >= 5 && spreadPct() <= .07); if (!threeConditions || !futuresExecutionOk) return;
+    const result = paperOrder({ action: 'buy', amountKrw: config.paperOrderKrw });
+    if (result.ok) { const opened = paperPositions().at(-1); if (opened) opened.auto = { protected: false, peak: market.price }; autoState.cooldownUntil = Date.now() + 3_000; paperEvent(`${market.symbol} PAPER 대체형 3조건 자동 매수 · 30초 상승 ${flow.rise30.toFixed(3)}%`); }
+  } catch (error) { paperEvent(`자동매매 판단 대기 · ${error instanceof Error ? error.message : '확인 필요'}`); }
+}
 function paperAccountView() {
-  const position = paperPositionView();
-  const totalKrw = paper.availableKrw + (position ? position.marginKrw + position.pnlKrw : 0);
-  return { source: 'PAPER', initialKrw: paper.initialKrw, availableKrw: paper.availableKrw, totalKrw, realizedKrw: paper.realizedKrw, position, balances: [], positions: position ? [position] : [], orders: paper.orders.slice(0, 40), trades: paper.trades.slice(0, 80), events: paper.events || [] };
+  const positions = paperPositionViews();
+  const totalKrw = paper.availableKrw + positions.reduce((sum, position) => sum + position.marginKrw + position.pnlKrw, 0);
+  return { source: 'PAPER', initialKrw: paper.initialKrw, availableKrw: paper.availableKrw, totalKrw, realizedKrw: paper.realizedKrw, position: positions[0] || null, balances: [], positions, orders: paper.orders.slice(0, 40), trades: paper.trades.slice(0, 80), events: paper.events || [] };
 }
 function recordPaperTrade(type, detail, amountKrw, pnlKrw = null) {
   paper.trades.unshift({ id: crypto.randomUUID(), time: Date.now(), type, detail, amountKrw, pnlKrw, source: 'PAPER' });
@@ -455,22 +506,25 @@ function paperOrder(body) {
     return { ok: true, message: `${initialKrw.toLocaleString('ko-KR')}원 PAPER 계좌를 완전히 초기화했습니다` };
   }
   if (!market.price || !market.usdKrw) throw new Error('실시간 Binance 시세와 환율을 받은 뒤 주문할 수 있습니다');
-  const position = paperPositionView();
+  const positions = paperPositions();
+  const position = paperPositionView(positions.find((item) => item.symbol === market.symbol) || positions[0]);
   if (action === 'close') {
     if (!position) throw new Error('정리할 PAPER 보유분이 없습니다');
     paper.availableKrw += position.marginKrw + position.pnlKrw;
     paper.realizedKrw += position.pnlKrw;
-    recordPaperTrade(isFutures ? 'PAPER 포지션 정리' : 'PAPER 매도', `${market.symbol} 보유분 정리`, position.marginKrw + position.pnlKrw, position.pnlKrw);
-    paper.position = null; savePaper(); return { ok: true, message: 'PAPER 보유분을 정리했습니다' };
+    recordPaperTrade(isFutures ? 'PAPER 포지션 정리' : 'PAPER 매도', `${position.symbol} 보유분 정리`, position.marginKrw + position.pnlKrw, position.pnlKrw);
+    paper.positions = positions.filter((item) => item.symbol !== position.symbol); paperPositions(); savePaper(); return { ok: true, message: 'PAPER 보유분을 정리했습니다' };
   }
-  if (position) throw new Error('현재 PAPER 보유분이 있습니다. 먼저 정리 후 새 주문을 넣으세요');
+  if (positions.some((item) => item.symbol === market.symbol)) throw new Error('해당 PAPER 종목을 이미 보유 중입니다');
+  if (positions.length >= config.maxPositions) throw new Error(`동시 보유 한도 ${config.maxPositions}개에 도달했습니다`);
   if (amountKrw > paper.availableKrw) throw new Error('PAPER 주문가능 원화가 부족합니다');
   const side = action === 'short' && isFutures ? 'SHORT' : 'LONG';
   const leverage = isFutures ? Math.max(1, Math.min(125, Math.floor(num(body.leverage, config.futuresLeverage)))) : 1;
   const notionalKrw = amountKrw * leverage;
   const qty = notionalKrw / krw(market.price);
   paper.availableKrw -= amountKrw;
-  paper.position = { symbol: market.symbol, side, qty, entryKrw: krw(market.price), marginKrw: amountKrw, leverage, openedAt: Date.now() };
+  const opened = { symbol: market.symbol, side, qty, entryKrw: krw(market.price), marginKrw: amountKrw, leverage, openedAt: Date.now() };
+  paper.positions = [...positions, opened]; paper.position = paper.positions[0];
   recordPaperTrade(side === 'SHORT' ? 'PAPER 숏 진입' : 'PAPER 매수', `${market.symbol} · ${leverage}배`, amountKrw);
   savePaper();
   return { ok: true, message: `${side === 'SHORT' ? 'PAPER 숏' : 'PAPER 매수'} 주문을 기록했습니다` };
@@ -616,9 +670,10 @@ function accountView() { return config.mode === 'live' ? liveAccount : paperAcco
 function uiCode(symbol) { return `USDT-${String(symbol || '').replace(/USDT$/, '')}`; }
 function uiSymbol(code) { const base = String(code || '').replace(/^USDT-/, '').replace(/[^A-Z0-9]/g, ''); return base ? `${base}USDT` : market.symbol; }
 function uiTicker(row) { const symbol = row.symbol || market.symbol; const price = krw(num(row.price, market.price)); const rate = num(row.changePct, market.changePct) / 100; return { cd: uiCode(symbol), tp: price, scr: rate, scp: price * rate, hp: symbol === market.symbol ? krw(market.high24h) : price, lp: symbol === market.symbol ? krw(market.low24h) : price, atv24h: symbol === market.symbol ? market.volumeBase : 0, atp24h: krw(num(row.quoteVolume, market.volumeQuote)) }; }
-function uiPosition() { const p = paperPositionView(); return p ? { market: uiCode(p.symbol), qty: p.qty, avgPrice: p.entryKrw, mark: p.markKrw, cost: p.marginKrw, value: p.marginKrw + p.pnlKrw, netPnl: p.pnlKrw, netPct: p.pnlPct, heldSec: Math.floor((Date.now() - p.openedAt) / 1000) } : null; }
+function uiPositionFrom(p) { return p ? { market: uiCode(p.symbol), qty: p.qty, avgPrice: p.entryKrw, mark: p.markKrw, cost: p.marginKrw, value: p.marginKrw + p.pnlKrw, netPnl: p.pnlKrw, netPct: p.pnlPct, heldSec: Math.floor((Date.now() - p.openedAt) / 1000) } : null; }
+function uiPosition() { return uiPositionFrom(paperPositionView()); }
 function uiConfig() { return { mode: config.mode, autoTrading: config.autoTrading, markets: config.watchMarkets || [], slots: { activeId: config.activeSlot, items: config.slots.items }, slotVersions: clone(config.slotVersions || {}), paper: { initialKrw: config.paperInitialKrw, feePct: 0, slippagePct: 0 }, trade: { orderMode: config.paperOrderMode || 'fixed', orderKrw: config.paperOrderKrw, orderPct: config.paperOrderPct ?? 10, maxPositions: config.maxPositions ?? 1, hardStopLossPct: 0 }, alerts: { voiceEnabled: false, voiceVolume: 0.7 }, screener: { enabled: true, candidates: marketCatalog.length, refreshSec: 3 }, strategyExport: { ready: true }, cost: { usdKrw: market.usdKrw || 1350 } }; }
-function uiSnapshot() { const account = paperAccountView(); const pos = uiPosition(); const equity = account.totalKrw; const pnl = equity - account.initialKrw; const markets = marketCatalog.map((x) => ({ code: uiCode(x.symbol), ko: x.symbol.replace(/USDT$/, ''), en: x.symbol.replace(/USDT$/, ''), warning: false })); const tickers = marketCatalog.map(uiTicker); const selected = uiCode(market.symbol); const watch = markets.map((item, i) => ({ market: item.code, watched: true, warm: true, price: tickers.find((t) => t.cd === item.code)?.tp || 0, position: pos?.market === item.code ? pos : null, bidShare15: .5, last: { kind: 'watch', reason: 'Binance full-market monitoring' }, entryEvidence: { rules: [] }, rank: i + 1 })); return { markets, tickers, config: uiConfig(), summary: { equity, initialKrw: account.initialKrw, krw: account.availableKrw, totalPnl: pnl, totalPnlPct: account.initialKrw ? pnl / account.initialKrw * 100 : 0, realizedPnl: account.realizedKrw, feesPaid: 0, trades: account.trades.length, wins: 0, losses: 0, winRate: null, avgHoldSec: pos?.heldSec || 0, positions: pos ? [pos] : [], inflight: [], activeSlot: { id: config.activeSlot, name: activeSlot()?.name || `${config.activeSlot} slot`, rules: 0 }, effectiveDecisionMode: 'rule', jev: { label: 'Binance rule', totalCalls: 0, totalErrors: 0, totalCostUsd: 0, tokens: 0 }, startedAt: account.updatedAt, maxDrawdownPct: 0 }, watch, trades: account.trades.map((t) => ({ id: t.id, t: t.time, market: selected, side: /sell|close|정리|매도/i.test(t.type) ? 'sell' : 'buy', price: krw(market.price), qty: pos?.qty || 0, gross: t.amountKrw, fee: 0, net: t.amountKrw, pnl: t.pnlKrw, reason: t.detail, reasonKo: t.type, slot: { id: config.activeSlot, name: activeSlot()?.name || '' } })), decisions: [], equity: [[account.updatedAt, equity]], logs: [...(paper.events || []).map((x)=>({t:x.time,level:'info',msg:x.message})), { t: Date.now(), level: 'info', msg: 'Binance 실시간 시세 수신' }], ob: { cd: selected, ask: market.asks.map((x) => ({ p: krw(x.price), s: x.qty })), bid: market.bids.map((x) => ({ p: krw(x.price), s: x.qty })), tas: 0, tbs: 0 }, status: { binance: market.connected, lastBinanceLatency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null }, screener: { enabled: true, rows: watch.map((x, i) => ({ code: x.market, rank: i + 1, delta: 0, score: 0 })) }, monitor: { current: { markets: marketCatalog.length, latency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null } } }; }
+function uiSnapshot() { const account = paperAccountView(); const positions = (account.positions || []).map(uiPositionFrom); const pos = positions.find((item) => item.market === uiCode(market.symbol)) || positions[0] || null; const equity = account.totalKrw; const pnl = equity - account.initialKrw; const markets = marketCatalog.map((x) => ({ code: uiCode(x.symbol), ko: x.symbol.replace(/USDT$/, ''), en: x.symbol.replace(/USDT$/, ''), warning: false })); const tickers = marketCatalog.map(uiTicker); const selected = uiCode(market.symbol); const watch = markets.map((item, i) => ({ market: item.code, watched: true, warm: true, price: tickers.find((t) => t.cd === item.code)?.tp || 0, position: positions.find((position) => position.market === item.code) || null, bidShare15: .5, last: { kind: 'watch', reason: 'Binance full-market monitoring' }, entryEvidence: { rules: [] }, rank: i + 1 })); return { markets, tickers, config: uiConfig(), summary: { equity, initialKrw: account.initialKrw, krw: account.availableKrw, totalPnl: pnl, totalPnlPct: account.initialKrw ? pnl / account.initialKrw * 100 : 0, realizedPnl: account.realizedKrw, feesPaid: 0, trades: account.trades.length, wins: 0, losses: 0, winRate: null, avgHoldSec: pos?.heldSec || 0, positions, inflight: [], activeSlot: { id: config.activeSlot, name: activeSlot()?.name || `${config.activeSlot} slot`, rules: 0 }, effectiveDecisionMode: 'rule', jev: { label: 'Binance rule', totalCalls: 0, totalErrors: 0, totalCostUsd: 0, tokens: 0 }, startedAt: account.updatedAt, maxDrawdownPct: 0 }, watch, trades: account.trades.map((t) => ({ id: t.id, t: t.time, market: selected, side: /sell|close|정리|매도/i.test(t.type) ? 'sell' : 'buy', price: krw(market.price), qty: pos?.qty || 0, gross: t.amountKrw, fee: 0, net: t.amountKrw, pnl: t.pnlKrw, reason: t.detail, reasonKo: t.type, slot: { id: config.activeSlot, name: activeSlot()?.name || '' } })), decisions: [], equity: [[account.updatedAt, equity]], logs: [...(paper.events || []).map((x)=>({t:x.time,level:'info',msg:x.message})), { t: Date.now(), level: 'info', msg: 'Binance 실시간 시세 수신' }], ob: { cd: selected, ask: market.asks.map((x) => ({ p: krw(x.price), s: x.qty })), bid: market.bids.map((x) => ({ p: krw(x.price), s: x.qty })), tas: 0, tbs: 0 }, status: { binance: market.connected, lastBinanceLatency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null }, screener: { enabled: true, rows: watch.map((x, i) => ({ code: x.market, rank: i + 1, delta: 0, score: 0 })) }, monitor: { current: { markets: marketCatalog.length, latency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null } } }; }
 // BINANCE_UI_COMPAT_END
 
 function snapshot(includeMarkets = true) {
@@ -671,10 +726,10 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive' });
       res.write(`event: init\ndata: ${JSON.stringify(uiSnapshot())}\n\n`); clients.add(res); req.on('close', () => clients.delete(res)); return;
     }
-    if (req.method === 'POST' && url.pathname === '/api/view') { const body = await readBody(req); const symbol = paper.position?.symbol || uiSymbol(body.market); if (safeSymbol(symbol)) { market.symbol = symbol; config.symbol = symbol; saveConfig(); await seedMarket(); connectMarket(); } const ui = uiSnapshot(); return json(res, 200, { ticker: ui.tickers.find((x) => x.cd === uiCode(symbol)), ob: ui.ob }); }
+    if (req.method === 'POST' && url.pathname === '/api/view') { const body = await readBody(req); const symbol = uiSymbol(body.market) || paper.position?.symbol; if (safeSymbol(symbol)) { market.symbol = symbol; config.symbol = symbol; saveConfig(); await seedMarket(); connectMarket(); } const ui = uiSnapshot(); return json(res, 200, { ticker: ui.tickers.find((x) => x.cd === uiCode(symbol)), ob: ui.ob }); }
     if (req.method === 'POST' && url.pathname === '/api/select') {
       const body = await readBody(req); const requested = safeSymbol(body.symbol); if (!requested) throw new Error('지원하지 않는 USDT 마켓입니다');
-      const symbol = paper.position?.symbol || requested;
+      const symbol = requested || paper.position?.symbol;
       market.symbol = symbol; config.symbol = symbol; saveConfig(); await seedMarket(); connectMarket(); return json(res, 200, snapshot());
     }
     if (req.method === 'POST' && url.pathname === '/api/interval') {
