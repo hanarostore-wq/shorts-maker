@@ -281,6 +281,11 @@ function healState(state: State): State {
   const blogProject = state.projects.find((project) => project.id === "p4");
   if (blogProject) { blogProject.departmentId = "blog"; blogProject.agentCount = 0; blogProject.leadAgent = "미배정"; }
   else if (freshBlogProject) state.projects.push(structuredClone(freshBlogProject));
+  for (const id of ["p6", "p7"]) {
+    const currentProject = state.projects.find((project) => project.id === id);
+    const freshProject = projects.find((project) => project.id === id);
+    if (currentProject && freshProject) Object.assign(currentProject, structuredClone(freshProject));
+  }
   const existingDepartmentIds = new Set(state.departments.map((department) => department.id));
   for (const freshDepartment of initialDepartments) {
     if (!existingDepartmentIds.has(freshDepartment.id)) {

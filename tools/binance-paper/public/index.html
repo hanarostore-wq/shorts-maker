@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Binance 로컬 트레이딩 터미널</title>
+  <link rel="stylesheet" href="/app.css?v=2.0.0">
+</head>
+<body>
+  <div id="app" class="terminal">
+    <header class="topbar">
+      <div class="brand"><img src="https://bin.bnbstatic.com/static/images/common/favicon.ico" alt="Binance"><b>BINANCE</b><span class="brand-divider"></span><strong id="terminalTitle">현물</strong><span class="local-badge">BLACK PC LOCAL</span></div>
+      <nav class="top-nav" aria-label="주요 메뉴"><button class="active">거래</button><button data-open-settings>자동매매</button><button data-open-settings>지갑</button><button data-open-settings>주문</button><button data-open-settings>전략 슬롯</button></nav>
+      <div class="top-actions"><span class="connection" id="connection">시세 연결 중</span><button class="mode-chip" id="modeChip" data-open-settings>PAPER</button><button class="settings-trigger" data-open-settings title="API·투자금·자동매매 설정">⚙ 설정</button></div>
+    </header>
+
+    <section class="market-strip">
+      <button class="symbol-picker" id="symbolPicker" title="거래 종목 선택"><span class="star">☆</span><span><b id="symbolText">BTC/USDT</b><small id="marketType">현물</small></span><span class="chev">⌄</span></button>
+      <div class="price-box"><b id="lastPrice">-</b><small id="lastPriceUsd">-</small></div>
+      <div class="change-box"><b id="changePct">-</b><small>24시간 변동</small></div>
+      <div class="ticker-stat"><span>24시간 고가</span><b id="high24">-</b></div>
+      <div class="ticker-stat"><span>24시간 저가</span><b id="low24">-</b></div>
+      <div class="ticker-stat"><span>24시간 거래대금</span><b id="volume24">-</b></div>
+      <div class="ticker-stat futures-only"><span>펀딩비 <i title="선물 롱과 숏 사이에 주고받는 정산 비율">?</i></span><b id="fundingRate">-</b></div>
+      <div class="ticker-stat futures-only"><span>미결제약정 <i title="아직 끝나지 않은 선물 계약 수">?</i></span><b id="openInterest">-</b></div>
+      <div class="ticker-stat"><span>수신 간격</span><b id="receiveGap">-</b></div>
+    </section>
+
+    <main class="terminal-grid">
+      <aside class="markets-panel panel">
+        <div class="panel-title"><b>마켓</b><span id="marketCount">USDT</span></div>
+        <div class="market-tabs"><button class="active">즐겨찾기</button><button>USDT</button><button>보유</button></div>
+        <label class="search"><span>⌕</span><input id="marketSearch" placeholder="코인 검색"></label>
+        <div class="market-head"><span>마켓</span><span>현재가</span><span>24시간</span></div>
+        <div id="marketList" class="market-list"></div>
+        <div class="market-foot">실시간 Binance WebSocket 수신</div>
+      </aside>
+
+      <section class="chart-column">
+        <section class="chart-panel panel">
+          <header class="chart-head"><div class="chart-tabs"><button class="active">차트</button><button>정보</button><button>분석</button></div><div class="chart-actions"><button class="interval active" data-interval="1m">1분</button><button class="interval" data-interval="3m">3분</button><button class="interval" data-interval="5m">5분</button><button class="interval" data-interval="15m">15분</button><button class="interval" data-interval="1h">1시간</button><button class="interval" data-interval="4h">4시간</button><button class="interval" data-interval="1d">일</button><span class="toolbar-sep"></span><button id="chartZoomOut">−</button><button id="chartZoomIn">＋</button></div></header>
+          <div class="chart-meta"><span id="chartSymbol">BTCUSDT</span><span>시가 <b id="candleOpen">-</b></span><span>고가 <b class="up" id="candleHigh">-</b></span><span>저가 <b class="down" id="candleLow">-</b></span><span>종가 <b id="candleClose">-</b></span><span>거래량 <b id="candleVolume">-</b></span></div>
+          <div class="chart-wrap"><canvas id="priceChart" width="1000" height="480" aria-label="실시간 캔들 차트"></canvas><div id="chartEmpty" class="chart-empty">실시간 캔들 수신 중</div></div>
+          <div class="chart-bottom"><span><i class="signal-dot online"></i> Binance 가격·캔들 실시간 수신</span><span id="chartUpdated">-</span></div>
+        </section>
+
+        <section class="bottom-workspace panel">
+          <div class="workspace-tabs" id="workspaceTabs"><button class="active" data-tab="positions">포지션</button><button data-tab="openOrders">미체결 주문</button><button data-tab="history">거래 내역</button><button data-tab="assets">자산</button><button data-tab="events">실시간 알림</button></div>
+          <div id="workspaceContent" class="workspace-content"></div>
+        </section>
+      </section>
+
+      <aside class="right-column">
+        <section class="orderbook panel">
+          <div class="panel-title"><b>호가창</b><span class="book-mode">20단계</span></div>
+          <div class="book-head"><span>가격(USDT)</span><span>수량</span><span>누적</span></div>
+          <div id="asks" class="book-list asks"></div>
+          <div class="spread"><b id="spreadPrice">-</b><small id="spreadKrw">-</small><span id="spreadPct">-</span></div>
+          <div id="bids" class="book-list bids"></div>
+          <div class="book-foot"><span>매수 힘 <b id="bidPower">-</b></span><span>매도 힘 <b id="askPower">-</b></span></div>
+        </section>
+
+        <section class="recent-trades panel">
+          <div class="panel-title"><b>최근 체결</b><span>실시간</span></div>
+          <div class="trade-head"><span>가격(USDT)</span><span>수량</span><span>시간</span></div>
+          <div id="recentTrades" class="recent-list"></div>
+        </section>
+
+        <section class="order-panel panel">
+          <div class="order-tabs"><button class="active buy" data-action="buy">매수</button><button class="sell" data-action="sell">매도</button><button class="short futures-only" data-action="short">숏</button><button class="close-pos futures-only" data-action="close">정리</button></div>
+          <div class="order-inner">
+            <div class="order-type"><button class="active" data-order-type="market">시장가</button><button data-order-type="limit">지정가</button></div>
+            <label class="field limit-field hidden"><span>주문 가격 <i title="원하는 가격을 정해 주문합니다">?</i></span><div><input id="limitPrice" inputmode="decimal" placeholder="현재가"><em>USDT</em></div></label>
+            <label class="field"><span id="amountLabel">주문 금액</span><div><input id="orderAmount" inputmode="numeric" placeholder="0"><em>KRW</em></div></label>
+            <div class="quick-amount"><button data-ratio="0.1">10%</button><button data-ratio="0.25">25%</button><button data-ratio="0.5">50%</button><button data-ratio="1">최대</button></div>
+            <label class="field leverage-field futures-only"><span>레버리지 <i title="같은 돈으로 더 큰 금액을 거래하는 배수이며 손실도 커집니다">?</i></span><div><input id="leverage" inputmode="numeric" value="1"><em>배</em></div></label>
+            <div class="order-summary"><span>예상 수수료</span><b id="feeEstimate">-</b><span>주문 후 남는 원화</span><b id="afterOrder">-</b></div>
+            <button class="order-submit buy" id="orderSubmit">PAPER 매수</button>
+            <p class="order-guide" id="orderGuide">모의투자입니다 · 가상 원화로 주문을 연습합니다</p>
+          </div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <dialog id="settingsDialog" class="settings-dialog">
+    <form method="dialog" class="settings-card" id="settingsForm">
+      <header><div><b>Binance 로컬 설정</b><small>모든 설정은 BLACK PC에만 저장됩니다</small></div><button value="cancel" class="icon-close" aria-label="닫기">✕</button></header>
+      <section class="setting-group"><h3>투자 모드</h3><div class="mode-switch"><button type="button" data-mode="paper">PAPER 모의계좌</button><button type="button" data-mode="live">LIVE 실계좌</button></div><p class="setting-note">LIVE는 API 키를 입력해도 주문 확인창을 한 번 더 통과해야 실제 주문이 전송됩니다</p></section>
+      <section class="setting-grid"><label><span>PAPER 시작 금액</span><input id="paperInitial" inputmode="numeric" placeholder="100000000"><em>KRW</em></label><label><span>PAPER 한 번 주문 금액</span><input id="paperOrder" inputmode="numeric" placeholder="1000000"><em>KRW</em></label><label class="futures-only"><span>선물 기본 레버리지</span><input id="futuresLeverage" inputmode="numeric" placeholder="1"><em>배</em></label><label><span>자동매매</span><select id="autoTrading"><option value="false">꺼짐 · 수동 주문만</option><option value="true">켜짐 · 적용 슬롯 규칙 사용</option></select></label><label><span>적용 슬롯</span><select id="activeSlot"><option value="1">1번 슬롯</option><option value="2">2번 슬롯</option><option value="3">3번 슬롯</option><option value="4">4번 슬롯</option></select></label></section>
+      <section class="setting-group api-group"><h3>Binance API 연결</h3><p class="setting-note">API Key와 Secret Key는 이 로컬 서버의 보호된 폴더에만 보관됩니다. 채팅·GitHub·관제실 로그에는 저장되지 않습니다</p><label><span>API Key</span><input id="apiKey" autocomplete="off" placeholder="입력한 키는 화면에 다시 표시하지 않습니다"></label><label><span>Secret Key</span><input id="secretKey" type="password" autocomplete="new-password" placeholder="새 키를 입력할 때만 작성"></label><div id="apiStatus" class="api-status">연결 상태 확인 중</div></section>
+      <footer><button type="button" id="paperReset" class="danger-lite">PAPER 계좌 완전 초기화</button><button value="save" class="save-settings">설정 저장</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="confirmDialog" class="confirm-dialog"><section class="confirm-card"><header><b>실계좌 주문 최종 확인</b><span>LIVE</span></header><p id="confirmText">-</p><div class="confirm-details" id="confirmDetails"></div><p class="warning">확인하면 Binance API로 실제 주문이 전송됩니다. 주문 금액과 방향을 다시 확인하세요</p><footer><button id="cancelLiveOrder">취소</button><button id="confirmLiveOrder" class="danger">실제 주문 전송</button></footer></section></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/app.js?v=2.0.0"></script>
+</body>
+</html>

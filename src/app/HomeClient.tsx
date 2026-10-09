@@ -7,6 +7,7 @@ import { ActivityLog } from "@/components/ActivityLog";
 import { AutoSync } from "@/components/AutoSync";
 import { UpbitTerminalModal } from "@/components/UpbitTerminalModal";
 import { YuJinTradersModal } from "@/components/YuJinTradersModal";
+import { BinanceTerminalModal } from "@/components/BinanceTerminalModal";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
 import { ShortsStudioModal } from "@/components/ShortsStudioModal";
 import { SHORTS_AGENT_STEP_MAP } from "@/lib/agentIntegrations";
@@ -22,13 +23,16 @@ interface State {
 }
 
 const UPBIT_MODAL_AGENT_IDS = new Set(["c_yujin", "c7", "c13"]);
+const BINANCE_MODAL_AGENT_IDS = new Set(["c_binance_spot", "c_binance_futures"]);
 const UPBIT_MODAL_STORAGE_KEY = "control-room-upbit-modal-agent";
 const isUpbitModalAgent = (agentId: string | null | undefined) => Boolean(agentId && UPBIT_MODAL_AGENT_IDS.has(agentId));
+const isBinanceModalAgent = (agentId: string | null | undefined) => Boolean(agentId && BINANCE_MODAL_AGENT_IDS.has(agentId));
 function restoredUpbitModalAgent(): Agent | null {
   if (typeof window === "undefined") return null;
   const id = window.localStorage.getItem(UPBIT_MODAL_STORAGE_KEY);
-  if (!id || !isUpbitModalAgent(id)) return null;
-  return { id, name: "업비트", task: "관제실 화면 복원 중", status: "active" };
+  if (!id || (!isUpbitModalAgent(id) && !isBinanceModalAgent(id))) return null;
+  const name = id === "c_binance_spot" ? "바이낸스 현물" : id === "c_binance_futures" ? "바이낸스 선물" : "업비트";
+  return { id, name, task: "관제실 화면 복원 중", status: "active" };
 }
 
 export default function Home() {
@@ -112,7 +116,7 @@ export default function Home() {
     setSelectedAgent(null);
   };
   const handleAgentClick = (agent: Agent) => {
-    if (isUpbitModalAgent(agent.id)) window.localStorage.setItem(UPBIT_MODAL_STORAGE_KEY, agent.id);
+    if (isUpbitModalAgent(agent.id) || isBinanceModalAgent(agent.id)) window.localStorage.setItem(UPBIT_MODAL_STORAGE_KEY, agent.id);
     else window.localStorage.removeItem(UPBIT_MODAL_STORAGE_KEY);
     setSelectedAgent(agent);
   };
@@ -230,6 +234,7 @@ export default function Home() {
       {/* 업비트 터미널 모달 */}
       <UpbitTerminalModal mode={liveSelectedAgent?.id === "c7" ? "paper" : liveSelectedAgent?.id === "c13" ? "live" : null} onClose={closeAgentModal} />
       <YuJinTradersModal isOpen={liveSelectedAgent?.id === "c_yujin"} onClose={closeAgentModal} />
+      <BinanceTerminalModal kind={liveSelectedAgent?.id === "c_binance_spot" ? "spot" : liveSelectedAgent?.id === "c_binance_futures" ? "futures" : null} onClose={closeAgentModal} />
       
       {/* 쇼츠부서 남다른AI Shorts 분석기 모달 (선택된 직원의 전용 단계로 즉시 오픈) */}
       <ShortsStudioModal
@@ -243,7 +248,7 @@ export default function Home() {
       />
 
       {/* 기타 일반 직원 상세 모달 */}
-      {liveSelectedAgent && !["c7", "c13"].includes(liveSelectedAgent.id) && !isShortsStudioAgent && (
+      {liveSelectedAgent && !["c7", "c13", "c_binance_spot", "c_binance_futures"].includes(liveSelectedAgent.id) && !isShortsStudioAgent && (
         <AgentDetailModal
           agent={liveSelectedAgent}
           departments={state.departments}

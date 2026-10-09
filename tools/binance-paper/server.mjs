@@ -1,211 +1,518 @@
-import http from "node:http";
-import fs from "node:fs";
-import path from "node:path";
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
-const kind = process.env.PAPER_KIND === "futures" ? "futures" : "spot";
-const port = Number(process.env.PORT || (kind === "spot" ? 7081 : 7082));
-const dataDir = process.env.PAPER_DATA_DIR || `C:/ProgramData/BinancePaper/${kind}`;
-const statePath = path.join(dataDir, "paper-state.json");
-const symbol = "BTCUSDT";
-const isFutures = kind === "futures";
-const title = isFutures ? "BINANCE 선물 · PAPER" : "BINANCE 현물 · PAPER";
-const accent = isFutures ? "#a78bfa" : "#37d67a";
-const marketApi = isFutures ? "https://fapi.binance.com/fapi/v1" : "https://data-api.binance.vision/api/v3";
+const kind = process.env.PAPER_KIND === 'futures' ? 'futures' : 'spot';
+const isFutures = kind === 'futures';
+const port = Number(process.env.PORT || (isFutures ? 7082 : 7081));
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
+const PUBLIC = path.join(ROOT, 'public');
+const dataDir = process.env.PAPER_DATA_DIR || `C:/ProgramData/BinanceTerminal/${kind}`;
+const configPath = path.join(dataDir, 'terminal-config.json');
+const paperPath = path.join(dataDir, 'paper-account.json');
+
+const SPOT_REST = process.env.BINANCE_SPOT_REST || 'https://api.binance.com';
+const SPOT_DATA = process.env.BINANCE_SPOT_DATA || 'https://data-api.binance.vision';
+const FUTURES_REST = process.env.BINANCE_FUTURES_REST || 'https://fapi.binance.com';
+const SPOT_WS = 'wss://stream.binance.com:9443';
+const FUTURES_WS = 'wss://fstream.binance.com';
+const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT', 'LINKUSDT', 'SUIUSDT'];
 
 fs.mkdirSync(dataDir, { recursive: true });
 
-const emptyState = () => ({
-  initialKrw: 100_000_000,
-  krw: 100_000_000,
-  position: null,
-  trades: [],
-  realizedKrw: 0,
-  orderKrw: 1_000_000,
+const defaultConfig = () => ({
+  mode: 'paper',
+  apiKey: '',
+  secretKey: '',
+  paperInitialKrw: 100_000_000,
+  paperOrderKrw: 1_000_000,
+  futuresLeverage: 1,
   autoTrading: false,
-  updatedAt: new Date().toISOString(),
+  activeSlot: 1,
+  symbol: 'BTCUSDT',
+  interval: '1m',
+  updatedAt: Date.now(),
+});
+const defaultPaper = (initialKrw) => ({
+  initialKrw,
+  availableKrw: initialKrw,
+  realizedKrw: 0,
+  position: null,
+  orders: [],
+  trades: [],
+  updatedAt: Date.now(),
 });
 
-function loadState() {
-  try { return { ...emptyState(), ...JSON.parse(fs.readFileSync(statePath, "utf8")) }; }
-  catch { return emptyState(); }
+function readJson(file, fallback) {
+  try { return { ...fallback(), ...JSON.parse(fs.readFileSync(file, 'utf8')) }; }
+  catch { return fallback(); }
 }
-let paper = loadState();
-function saveState() { paper.updatedAt = new Date().toISOString(); fs.writeFileSync(statePath, JSON.stringify(paper, null, 2), "utf8"); }
+let config = readJson(configPath, defaultConfig);
+let paper = readJson(paperPath, () => defaultPaper(config.paperInitialKrw));
+function saveConfig() { config.updatedAt = Date.now(); fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8'); }
+function savePaper() { paper.updatedAt = Date.now(); fs.writeFileSync(paperPath, JSON.stringify(paper, null, 2), 'utf8'); }
 
-let market = {
-  ok: false, priceUsd: 0, priceKrw: 0, changePct: 0, highUsd: 0, lowUsd: 0,
-  volumeUsd: 0, usdKrw: 0, bidUsd: 0, askUsd: 0, candles: [],
-  markUsd: 0, indexUsd: 0, fundingRate: 0, nextFundingTime: 0, openInterest: 0,
-  updatedAt: null, error: "시세를 불러오는 중입니다",
+const market = {
+  symbol: config.symbol,
+  interval: config.interval,
+  connected: false,
+  lastMessageAt: 0,
+  lastRestAt: 0,
+  error: '실시간 시세 연결 중',
+  price: 0,
+  open24h: 0,
+  high24h: 0,
+  low24h: 0,
+  changePct: 0,
+  volumeBase: 0,
+  volumeQuote: 0,
+  bid: 0,
+  ask: 0,
+  usdKrw: 0,
+  candles: [],
+  bids: [],
+  asks: [],
+  trades: [],
+  markPrice: 0,
+  indexPrice: 0,
+  fundingRate: 0,
+  nextFundingTime: 0,
+  openInterest: 0,
 };
+let publicSocket = null;
+let privateSocket = null;
+let privateListenKey = null;
+let privateKeepAlive = null;
+let reconnectTimer = null;
+let clients = new Set();
+let broadcastTimer = null;
+let liveAccount = { configured: false, ready: false, refreshedAt: 0, error: 'API 키를 입력하면 실제 계좌를 확인합니다', balances: [], positions: [], orders: [], trades: [], events: [] };
 
-async function json(url) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(8_000), headers: { "user-agent": "BLACK-BinancePaper/1.0" } });
-  if (!response.ok) throw new Error(`${response.status} ${url}`);
+function num(value, fallback = 0) { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
+function fixed(value, decimals = 6) { return Number(num(value).toFixed(decimals)); }
+function nowKst() { return new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false }); }
+function krw(usd) { return num(usd) * num(market.usdKrw); }
+function safeSymbol(symbol) { return SYMBOLS.includes(String(symbol || '').toUpperCase()) ? String(symbol).toUpperCase() : null; }
+function publicConfig() { return { mode: config.mode, hasApiKey: Boolean(config.apiKey && config.secretKey), apiKeyHint: config.apiKey ? `${config.apiKey.slice(0, 5)}••••${config.apiKey.slice(-3)}` : '', paperInitialKrw: config.paperInitialKrw, paperOrderKrw: config.paperOrderKrw, futuresLeverage: config.futuresLeverage, autoTrading: config.autoTrading, activeSlot: config.activeSlot, symbol: market.symbol, interval: market.interval }; }
+
+function signedQuery(params = {}) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries({ ...params, recvWindow: 5000, timestamp: Date.now() })) {
+    if (value !== undefined && value !== null && value !== '') search.set(key, String(value));
+  }
+  const signature = crypto.createHmac('sha256', config.secretKey).update(search.toString()).digest('hex');
+  search.set('signature', signature);
+  return search.toString();
+}
+async function signedRequest(method, base, endpoint, params = {}) {
+  if (!config.apiKey || !config.secretKey) throw new Error('API Key와 Secret Key를 로컬 설정에서 입력하세요');
+  const query = signedQuery(params);
+  const response = await fetch(`${base}${endpoint}?${query}`, {
+    method,
+    headers: { 'X-MBX-APIKEY': config.apiKey, 'Content-Type': 'application/x-www-form-urlencoded' },
+    signal: AbortSignal.timeout(10_000),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.msg || `Binance API HTTP ${response.status}`);
+  return body;
+}
+async function publicJson(url) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(10_000), headers: { 'user-agent': 'BLACK-BinanceTerminal/2.0' } });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
 }
 
-async function refreshMarket() {
+function updatePrice(next) {
+  if (next?.price) market.price = num(next.price, market.price);
+  if (next?.bid) market.bid = num(next.bid, market.bid);
+  if (next?.ask) market.ask = num(next.ask, market.ask);
+  market.lastMessageAt = Date.now();
+  market.error = '';
+  requestBroadcast();
+}
+function pushTrade(raw) {
+  market.trades.unshift({ price: num(raw.price), qty: num(raw.qty), buy: Boolean(raw.buy), time: num(raw.time) || Date.now() });
+  if (market.trades.length > 80) market.trades.length = 80;
+}
+function mergeCandle(raw) {
+  const row = { t: num(raw.t), o: num(raw.o), h: num(raw.h), l: num(raw.l), c: num(raw.c), v: num(raw.v) };
+  const idx = market.candles.findIndex((item) => item.t === row.t);
+  if (idx >= 0) market.candles[idx] = row;
+  else {
+    market.candles.push(row);
+    market.candles = market.candles.slice(-180);
+  }
+}
+
+async function seedMarket() {
+  const symbol = market.symbol;
   try {
-    const fxUrl = "https://open.er-api.com/v6/latest/USD";
+    const fx = publicJson('https://open.er-api.com/v6/latest/USD').catch(() => ({ rates: {} }));
     if (isFutures) {
-      const [premium, ticker, interest, candles, fx] = await Promise.all([
-        json(`${marketApi}/premiumIndex?symbol=${symbol}`),
-        json(`${marketApi}/ticker/24hr?symbol=${symbol}`),
-        json(`${marketApi}/openInterest?symbol=${symbol}`),
-        json(`${marketApi}/klines?symbol=${symbol}&interval=1m&limit=40`),
-        json(fxUrl),
+      const [ticker, depth, candles, premium, oi, exchange] = await Promise.all([
+        publicJson(`${FUTURES_REST}/fapi/v1/ticker/24hr?symbol=${symbol}`),
+        publicJson(`${FUTURES_REST}/fapi/v1/depth?symbol=${symbol}&limit=20`),
+        publicJson(`${FUTURES_REST}/fapi/v1/klines?symbol=${symbol}&interval=${market.interval}&limit=180`),
+        publicJson(`${FUTURES_REST}/fapi/v1/premiumIndex?symbol=${symbol}`),
+        publicJson(`${FUTURES_REST}/fapi/v1/openInterest?symbol=${symbol}`),
+        fx,
       ]);
-      const usdKrw = Number(fx.rates?.KRW || 0);
-      market = {
-        ...market,
-        ok: true, error: "", usdKrw,
-        priceUsd: Number(premium.markPrice), priceKrw: Number(premium.markPrice) * usdKrw,
-        markUsd: Number(premium.markPrice), indexUsd: Number(premium.indexPrice),
-        changePct: Number(ticker.priceChangePercent), highUsd: Number(ticker.highPrice), lowUsd: Number(ticker.lowPrice), volumeUsd: Number(ticker.quoteVolume),
-        fundingRate: Number(premium.lastFundingRate) * 100, nextFundingTime: Number(premium.nextFundingTime), openInterest: Number(interest.openInterest),
-        candles: candles.map((row) => ({ t: Number(row[0]), o: Number(row[1]), h: Number(row[2]), l: Number(row[3]), c: Number(row[4]), v: Number(row[5]) })),
-        updatedAt: new Date().toISOString(),
+      market.usdKrw = num(exchange.rates?.KRW, market.usdKrw);
+      market.price = num(premium.markPrice || ticker.lastPrice);
+      market.markPrice = num(premium.markPrice);
+      market.indexPrice = num(premium.indexPrice);
+      market.fundingRate = num(premium.lastFundingRate) * 100;
+      market.nextFundingTime = num(premium.nextFundingTime);
+      market.openInterest = num(oi.openInterest);
+      applyTicker(ticker);
+      market.bids = (depth.bids || []).map(([price, qty]) => ({ price: num(price), qty: num(qty) }));
+      market.asks = (depth.asks || []).map(([price, qty]) => ({ price: num(price), qty: num(qty) }));
+      market.candles = (candles || []).map(([t, o, h, l, c, v]) => ({ t: num(t), o: num(o), h: num(h), l: num(l), c: num(c), v: num(v) }));
+    } else {
+      const [ticker, depth, candles, exchange] = await Promise.all([
+        publicJson(`${SPOT_DATA}/api/v3/ticker/24hr?symbol=${symbol}`),
+        publicJson(`${SPOT_DATA}/api/v3/depth?symbol=${symbol}&limit=20`),
+        publicJson(`${SPOT_DATA}/api/v3/klines?symbol=${symbol}&interval=${market.interval}&limit=180`),
+        fx,
+      ]);
+      market.usdKrw = num(exchange.rates?.KRW, market.usdKrw);
+      applyTicker(ticker);
+      market.bids = (depth.bids || []).map(([price, qty]) => ({ price: num(price), qty: num(qty) }));
+      market.asks = (depth.asks || []).map(([price, qty]) => ({ price: num(price), qty: num(qty) }));
+      market.candles = (candles || []).map(([t, o, h, l, c, v]) => ({ t: num(t), o: num(o), h: num(h), l: num(l), c: num(c), v: num(v) }));
+    }
+    market.lastRestAt = Date.now();
+    market.error = '';
+  } catch (error) {
+    market.error = `초기 시세 수신 실패: ${error instanceof Error ? error.message : '확인 필요'}`;
+  }
+  requestBroadcast();
+}
+function applyTicker(data) {
+  market.price = num(data.lastPrice ?? data.c, market.price);
+  market.open24h = num(data.openPrice ?? data.o, market.open24h);
+  market.high24h = num(data.highPrice ?? data.h, market.high24h);
+  market.low24h = num(data.lowPrice ?? data.l, market.low24h);
+  market.changePct = num(data.priceChangePercent ?? data.P, market.changePct);
+  market.volumeBase = num(data.volume ?? data.v, market.volumeBase);
+  market.volumeQuote = num(data.quoteVolume ?? data.q, market.volumeQuote);
+}
+
+function publicStreams() {
+  const symbol = market.symbol.toLowerCase();
+  const common = [`${symbol}@ticker`, `${symbol}@depth20@100ms`, `${symbol}@aggTrade`, `${symbol}@kline_${market.interval}`];
+  if (isFutures) common.push(`${symbol}@markPrice@1s`);
+  return common;
+}
+function connectMarket() {
+  clearTimeout(reconnectTimer);
+  if (publicSocket) { try { publicSocket.close(); } catch {} }
+  const base = isFutures ? FUTURES_WS : SPOT_WS;
+  const url = `${base}/stream?streams=${publicStreams().join('/')}`;
+  try {
+    publicSocket = new WebSocket(url);
+    publicSocket.addEventListener('open', () => { market.connected = true; market.error = ''; requestBroadcast(); });
+    publicSocket.addEventListener('message', (event) => {
+      try { handleMarketEvent(JSON.parse(String(event.data)).data || {}); } catch { /* malformed message ignored */ }
+    });
+    publicSocket.addEventListener('error', () => { market.error = 'Binance 실시간 시세 연결을 다시 시도합니다'; requestBroadcast(); });
+    publicSocket.addEventListener('close', () => {
+      market.connected = false;
+      requestBroadcast();
+      reconnectTimer = setTimeout(connectMarket, 2500);
+    });
+  } catch {
+    market.connected = false;
+    reconnectTimer = setTimeout(connectMarket, 2500);
+  }
+}
+function handleMarketEvent(data) {
+  const type = data.e;
+  if (type === '24hrTicker') applyTicker(data);
+  if (type === 'depthUpdate' || data.lastUpdateId) {
+    const bids = data.bids || data.b || [];
+    const asks = data.asks || data.a || [];
+    market.bids = bids.slice(0, 20).map(([price, qty]) => ({ price: num(price), qty: num(qty) }));
+    market.asks = asks.slice(0, 20).map(([price, qty]) => ({ price: num(price), qty: num(qty) }));
+    if (market.bids[0]) market.bid = market.bids[0].price;
+    if (market.asks[0]) market.ask = market.asks[0].price;
+  }
+  if (type === 'aggTrade') pushTrade({ price: data.p, qty: data.q, buy: !data.m, time: data.T });
+  if (type === 'kline' && data.k) mergeCandle({ t: data.k.t, o: data.k.o, h: data.k.h, l: data.k.l, c: data.k.c, v: data.k.v });
+  if (type === 'markPriceUpdate') {
+    market.markPrice = num(data.p); market.indexPrice = num(data.i); market.fundingRate = num(data.r) * 100; market.nextFundingTime = num(data.T); market.price = market.markPrice || market.price;
+  }
+  updatePrice({ price: data.c || data.p, bid: data.b, ask: data.a });
+}
+
+function paperPositionView() {
+  const position = paper.position;
+  if (!position || !market.price) return null;
+  const sign = position.side === 'SHORT' ? -1 : 1;
+  const pnlKrw = (krw(market.price) - position.entryKrw) * position.qty * sign;
+  return { ...position, markKrw: krw(market.price), pnlKrw, pnlPct: position.marginKrw ? pnlKrw / position.marginKrw * 100 : 0 };
+}
+function paperAccountView() {
+  const position = paperPositionView();
+  const totalKrw = paper.availableKrw + (position ? position.marginKrw + position.pnlKrw : 0);
+  return { source: 'PAPER', initialKrw: paper.initialKrw, availableKrw: paper.availableKrw, totalKrw, realizedKrw: paper.realizedKrw, position, balances: [], positions: position ? [position] : [], orders: paper.orders.slice(0, 40), trades: paper.trades.slice(0, 80), events: [] };
+}
+function recordPaperTrade(type, detail, amountKrw, pnlKrw = null) {
+  paper.trades.unshift({ id: crypto.randomUUID(), time: Date.now(), type, detail, amountKrw, pnlKrw, source: 'PAPER' });
+  paper.trades = paper.trades.slice(0, 120);
+}
+function paperOrder(body) {
+  const action = String(body.action || '').toLowerCase();
+  const amountKrw = Math.max(10_000, Math.floor(num(body.amountKrw, config.paperOrderKrw)));
+  if (!market.price || !market.usdKrw) throw new Error('실시간 Binance 시세와 환율을 받은 뒤 주문할 수 있습니다');
+  const position = paperPositionView();
+  if (action === 'reset') {
+    const initialKrw = Math.max(10_000, Math.floor(num(body.initialKrw, config.paperInitialKrw)));
+    config.paperInitialKrw = initialKrw; config.paperOrderKrw = Math.min(Math.max(10_000, amountKrw), initialKrw); saveConfig();
+    paper = defaultPaper(initialKrw); savePaper();
+    return { ok: true, message: `${initialKrw.toLocaleString('ko-KR')}원 PAPER 계좌를 완전히 초기화했습니다` };
+  }
+  if (action === 'close') {
+    if (!position) throw new Error('정리할 PAPER 보유분이 없습니다');
+    paper.availableKrw += position.marginKrw + position.pnlKrw;
+    paper.realizedKrw += position.pnlKrw;
+    recordPaperTrade(isFutures ? 'PAPER 포지션 정리' : 'PAPER 매도', `${market.symbol} 보유분 정리`, position.marginKrw + position.pnlKrw, position.pnlKrw);
+    paper.position = null; savePaper(); return { ok: true, message: 'PAPER 보유분을 정리했습니다' };
+  }
+  if (position) throw new Error('현재 PAPER 보유분이 있습니다. 먼저 정리 후 새 주문을 넣으세요');
+  if (amountKrw > paper.availableKrw) throw new Error('PAPER 주문가능 원화가 부족합니다');
+  const side = action === 'short' && isFutures ? 'SHORT' : 'LONG';
+  const leverage = isFutures ? Math.max(1, Math.min(125, Math.floor(num(body.leverage, config.futuresLeverage)))) : 1;
+  const notionalKrw = amountKrw * leverage;
+  const qty = notionalKrw / krw(market.price);
+  paper.availableKrw -= amountKrw;
+  paper.position = { symbol: market.symbol, side, qty, entryKrw: krw(market.price), marginKrw: amountKrw, leverage, openedAt: Date.now() };
+  recordPaperTrade(side === 'SHORT' ? 'PAPER 숏 진입' : 'PAPER 매수', `${market.symbol} · ${leverage}배`, amountKrw);
+  savePaper();
+  return { ok: true, message: `${side === 'SHORT' ? 'PAPER 숏' : 'PAPER 매수'} 주문을 기록했습니다` };
+}
+
+function addLiveEvent(event) {
+  liveAccount.events.unshift({ time: Date.now(), event });
+  liveAccount.events = liveAccount.events.slice(0, 60);
+}
+async function refreshLiveAccount() {
+  if (!config.apiKey || !config.secretKey) {
+    liveAccount = { configured: false, ready: false, refreshedAt: Date.now(), error: 'API Key와 Secret Key를 입력하면 실계좌를 표시합니다', balances: [], positions: [], orders: [], trades: [], events: liveAccount.events || [] };
+    requestBroadcast(); return liveAccount;
+  }
+  try {
+    if (isFutures) {
+      const [account, orders] = await Promise.all([
+        signedRequest('GET', FUTURES_REST, '/fapi/v2/account'),
+        signedRequest('GET', FUTURES_REST, '/fapi/v1/openOrders'),
+      ]);
+      liveAccount = {
+        configured: true, ready: true, refreshedAt: Date.now(), error: '', source: 'BINANCE LIVE',
+        walletBalanceUsdt: num(account.totalWalletBalance), equityUsdt: num(account.totalMarginBalance), unrealizedUsdt: num(account.totalUnrealizedProfit),
+        totalKrw: krw(account.totalMarginBalance), availableKrw: krw(account.availableBalance),
+        balances: (account.assets || []).filter((asset) => num(asset.walletBalance) || num(asset.unrealizedProfit)).map((asset) => ({ asset: asset.asset, free: num(asset.availableBalance), total: num(asset.walletBalance), pnl: num(asset.unrealizedProfit) })),
+        positions: (account.positions || []).filter((position) => num(position.positionAmt)).map((position) => ({ symbol: position.symbol, side: num(position.positionAmt) >= 0 ? 'LONG' : 'SHORT', qty: Math.abs(num(position.positionAmt)), entryPrice: num(position.entryPrice), markPrice: num(position.markPrice), pnlUsdt: num(position.unrealizedProfit), leverage: num(position.leverage) })),
+        orders: (orders || []).slice(0, 80).map(normalizeLiveOrder), trades: liveAccount.trades || [], events: liveAccount.events || [],
       };
     } else {
-      const [ticker, book, candles, fx] = await Promise.all([
-        json(`${marketApi}/ticker/24hr?symbol=${symbol}`),
-        json(`${marketApi}/ticker/bookTicker?symbol=${symbol}`),
-        json(`${marketApi}/klines?symbol=${symbol}&interval=1m&limit=40`),
-        json(fxUrl),
+      const [account, orders] = await Promise.all([
+        signedRequest('GET', SPOT_REST, '/api/v3/account'),
+        signedRequest('GET', SPOT_REST, '/api/v3/openOrders'),
       ]);
-      const usdKrw = Number(fx.rates?.KRW || 0);
-      market = {
-        ...market,
-        ok: true, error: "", usdKrw,
-        priceUsd: Number(ticker.lastPrice), priceKrw: Number(ticker.lastPrice) * usdKrw,
-        bidUsd: Number(book.bidPrice), askUsd: Number(book.askPrice),
-        changePct: Number(ticker.priceChangePercent), highUsd: Number(ticker.highPrice), lowUsd: Number(ticker.lowPrice), volumeUsd: Number(ticker.quoteVolume),
-        candles: candles.map((row) => ({ t: Number(row[0]), o: Number(row[1]), h: Number(row[2]), l: Number(row[3]), c: Number(row[4]), v: Number(row[5]) })),
-        updatedAt: new Date().toISOString(),
+      const baseAsset = market.symbol.replace('USDT', '');
+      const balances = (account.balances || []).filter((asset) => num(asset.free) || num(asset.locked)).map((asset) => ({ asset: asset.asset, free: num(asset.free), locked: num(asset.locked), total: num(asset.free) + num(asset.locked) }));
+      const usdt = balances.find((asset) => asset.asset === 'USDT');
+      const held = balances.find((asset) => asset.asset === baseAsset);
+      const positionValue = held ? held.total * market.price : 0;
+      liveAccount = {
+        configured: true, ready: true, refreshedAt: Date.now(), error: '', source: 'BINANCE LIVE',
+        totalKrw: krw((usdt?.total || 0) + positionValue), availableKrw: krw(usdt?.free || 0),
+        balances,
+        positions: held && held.total > 0 ? [{ symbol: market.symbol, side: 'LONG', qty: held.total, entryPrice: 0, markPrice: market.price, pnlUsdt: null, leverage: 1 }] : [],
+        orders: (orders || []).slice(0, 80).map(normalizeLiveOrder), trades: liveAccount.trades || [], events: liveAccount.events || [],
       };
     }
   } catch (error) {
-    market = { ...market, ok: false, error: `시세 연결 문제: ${error instanceof Error ? error.message : "확인 필요"}` };
+    liveAccount = { ...liveAccount, configured: true, ready: false, refreshedAt: Date.now(), error: `실계좌 조회 실패: ${error instanceof Error ? error.message : 'API 권한과 IP 제한을 확인하세요'}` };
+  }
+  requestBroadcast();
+  return liveAccount;
+}
+function normalizeLiveOrder(order) {
+  return { id: String(order.orderId || order.clientOrderId || ''), symbol: order.symbol, side: order.side, type: order.type, status: order.status, price: num(order.price), qty: num(order.origQty || order.origQuantity), updatedAt: num(order.updateTime || order.time) };
+}
+async function startPrivateStream() {
+  await stopPrivateStream();
+  if (!config.apiKey || !config.secretKey) return;
+  try {
+    const base = isFutures ? FUTURES_REST : SPOT_REST;
+    const endpoint = isFutures ? '/fapi/v1/listenKey' : '/api/v3/userDataStream';
+    const response = await fetch(`${base}${endpoint}`, { method: 'POST', headers: { 'X-MBX-APIKEY': config.apiKey }, signal: AbortSignal.timeout(10_000) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.listenKey) throw new Error(payload.msg || 'User Data Stream 시작 실패');
+    privateListenKey = payload.listenKey;
+    const url = `${isFutures ? FUTURES_WS : SPOT_WS}/ws/${privateListenKey}`;
+    privateSocket = new WebSocket(url);
+    privateSocket.addEventListener('message', (event) => {
+      try {
+        const data = JSON.parse(String(event.data));
+        const tag = isFutures ? data.e : data.e;
+        if (['executionReport', 'ORDER_TRADE_UPDATE', 'ACCOUNT_UPDATE'].includes(tag)) {
+          addLiveEvent({ kind: tag, message: formatUserEvent(data) });
+          refreshLiveAccount();
+        }
+      } catch { /* malformed private event ignored */ }
+    });
+    privateSocket.addEventListener('close', () => { privateSocket = null; });
+    privateKeepAlive = setInterval(async () => {
+      try {
+        await fetch(`${base}${endpoint}?listenKey=${encodeURIComponent(privateListenKey)}`, { method: isFutures ? 'PUT' : 'PUT', headers: { 'X-MBX-APIKEY': config.apiKey }, signal: AbortSignal.timeout(10_000) });
+      } catch { /* next refresh reconnects */ }
+    }, 25 * 60_000);
+  } catch (error) {
+    liveAccount = { ...liveAccount, error: `실시간 계좌 연결 실패: ${error instanceof Error ? error.message : 'API 권한을 확인하세요'}` };
+    requestBroadcast();
   }
 }
+async function stopPrivateStream() {
+  if (privateKeepAlive) clearInterval(privateKeepAlive);
+  privateKeepAlive = null;
+  if (privateSocket) { try { privateSocket.close(); } catch {} }
+  privateSocket = null;
+  privateListenKey = null;
+}
+function formatUserEvent(data) {
+  if (data.e === 'executionReport') return `${data.s} ${data.S} · ${data.X}`;
+  if (data.e === 'ORDER_TRADE_UPDATE') return `${data.o?.s || '-'} ${data.o?.S || '-'} · ${data.o?.X || '-'}`;
+  if (data.e === 'ACCOUNT_UPDATE') return '선물 계좌·포지션 변경 수신';
+  return '실계좌 이벤트 수신';
+}
+async function liveOrder(body) {
+  if (!body.confirmLive) throw new Error('실계좌 주문 확인창에서 최종 확인해야 합니다');
+  if (!config.apiKey || !config.secretKey) throw new Error('실계좌 주문 전 API Key와 Secret Key를 로컬 설정에 입력하세요');
+  const side = String(body.action || '').toLowerCase();
+  const type = String(body.orderType || 'market').toUpperCase() === 'LIMIT' ? 'LIMIT' : 'MARKET';
+  const amountKrw = Math.max(10_000, Math.floor(num(body.amountKrw, config.paperOrderKrw)));
+  const quoteAmount = amountKrw / Math.max(market.usdKrw, 1);
+  if (!market.price) throw new Error('실시간 시세를 받은 뒤 주문할 수 있습니다');
+  if (!isFutures) {
+    const isBuy = side === 'buy';
+    const isSell = side === 'sell';
+    if (!isBuy && !isSell) throw new Error('현물 주문 방향을 확인하세요');
+    const params = { symbol: market.symbol, side: isBuy ? 'BUY' : 'SELL', type };
+    if (isBuy && type === 'MARKET') params.quoteOrderQty = fixed(quoteAmount, 4);
+    else {
+      const price = type === 'LIMIT' ? num(body.limitPrice, market.price) : market.price;
+      const qty = isSell ? Math.max(0, num(body.qty)) : quoteAmount / price;
+      params.quantity = fixed(qty, 6); if (type === 'LIMIT') { params.price = fixed(price, 2); params.timeInForce = 'GTC'; }
+    }
+    const order = await signedRequest('POST', SPOT_REST, '/api/v3/order', params);
+    addLiveEvent({ kind: 'ORDER_SENT', message: `${market.symbol} ${isBuy ? '매수' : '매도'} 주문 접수` });
+    await refreshLiveAccount();
+    return { live: true, order: normalizeLiveOrder(order) };
+  }
+  const action = side === 'short' ? 'SELL' : 'BUY';
+  const closing = side === 'close';
+  const leverage = Math.max(1, Math.min(125, Math.floor(num(body.leverage, config.futuresLeverage))));
+  if (!closing) await signedRequest('POST', FUTURES_REST, '/fapi/v1/leverage', { symbol: market.symbol, leverage });
+  const qty = Math.max(0.001, fixed((quoteAmount * leverage) / market.price, 3));
+  const params = { symbol: market.symbol, side: closing ? String(body.closeSide || 'SELL').toUpperCase() : action, type, quantity: qty };
+  if (closing) params.reduceOnly = 'true';
+  if (type === 'LIMIT') { params.price = fixed(num(body.limitPrice, market.price), 2); params.timeInForce = 'GTC'; }
+  const order = await signedRequest('POST', FUTURES_REST, '/fapi/v1/order', params);
+  addLiveEvent({ kind: 'ORDER_SENT', message: `${market.symbol} ${params.side} 선물 주문 접수` });
+  await refreshLiveAccount();
+  return { live: true, order: normalizeLiveOrder(order) };
+}
 
-function round(value) { return Math.round(Number(value) || 0); }
-function totalEquity() {
-  if (!paper.position || !market.priceKrw) return paper.krw;
-  const multiplier = paper.position.side === "SHORT" ? -1 : 1;
-  const unrealized = (market.priceKrw - paper.position.entryKrw) * paper.position.qty * multiplier;
-  return paper.krw + paper.position.marginKrw + unrealized;
-}
-function positionView() {
-  if (!paper.position || !market.priceKrw) return null;
-  const multiplier = paper.position.side === "SHORT" ? -1 : 1;
-  const pnlKrw = (market.priceKrw - paper.position.entryKrw) * paper.position.qty * multiplier;
-  return { ...paper.position, currentKrw: round(market.priceKrw), pnlKrw: round(pnlKrw), pnlPct: paper.position.marginKrw ? (pnlKrw / paper.position.marginKrw) * 100 : 0 };
-}
-function apiState() {
-  const position = positionView();
+function accountView() { return config.mode === 'live' ? liveAccount : paperAccountView(); }
+function snapshot() {
+  const account = accountView();
+  const priceKrw = krw(market.price);
   return {
-    kind, title, paperOnly: true, localServer: true, market,
-    account: {
-      initialKrw: paper.initialKrw, availableKrw: round(paper.krw), totalKrw: round(totalEquity()),
-      realizedKrw: round(paper.realizedKrw), position, orderKrw: paper.orderKrw, autoTrading: paper.autoTrading,
-      trades: paper.trades.slice(0, 8),
-    },
+    ok: true, kind, version: '2.0.0', localServer: true, paperOnly: false, server: { host: 'BLACK PC', port, at: Date.now() },
+    config: publicConfig(),
+    market: { ...market, priceKrw, bidKrw: krw(market.bid), askKrw: krw(market.ask), markKrw: krw(market.markPrice), indexKrw: krw(market.indexPrice) },
+    account,
+    markets: SYMBOLS,
   };
 }
-function reset(initialKrw) {
-  paper = { ...emptyState(), initialKrw, krw: initialKrw, orderKrw: Math.min(1_000_000, Math.max(10_000, Math.floor(initialKrw / 100))) };
-  saveState();
+function requestBroadcast() {
+  if (broadcastTimer) return;
+  broadcastTimer = setTimeout(() => {
+    broadcastTimer = null;
+    const line = `event: state\ndata: ${JSON.stringify(snapshot())}\n\n`;
+    for (const client of clients) { try { client.write(line); } catch { clients.delete(client); } }
+  }, 90);
 }
-function order(action) {
-  if (!market.ok || !market.priceKrw) throw new Error("실시간 시세를 받은 뒤 가상 주문을 할 수 있습니다");
-  const amount = Math.max(10_000, Math.min(paper.orderKrw, paper.krw));
-  const current = positionView();
-  const now = new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" });
-  if (action === "reset") { reset(paper.initialKrw); return; }
-  if (!paper.position) {
-    const side = isFutures && action === "short" ? "SHORT" : "LONG";
-    if (amount > paper.krw) throw new Error("가상 원화 잔고가 부족합니다");
-    const qty = amount / market.priceKrw;
-    paper.krw -= amount;
-    paper.position = { side, qty, entryKrw: market.priceKrw, marginKrw: amount, openedAt: now, leverage: isFutures ? 1 : 1 };
-    paper.trades.unshift({ time: now, type: side === "SHORT" ? "가상 숏 시작" : "가상 매수", amountKrw: round(amount), detail: "실제 주문 없음" });
-  } else {
-    const pnlKrw = current?.pnlKrw || 0;
-    paper.krw += paper.position.marginKrw + pnlKrw;
-    paper.realizedKrw += pnlKrw;
-    paper.trades.unshift({ time: now, type: isFutures ? "가상 포지션 종료" : "가상 매도", amountKrw: round(paper.position.marginKrw + pnlKrw), detail: `손익 ${round(pnlKrw).toLocaleString("ko-KR")}원` });
-    paper.position = null;
-  }
-  paper.trades = paper.trades.slice(0, 40);
-  saveState();
-}
-
-const money = (value) => `${Math.round(Number(value || 0)).toLocaleString("ko-KR")}원`;
-const percent = (value) => `${Number(value || 0).toFixed(2)}%`;
-
-function shell() {
-  const futureBlocks = isFutures
-    ? '<section class="metric"><small>사용 중인 돈</small><b id="margin">-</b><p>가상 돈 중 거래에 묶인 돈</p></section><section class="metric"><small>펀딩비</small><b id="funding">-</b><p>선물 계약을 오래 들고 있을 때 생기는 비용/보상</p></section><section class="metric"><small>청산 위험</small><b id="risk">낮음</b><p>강제로 거래가 끝날 가능성</p></section>'
-    : '<section class="metric"><small>보유 코인</small><b id="holding">없음</b><p>가상으로 사 둔 코인</p></section><section class="metric"><small>오늘 변동</small><b id="change">-</b><p>어제와 비교한 가격 움직임</p></section><section class="metric"><small>가상 거래 횟수</small><b id="tradeCount">0회</b><p>실제 돈은 전혀 움직이지 않음</p></section>';
-  const futureButton = isFutures ? '<button class="sell" id="short" onclick="paperOrder(\'short\')">가상으로 가격 하락에 걸기</button>' : '';
-  const cardTitle = isFutures ? '선물 위험 쉽게 보기' : '시장 움직임 쉽게 보기';
-  const cardHint = isFutures ? '레버리지와 청산은 위험이 커서 처음에는 1배만 씁니다' : '호가 = 지금 바로 사고팔 수 있는 가격 목록';
-  const script = String.raw`
-const isFutures = ${JSON.stringify(isFutures)};
-const won = function(n){ return Math.round(Number(n || 0)).toLocaleString('ko-KR') + '원'; };
-const per = function(n){ return Number(n || 0).toFixed(2) + '%'; };
-function drawChart(candles){
-  const svg=document.getElementById('chartSvg'); if(!candles || !candles.length){ svg.innerHTML=''; return; }
-  const min=Math.min.apply(null,candles.map(function(x){return x.l;})); const max=Math.max.apply(null,candles.map(function(x){return x.h;})); const w=1000/candles.length; let out='';
-  candles.forEach(function(x,i){ const y=function(v){return 260-(v-min)/(max-min||1)*230;}; const color=x.c>=x.o?'#36d990':'#f05c72'; const cx=i*w+w/2; out += '<line x1="'+cx+'" y1="'+y(x.h)+'" x2="'+cx+'" y2="'+y(x.l)+'" stroke="'+color+'" stroke-width="2"/><rect x="'+(cx-w*.27)+'" y="'+Math.min(y(x.o),y(x.c))+'" width="'+(w*.54)+'" height="'+Math.max(3,Math.abs(y(x.o)-y(x.c)))+'" fill="'+color+'"/>'; });
-  svg.innerHTML=out;
-}
-function row(a,b,c){ return '<div class="row"><strong>'+a+'</strong><span>'+b+'</span><span>'+c+'</span></div>'; }
-async function load(){
-  try{
-    const response=await fetch('api/state',{cache:'no-store'}); const state=await response.json(); const a=state.account; const m=state.market; const p=a.position;
-    const connection=document.getElementById('connection'); connection.textContent=m.ok?'● 시세 수신 정상':'● 시세 연결 확인 중'; connection.className='pill '+(m.ok?'live':'');
-    document.getElementById('initial').textContent=won(a.initialKrw); document.getElementById('equity').textContent=won(a.totalKrw);
-    const pnl=document.getElementById('pnl'); pnl.textContent=(a.realizedKrw>=0?'+':'')+won(a.realizedKrw); pnl.className=a.realizedKrw>=0?'good':'bad';
-    document.getElementById('price').textContent=m.priceKrw?won(m.priceKrw):'-'; document.getElementById('priceInfo').textContent=m.updatedAt?'시세 갱신 '+new Date(m.updatedAt).toLocaleTimeString('ko-KR')+' · 달러 1개 ≈ '+won(m.usdKrw):m.error;
-    document.getElementById('chartHint').textContent=m.ok?'최근 40분 가격 흐름':'시세 연결 중'; document.getElementById('orderAmount').textContent=won(a.orderKrw); drawChart(m.candles);
-    if(isFutures){ document.getElementById('margin').textContent=p?won(p.marginKrw):'0원'; document.getElementById('funding').textContent=per(m.fundingRate); document.getElementById('risk').textContent=p?'낮음 (1배 연습 중)':'없음'; }
-    else { document.getElementById('holding').textContent=p?'BTC 보유 중':'없음'; document.getElementById('change').textContent=(m.changePct>=0?'+':'')+per(m.changePct); document.getElementById('tradeCount').textContent=a.trades.length+'회'; }
-    const primary=document.getElementById('primary'); primary.textContent=p?'가상 보유분 정리하기':'가상으로 사 보기'; primary.onclick=function(){paperOrder(p?'close':'buy');}; const short=document.getElementById('short'); if(short) short.disabled=!!p;
-    document.getElementById('position').innerHTML=p?row(p.side==='SHORT'?'가격 하락에 건 상태':'BTC 보유 중','시작 '+won(p.entryKrw),(p.pnlKrw>=0?'+':'')+won(p.pnlKrw))+'<p class="hint">'+(p.side==='SHORT'?'가격이 내려가면 이익, 오르면 손실':'가격이 오르면 이익, 내리면 손실')+' · 실제 주문 없음</p>':'<div class="empty">지금 보유한 가상 코인이 없습니다</div>';
-    let risk=''; if(isFutures){ risk=row('현재 가격',won(m.priceKrw),'시장가')+row('예상 청산가',p?won(p.entryKrw*.2):'-','1배라 매우 낮음')+row('미결제약정',Math.round(m.openInterest||0).toLocaleString('ko-KR')+' BTC','시장 계약 규모'); }
-    else { risk=row('지금 사는 가격',won(m.askUsd*m.usdKrw),'매수 호가')+row('지금 파는 가격',won(m.bidUsd*m.usdKrw),'매도 호가')+row('오늘 거래 규모',won(m.volumeUsd*m.usdKrw),'시장 활발함'); }
-    document.getElementById('riskBox').innerHTML=risk; document.getElementById('trades').innerHTML=a.trades.length?a.trades.map(function(t){return row(t.type,won(t.amountKrw),t.time);}).join(''):'<div class="empty">아직 가상 거래가 없습니다</div>';
-  } catch(e) { document.getElementById('connection').textContent='● 화면 연결 확인 필요'; }
-}
-async function paperOrder(action){ const r=await fetch('api/order',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:action})}); const j=await r.json(); if(!j.ok) alert(j.error||'가상 주문 처리에 실패했습니다'); load(); }
-async function resetAccount(){ if(confirm('가상 보유분과 기록을 모두 지우고 처음부터 시작할까요?')) paperOrder('reset'); }
-load(); setInterval(load,2000);`;
-  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>
-:root{--bg:#07101b;--line:#1b3047;--text:#eaf2fb;--muted:#8da0b7;--accent:${accent};--good:#36d990;--bad:#f05c72}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 85% 0,#12243d 0,transparent 30%),var(--bg);color:var(--text);font-family:Arial,"Malgun Gothic",sans-serif;font-size:14px}header{height:58px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:0 24px;background:#081321}.brand{font-weight:900;font-size:20px}.brand em{color:var(--accent);font-style:normal}.pills{display:flex;gap:8px}.pill{padding:6px 10px;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:12px}.live{color:#bff4d6;border-color:#1e7652;background:#0d2b25}.layout{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 58px)}aside{border-right:1px solid var(--line);padding:16px;background:#081321}.nav{padding:11px 10px;color:var(--muted);border-radius:6px;margin-bottom:4px}.nav.active{color:var(--text);border:1px solid #23526a;background:#0e2032}.side-note{position:fixed;bottom:18px;color:var(--muted);font-size:11px;line-height:1.7;padding-right:20px}main{padding:18px;max-width:1800px;width:100%;margin:auto}.notice{border:1px solid #6d5a1c;background:#251f10;color:#f7d66d;padding:10px 12px;border-radius:7px;margin-bottom:14px;font-weight:700}.metrics{display:grid;grid-template-columns:repeat(${isFutures ? 6 : 5},1fr);gap:12px}.metric,.card{background:linear-gradient(145deg,#0d1b2b,#091522);border:1px solid var(--line);border-radius:8px}.metric{padding:15px;min-height:102px}.metric small,.card small{color:var(--muted);display:block}.metric b{display:block;font-size:24px;margin:6px 0;color:var(--text)}.metric p{margin:0;color:var(--muted);font-size:11px;line-height:1.4}.grid{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(290px,.9fr);gap:12px;margin-top:12px}.card{padding:14px}.card h2{font-size:15px;margin:0 0 4px}.hint{color:var(--muted);font-size:11px;margin:0 0 12px}.chart{height:270px;border:1px solid #1b3651;border-radius:5px;background:repeating-linear-gradient(0deg,transparent 0 48px,#12263c 49px 50px),repeating-linear-gradient(90deg,transparent 0 80px,#12263c 81px 82px);position:relative;overflow:hidden}.chart svg{width:100%;height:100%}.chart-label{position:absolute;left:12px;top:10px;color:var(--muted);font-size:12px}.action{display:grid;gap:8px;margin-top:14px}.action button{border:0;border-radius:6px;background:var(--accent);color:#06121c;padding:11px;font-weight:900;cursor:pointer}.action button.alt{background:#173149;color:var(--text);border:1px solid #2d5575}.action button.sell{background:#6e3142;color:#ffe7ec}.action button:disabled{opacity:.55;cursor:not-allowed}.bottom{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:12px;margin-top:12px}.rows{display:grid;gap:8px}.row{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:6px;padding:8px;border-bottom:1px solid #14263a;color:var(--muted);font-size:12px}.row strong{color:var(--text)}.empty{padding:26px 6px;color:var(--muted);text-align:center}.large{font-size:20px}.good{color:var(--good)}.bad{color:var(--bad)}.last{color:var(--muted);font-size:11px;text-align:right;margin-top:8px}@media(max-width:1100px){.layout{grid-template-columns:1fr}aside{display:none}.metrics{grid-template-columns:repeat(2,1fr)}.grid,.bottom{grid-template-columns:1fr}}@media(max-width:520px){header{padding:0 12px}.brand{font-size:15px}.pills .pill:last-child{display:none}main{padding:10px}.metric b{font-size:18px}.chart{height:190px}}
-</style></head><body><header><div class="brand">${title.replace(" · PAPER", "")} <em>· PAPER</em></div><div class="pills"><span id="connection" class="pill">시세 연결 중</span><span class="pill">BLACK PC 로컬 서버</span></div></header><div class="layout"><aside><div class="nav active">▣ 대시보드</div><div class="nav">◉ 시장 상태</div><div class="nav">◈ 가상 주문</div><div class="nav">◷ 거래 기록</div><div class="nav">⚙ 쉬운 설정</div><div class="side-note">PAPER 전용<br>실제 계정·실제 주문 연결 없음<br>모든 돈 표시는 원화 기준</div></aside><main><div class="notice">⚠ 가상 연습장입니다 · 실제 돈은 절대 움직이지 않습니다 · 어려운 용어는 아래에 쉬운 뜻을 함께 표시합니다</div><section class="metrics"><section class="metric"><small>처음 넣은 가상 돈</small><b id="initial">-</b><p>연습을 위해 정한 시작 금액</p></section><section class="metric"><small>지금 가진 가상 돈</small><b id="equity">-</b><p>현금과 보유 코인을 모두 합친 값</p></section><section class="metric"><small>번 돈 / 잃은 돈</small><b id="pnl">-</b><p>이미 끝난 가상 거래의 결과</p></section>${futureBlocks}</section><section class="grid"><section class="card"><h2>BTC 현재 가격 <span id="price" class="good"></span></h2><p class="hint">1분마다 가격이 어떻게 움직였는지 보여주는 그래프 · 초록은 올랐고 빨강은 내렸다는 뜻</p><div class="chart"><span class="chart-label" id="chartHint">시세를 기다리는 중</span><svg id="chartSvg" viewBox="0 0 1000 270" preserveAspectRatio="none"></svg></div><div class="last" id="priceInfo">-</div></section><section class="card"><h2>지금 할 수 있는 가상 연습</h2><p class="hint">실제 돈은 사용하지 않습니다</p><div class="action"><button id="primary" onclick="paperOrder('buy')">가상으로 사 보기</button>${futureButton}<button class="alt" onclick="resetAccount()">가상 계좌 처음부터 다시 시작</button></div><div style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px"><small>가상 한 번 거래 금액</small><b id="orderAmount" class="large">-</b><p class="hint">설정은 다음 단계에서 바꿀 수 있습니다</p></div></section></section><section class="bottom"><section class="card"><h2>현재 보유 상태</h2><p class="hint">현재 가진 코인과 손익</p><div id="position" class="empty">지금 보유한 가상 코인이 없습니다</div></section><section class="card"><h2>${cardTitle}</h2><p class="hint">${cardHint}</p><div id="riskBox" class="rows"></div></section><section class="card"><h2>최근 가상 거래</h2><p class="hint">실제 주문은 하나도 전송하지 않습니다</p><div id="trades" class="empty">아직 가상 거래가 없습니다</div></section></section></main></div><script>${script}</script></body></html>`;
+function json(res, status, body) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); }
+async function readBody(req) { let text = ''; for await (const chunk of req) { text += chunk; if (text.length > 1_000_000) throw new Error('요청이 너무 큽니다'); } try { return JSON.parse(text || '{}'); } catch { throw new Error('JSON 형식이 아닙니다'); } }
+function staticFile(req, res, pathname) {
+  const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\//, '');
+  const file = path.normalize(path.join(PUBLIC, rel));
+  if (!file.startsWith(PUBLIC)) { res.writeHead(403); return res.end('forbidden'); }
+  fs.readFile(file, (error, data) => {
+    if (error) { res.writeHead(404); return res.end('not found'); }
+    const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
+    res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' }); res.end(data);
+  });
 }
 
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url || "/", `http://${req.headers.host || "127.0.0.1"}`);
-  const pathname = url.pathname.replace(/\/$/, "") || "/";
-  res.setHeader("Cache-Control", "no-store");
-  if (req.method === "GET" && (pathname === "/" || pathname === `/${kind}` || pathname === `/binance/${kind}`)) {
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8" }); res.end(shell()); return;
+  const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
+  try {
+    if (req.method === 'GET' && url.pathname === '/api/state') return json(res, 200, snapshot());
+    if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, kind, port, websocket: market.connected, marketAt: market.lastMessageAt, mode: config.mode, liveReady: liveAccount.ready });
+    if (req.method === 'GET' && url.pathname === '/api/stream') {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive' });
+      res.write(`event: state\ndata: ${JSON.stringify(snapshot())}\n\n`); clients.add(res); req.on('close', () => clients.delete(res)); return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/select') {
+      const body = await readBody(req); const symbol = safeSymbol(body.symbol); if (!symbol) throw new Error('지원하지 않는 USDT 마켓입니다');
+      market.symbol = symbol; config.symbol = symbol; saveConfig(); await seedMarket(); connectMarket(); return json(res, 200, snapshot());
+    }
+    if (req.method === 'POST' && url.pathname === '/api/interval') {
+      const body = await readBody(req); const interval = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d'].includes(body.interval) ? body.interval : null; if (!interval) throw new Error('지원하지 않는 차트 시간입니다');
+      market.interval = interval; config.interval = interval; saveConfig(); await seedMarket(); connectMarket(); return json(res, 200, snapshot());
+    }
+    if (req.method === 'POST' && url.pathname === '/api/config') {
+      const body = await readBody(req);
+      if (body.mode && !['paper', 'live'].includes(body.mode)) throw new Error('투자 모드는 PAPER 또는 LIVE만 가능합니다');
+      if (body.mode) config.mode = body.mode;
+      if (body.paperInitialKrw !== undefined) config.paperInitialKrw = Math.max(10_000, Math.floor(num(body.paperInitialKrw, config.paperInitialKrw)));
+      if (body.paperOrderKrw !== undefined) config.paperOrderKrw = Math.max(10_000, Math.floor(num(body.paperOrderKrw, config.paperOrderKrw)));
+      if (body.futuresLeverage !== undefined) config.futuresLeverage = Math.max(1, Math.min(125, Math.floor(num(body.futuresLeverage, config.futuresLeverage))));
+      if (body.autoTrading !== undefined) config.autoTrading = Boolean(body.autoTrading);
+      if (body.activeSlot !== undefined) config.activeSlot = Math.max(1, Math.min(10, Math.floor(num(body.activeSlot, config.activeSlot))));
+      const updatingKeys = body.apiKey !== undefined || body.secretKey !== undefined;
+      if (body.apiKey !== undefined) config.apiKey = String(body.apiKey || '').trim();
+      if (body.secretKey !== undefined) config.secretKey = String(body.secretKey || '').trim();
+      saveConfig();
+      if (updatingKeys) { await refreshLiveAccount(); await startPrivateStream(); }
+      requestBroadcast(); return json(res, 200, { ok: true, config: publicConfig() });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/order') {
+      const body = await readBody(req);
+      const result = config.mode === 'live' ? await liveOrder(body) : paperOrder(body);
+      requestBroadcast(); return json(res, 200, { ok: true, ...result, state: snapshot() });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/reset') {
+      const body = await readBody(req); const result = paperOrder({ action: 'reset', initialKrw: body.initialKrw, amountKrw: body.orderKrw }); requestBroadcast(); return json(res, 200, result);
+    }
+    if (req.method === 'POST' && url.pathname === '/api/live/refresh') { await refreshLiveAccount(); return json(res, 200, snapshot()); }
+    if (req.method === 'GET') return staticFile(req, res, url.pathname);
+    return json(res, 404, { error: '요청 경로를 찾지 못했습니다' });
+  } catch (error) {
+    return json(res, 400, { ok: false, error: error instanceof Error ? error.message : '처리 중 오류가 발생했습니다' });
   }
-  if (req.method === "GET" && (pathname === "/api/state" || pathname.endsWith("/api/state"))) {
-    res.writeHead(200, { "content-type": "application/json; charset=utf-8" }); res.end(JSON.stringify(apiState())); return;
-  }
-  if (req.method === "POST" && (pathname === "/api/order" || pathname.endsWith("/api/order"))) {
-    let body = ""; for await (const chunk of req) body += chunk;
-    try { const { action } = JSON.parse(body || "{}"); order(action); res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true, state: apiState() })); }
-    catch (error) { res.writeHead(400, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : "가상 주문 처리 실패" })); }
-    return;
-  }
-  res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }); res.end("찾을 수 없는 로컬 PAPER 주소입니다");
 });
 
-refreshMarket(); setInterval(refreshMarket, 2_000).unref();
-server.listen(port, "127.0.0.1", () => console.log(`[${new Date().toISOString()}] ${title} local PAPER server listening on 127.0.0.1:${port}`));
+await seedMarket();
+connectMarket();
+setInterval(() => { seedMarket(); }, 12 * 60_000).unref();
+setInterval(() => { if (config.mode === 'live' && config.apiKey && config.secretKey) refreshLiveAccount(); }, 45_000).unref();
+server.listen(port, '127.0.0.1', () => console.log(`[${new Date().toISOString()}] Binance ${kind} terminal v2 listening at 127.0.0.1:${port}`));
+process.on('SIGTERM', async () => { await stopPrivateStream(); server.close(() => process.exit(0)); });
