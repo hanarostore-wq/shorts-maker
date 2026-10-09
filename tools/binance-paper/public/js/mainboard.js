@@ -424,8 +424,8 @@ function mainHtml() {
   return `<div class="main-board">
     <section class="main-top">${assetTrend()}${accountSummary()}</section>
     <div class="mobile-main-actions">
-      <button data-mobile-action="auto" class="mobile-auto-btn ${S.config?.autoTrading ? 'on' : ''}" type="button">
-        ${S.config?.autoTrading ? '자동매매 ON' : '자동매매 OFF'}
+      <button data-mobile-action="auto" class="mobile-auto-btn on" type="button">
+        자동매매 ON
       </button>
       <button data-mobile-action="connection" type="button">연결</button>
       <button data-mobile-action="slots" type="button">슬롯 관리</button>
