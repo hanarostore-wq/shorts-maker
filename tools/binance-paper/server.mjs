@@ -67,6 +67,9 @@ const defaultConfig = () => ({
   secretKey: '',
   paperInitialKrw: 100_000_000,
   paperOrderKrw: 1_000_000,
+  paperOrderMode: 'fixed',
+  paperOrderPct: 10,
+  maxPositions: 1,
   futuresLeverage: 1,
   autoTrading: false,
   activeSlot: 1,
@@ -193,6 +196,9 @@ function publicConfig() {
     apiKeyHint: config.apiKey ? `${config.apiKey.slice(0, 5)}••••${config.apiKey.slice(-3)}` : '',
     paperInitialKrw: config.paperInitialKrw,
     paperOrderKrw: config.paperOrderKrw,
+    paperOrderMode: config.paperOrderMode,
+    paperOrderPct: config.paperOrderPct,
+    maxPositions: config.maxPositions,
     futuresLeverage: config.futuresLeverage,
     autoTrading: config.autoTrading,
     activeSlot: config.activeSlot,
@@ -611,7 +617,7 @@ function uiCode(symbol) { return `USDT-${String(symbol || '').replace(/USDT$/, '
 function uiSymbol(code) { const base = String(code || '').replace(/^USDT-/, '').replace(/[^A-Z0-9]/g, ''); return base ? `${base}USDT` : market.symbol; }
 function uiTicker(row) { const symbol = row.symbol || market.symbol; const price = krw(num(row.price, market.price)); const rate = num(row.changePct, market.changePct) / 100; return { cd: uiCode(symbol), tp: price, scr: rate, scp: price * rate, hp: symbol === market.symbol ? krw(market.high24h) : price, lp: symbol === market.symbol ? krw(market.low24h) : price, atv24h: symbol === market.symbol ? market.volumeBase : 0, atp24h: krw(num(row.quoteVolume, market.volumeQuote)) }; }
 function uiPosition() { const p = paperPositionView(); return p ? { market: uiCode(p.symbol), qty: p.qty, avgPrice: p.entryKrw, mark: p.markKrw, cost: p.marginKrw, value: p.marginKrw + p.pnlKrw, netPnl: p.pnlKrw, netPct: p.pnlPct, heldSec: Math.floor((Date.now() - p.openedAt) / 1000) } : null; }
-function uiConfig() { return { mode: config.mode, autoTrading: config.autoTrading, markets: config.watchMarkets || [], slots: { activeId: config.activeSlot, items: config.slots.items }, slotVersions: clone(config.slotVersions || {}), paper: { initialKrw: config.paperInitialKrw, feePct: 0, slippagePct: 0 }, trade: { orderMode: 'fixed', orderKrw: config.paperOrderKrw, orderPct: 10, maxPositions: 1, hardStopLossPct: 0 }, alerts: { voiceEnabled: false, voiceVolume: 0.7 }, screener: { enabled: true, candidates: marketCatalog.length, refreshSec: 3 }, strategyExport: { ready: true }, cost: { usdKrw: market.usdKrw || 1350 } }; }
+function uiConfig() { return { mode: config.mode, autoTrading: config.autoTrading, markets: config.watchMarkets || [], slots: { activeId: config.activeSlot, items: config.slots.items }, slotVersions: clone(config.slotVersions || {}), paper: { initialKrw: config.paperInitialKrw, feePct: 0, slippagePct: 0 }, trade: { orderMode: config.paperOrderMode || 'fixed', orderKrw: config.paperOrderKrw, orderPct: config.paperOrderPct ?? 10, maxPositions: config.maxPositions ?? 1, hardStopLossPct: 0 }, alerts: { voiceEnabled: false, voiceVolume: 0.7 }, screener: { enabled: true, candidates: marketCatalog.length, refreshSec: 3 }, strategyExport: { ready: true }, cost: { usdKrw: market.usdKrw || 1350 } }; }
 function uiSnapshot() { const account = paperAccountView(); const pos = uiPosition(); const equity = account.totalKrw; const pnl = equity - account.initialKrw; const markets = marketCatalog.map((x) => ({ code: uiCode(x.symbol), ko: x.symbol.replace(/USDT$/, ''), en: x.symbol.replace(/USDT$/, ''), warning: false })); const tickers = marketCatalog.map(uiTicker); const selected = uiCode(market.symbol); const watch = markets.map((item, i) => ({ market: item.code, watched: true, warm: true, price: tickers.find((t) => t.cd === item.code)?.tp || 0, position: pos?.market === item.code ? pos : null, bidShare15: .5, last: { kind: 'watch', reason: 'Binance full-market monitoring' }, entryEvidence: { rules: [] }, rank: i + 1 })); return { markets, tickers, config: uiConfig(), summary: { equity, initialKrw: account.initialKrw, krw: account.availableKrw, totalPnl: pnl, totalPnlPct: account.initialKrw ? pnl / account.initialKrw * 100 : 0, realizedPnl: account.realizedKrw, feesPaid: 0, trades: account.trades.length, wins: 0, losses: 0, winRate: null, avgHoldSec: pos?.heldSec || 0, positions: pos ? [pos] : [], inflight: [], activeSlot: { id: config.activeSlot, name: activeSlot()?.name || `${config.activeSlot} slot`, rules: 0 }, effectiveDecisionMode: 'rule', jev: { label: 'Binance rule', totalCalls: 0, totalErrors: 0, totalCostUsd: 0, tokens: 0 }, startedAt: account.updatedAt, maxDrawdownPct: 0 }, watch, trades: account.trades.map((t) => ({ id: t.id, t: t.time, market: selected, side: /sell|close|정리|매도/i.test(t.type) ? 'sell' : 'buy', price: krw(market.price), qty: pos?.qty || 0, gross: t.amountKrw, fee: 0, net: t.amountKrw, pnl: t.pnlKrw, reason: t.detail, reasonKo: t.type, slot: { id: config.activeSlot, name: activeSlot()?.name || '' } })), decisions: [], equity: [[account.updatedAt, equity]], logs: [...(paper.events || []).map((x)=>({t:x.time,level:'info',msg:x.message})), { t: Date.now(), level: 'info', msg: 'Binance 실시간 시세 수신' }], ob: { cd: selected, ask: market.asks.map((x) => ({ p: krw(x.price), s: x.qty })), bid: market.bids.map((x) => ({ p: krw(x.price), s: x.qty })), tas: 0, tbs: 0 }, status: { binance: market.connected, lastBinanceLatency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null }, screener: { enabled: true, rows: watch.map((x, i) => ({ code: x.market, rank: i + 1, delta: 0, score: 0 })) }, monitor: { current: { markets: marketCatalog.length, latency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null } } }; }
 // BINANCE_UI_COMPAT_END
 
@@ -700,6 +706,9 @@ const server = http.createServer(async (req, res) => {
       if (body.mode) config.mode = body.mode;
       if (body.paperInitialKrw !== undefined) config.paperInitialKrw = Math.max(10_000, Math.floor(num(body.paperInitialKrw, config.paperInitialKrw)));
       if (body.paperOrderKrw !== undefined) config.paperOrderKrw = Math.max(10_000, Math.floor(num(body.paperOrderKrw, config.paperOrderKrw)));
+      if (body.paperOrderMode !== undefined) config.paperOrderMode = body.paperOrderMode === 'percent' ? 'percent' : 'fixed';
+      if (body.paperOrderPct !== undefined) config.paperOrderPct = Math.max(0, Math.min(100, num(body.paperOrderPct, config.paperOrderPct ?? 10)));
+      if (body.maxPositions !== undefined) config.maxPositions = Math.max(1, Math.min(20, Math.floor(num(body.maxPositions, config.maxPositions ?? 1))));
       if (body.futuresLeverage !== undefined) config.futuresLeverage = Math.max(1, Math.min(125, Math.floor(num(body.futuresLeverage, config.futuresLeverage))));
       if (body.autoTrading !== undefined) config.autoTrading = Boolean(body.autoTrading);
       if (body.activeSlot !== undefined) activateSlot(body.activeSlot);

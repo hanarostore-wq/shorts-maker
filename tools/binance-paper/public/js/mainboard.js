@@ -550,6 +550,9 @@ function openCapital() {
       const c = await api('/api/config', {
         paperInitialKrw: initialKrw,
         paperOrderKrw: orderKrw,
+        paperOrderMode: tradeSettings.orderMode,
+        paperOrderPct: tradeSettings.orderPct,
+        maxPositions: tradeSettings.maxPositions,
         trade: tradeSettings,
         userTrade: tradeSettings,
       });
