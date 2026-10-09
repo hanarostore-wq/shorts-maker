@@ -84,7 +84,20 @@ function slotRuleRows(active, group, evidence = []) {
       type: r.종류, value: r.값, unit: r.단위, status: '자료 부족', actual: null,
       ...live.get(r.규칙번호)
     }));
-  return compactDupontExitRows(active, rows);
+  return compactDupontExitRows(active, decorateDupontRows(active, rows));
+}
+function decorateDupontRows(slot, rows = []) {
+  if (!String(slot?.name || slot?.definition?.슬롯이름 || '').includes('듀퐁 박스권 PAPER 대체형')) return rows;
+  const labels = {
+    '듀퐁-가격속도': ['실시간 30초 방향·거래 집중', '30초 방향과 최근 10초 거래 집중을 동시에 확인'],
+    '듀퐁-거래집중': ['자동 박스 구조', '5·10·20·30·60분 후보에서 지지·저항 접촉이 있는 박스를 선택'],
+    '듀퐁-호가압력': ['거리 가중 맞춤 호가압력', '20단계 호가·체결·호가벽 변화를 함께 반영 · 기준 12%'],
+    '듀퐁-비용제한': ['박스 진입 구간', '박스 하단 22% 롱 · 선물은 상단 22% 숏도 판단'],
+    '듀퐁-고점차단': ['진입 호가 간격 제한', '매수·매도 호가 차가 0.07% 이하일 때만 신규 진입'],
+    '듀퐁-수익보호': ['박스 중간선 50% 분할익절', '신규 듀퐁 진입은 박스 중간선에서 보유 수량 50% 정리'],
+    '듀퐁-반대장악청산': ['잔여 수량 1:3 목표 익절', '남은 수량은 손절폭 1 대비 목표 3에서 정리']
+  };
+  return rows.map((row) => labels[row.id] ? { ...row, name: labels[row.id][0], description: labels[row.id][1] } : row);
 }
 const DUPONT_EXIT_IDS = ['듀퐁-손절주의', '듀퐁-손절확인', '듀퐁-손절회복', '듀퐁-비상손절'];
 function ruleIds(rule) { return rule?.sourceIds || [rule?.id || rule?.규칙번호].filter(Boolean); }
@@ -96,7 +109,7 @@ function compactDupontExitRows(slot, rows = []) {
   const status = lossRows.some((rule) => rule.status === '통과') ? '통과' : lossRows.some((rule) => rule.status === '대기') ? '대기' : '자료 부족';
   const merged = {
     ...lossRows[0], id: '듀퐁-손절안전묶음', 규칙번호: '듀퐁-손절안전묶음',
-    name: '손절 주의 · 확인 · 회복 · 비상 손절', 이름: '손절 주의 · 확인 · 회복 · 비상 손절',
+    name: '박스 경계·직전 고점 손절', 이름: '박스 경계·직전 고점 손절',
     description: '순손실 -0.25%부터 3초 확인 · 0.06% 회복 시 취소 · -0.40% 즉시 정리',
     쉬운설명: '순손실 -0.25%부터 3초 확인 · 0.06% 회복 시 취소 · -0.40% 즉시 정리',
     status, actual: null, sourceIds: [...DUPONT_EXIT_IDS], composite: true,
