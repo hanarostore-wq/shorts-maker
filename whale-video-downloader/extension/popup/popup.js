@@ -150,7 +150,7 @@ async function renderFolder() {
   renderPreview();
 }
 renderFolder();
-for (const id of ['captionOnMedia', 'captionCover', 'captionIntro', 'captionKeepOriginal', 'translateCaption', 'ytShortsStats', 'xFollowButtons', 'pauseOffscreen', 'preventDuplicates', 'autoFollow', 'aiLabel', 'downloadedMark', 'xPhotoTapClose', 'bskyFollowButtons', 'followAllButton', 'noAutoplay', 'captionAuthor', 'alwaysShowButtons', 'ytLikeFloat', 'followFloat', 'seekBar', 'forceH264Aac']) {
+for (const id of ['captionOnMedia', 'captionCover', 'captionIntro', 'captionKeepOriginal', 'translateCaption', 'ytShortsStats', 'xFollowButtons', 'pauseOffscreen', 'preventDuplicates', 'autoFollow', 'aiLabel', 'downloadedMark', 'xPhotoTapClose', 'bskyFollowButtons', 'followAllButton', 'noAutoplay', 'captionAuthor', 'alwaysShowButtons', 'ytLikeFloat', 'followFloat', 'seekBar', 'forceH264Aac', 'hideTextPosts']) {
   $(`#${id}`).checked = settings[id] !== false;
   $(`#${id}`).addEventListener('change', (e) => save({ [id]: e.target.checked }));
 }

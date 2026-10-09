@@ -673,6 +673,12 @@ const handlers = {
 
   // ── X ──
   'x.com': (req, res, u) => {
+    if (u.pathname === '/xtextfeed') {
+      // 피드: 글만(t1) · 사진(p1) · 영상(v1) · 처음엔 글만이다가 3초 뒤 사진이 생기는 게시물(late)
+      const cell = (id, inner) => `<div data-testid="cellInnerDiv" id="${id}"><article data-testid="tweet"><img src="https://pbs.twimg.com/profile_images/1/a.jpg" style="width:40px;height:40px"><div data-testid="tweetText">${id} 본문</div>${inner}</article></div>`;
+      return html(res, page('X 글 피드', cell('t1', '') + cell('p1', '<div data-testid="tweetPhoto"><img src="https://cdn.example-videos.com/img/photo.jpg" style="width:400px;height:220px;object-fit:cover"></div>') + cell('v1', '<div data-testid="videoPlayer"><video src="https://cdn.example-videos.com/preview.webm" muted style="width:400px;height:220px"></video></div>') + cell('late', '<div id="lateslot"></div>')
+        + `<script>setTimeout(() => { document.getElementById('lateslot').innerHTML = '<img src="https://cdn.example-videos.com/img/photo.jpg?late" style="width:400px;height:220px;object-fit:cover">'; }, 3000);</script>`));
+    }
     if (u.pathname === '/xposter') {
       // 재생 전 X 게시물: <video> 없이 표지 사진(amplify_video_thumb)과 재생 단추만
       return html(res, page('X 재생 전', `<article data-testid="tweet" style="width:520px"><a href="/tester/status/1790000000000000009">시간</a>

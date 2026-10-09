@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS = {
   videoScale: 70, // 줄인 크기(%)
   ytShortsStats: true, // 유튜브 쇼츠 오른쪽 위에 조회수·구독자 수
   seekBar: true, // 영상 아래 재생바(재생 위치 이동). 자체 재생바가 있는 사이트는 사이트별 기본값으로 끔
+  hideTextPosts: true, // 피드에서 글만 있는(사진·영상 없는) 게시물 숨기기(X·블루스카이·스레드·페이스북·웨이보·유튜브 커뮤니티)
   ytLikeFloat: true, // 모든 사이트: 화면 오른쪽 아래 좋아요 플로팅 버튼(보고 있는 게시물)
   followFloat: true, // 모든 사이트: 화면 오른쪽 아래 팔로우 플로팅 버튼(보고 있는 게시물 작성자)
   xFollowButtons: true, // X 피드 작성자 옆 팔로우/팔로잉 버튼
@@ -158,6 +159,7 @@ export const SITE_FEATURES = [
   { key: 'followAllButton', group: '팔로우', name: '팔로우 목록 전부 팔로우 버튼', desc: '팔로워·팔로잉 목록 화면(창)에 버튼을 띄웁니다' },
   { key: 'xFollowButtons', group: '팔로우', name: '피드 작성자 옆 팔로우 버튼', desc: '피드 게시물에 팔로우/팔로잉 상태 버튼 (다른 사이트는 팔로우 플로팅 버튼 사용)', sites: ['x'] },
   { key: 'bskyFollowButtons', group: '팔로우', name: '피드 게시물 팔로우 버튼', desc: '피드 게시물에 팔로우/팔로잉 상태 버튼 (다른 사이트는 팔로우 플로팅 버튼 사용)', sites: ['bluesky'] },
+  { key: 'hideTextPosts', group: '보기', name: '글만 있는 피드 숨기기', desc: '피드에서 사진·영상이 없는 게시물을 가립니다 (게시물을 연 화면은 그대로)' },
   { key: 'ytLikeFloat', group: '보기', name: '좋아요 플로팅 버튼', desc: '화면 오른쪽 아래에 떠 있는 좋아요 버튼 — 지금 보고 있는 게시물에 좋아요' },
   { key: 'seekBar', group: '보기', name: '영상 재생바', desc: '재생바가 없는 영상 아래에 재생바와 시간을 띄웁니다. 누르거나 끌어서 위치 이동' },
   { key: 'xPhotoTapClose', group: '보기', name: '사진 확대 보기에서 누르면 닫기', desc: '크게 본 사진(확대 창)을 누르면 닫힙니다' },

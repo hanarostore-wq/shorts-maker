@@ -232,7 +232,7 @@ const scenarios = [
 
 console.log(`확장프로그램 ID: ${extId}\n`);
 // 일반 시나리오는 원본 그대로 저장되는지 보므로 요약 글자 넣기는 끄고, 아래 전용 테스트에서 켠다.
-await setSettings({ subfolder: '', subfolderV: 2, forceH264Aac: false, captionOnMedia: false, preventDuplicates: false, siteFolders: false, noAutoplay: false, alwaysShowButtons: false, siteSettings: {}, siteSettingsV: 3, siteFolderV: 2 }); // 사이트별 기능 설정은 전용 테스트에서 확인. 저장 버튼 항상 표시는 전용 테스트에서 확인(다른 테스트는 마우스를 올린 사진의 버튼을 누름). 자동재생 끄기는 전용 테스트에서 확인. 사이트별 폴더는 전용 테스트에서 확인. 같은 페이지를 여러 번 받는 시나리오가 많아 중복 막기는 전용 테스트에서만 켠다
+await setSettings({ hideTextPosts: false, subfolder: '', subfolderV: 2, forceH264Aac: false, captionOnMedia: false, preventDuplicates: false, siteFolders: false, noAutoplay: false, alwaysShowButtons: false, siteSettings: {}, siteSettingsV: 3, siteFolderV: 2 }); // 사이트별 기능 설정은 전용 테스트에서 확인. 저장 버튼 항상 표시는 전용 테스트에서 확인(다른 테스트는 마우스를 올린 사진의 버튼을 누름). 자동재생 끄기는 전용 테스트에서 확인. 사이트별 폴더는 전용 테스트에서 확인. 같은 페이지를 여러 번 받는 시나리오가 많아 중복 막기는 전용 테스트에서만 켠다
 for (const s of scenarios) await scenario(s);
 
 // ── 저장 위치: 하위 폴더 설정 반영 ──
@@ -529,6 +529,29 @@ if (!only || only === 'folder') {
     const p1 = await extPage();
     await p1.evaluate(() => chrome.storage.local.set({ downloadedKeys: [] }));
     await p1.close();
+    await page.close();
+  }
+}
+
+// ── 글만 있는 피드 숨기기(켜고 끄기, 늦게 뜬 사진은 다시 보임) ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ siteSettings: {}, hideTextPosts: true });
+    await page.goto('https://x.com/xtextfeed', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2200);
+    const vis = () => page.evaluate(() => Object.fromEntries(['t1', 'p1', 'v1', 'late'].map((id) => [id, getComputedStyle(document.getElementById(id)).display !== 'none'])));
+    const a = await vis();
+    await page.waitForTimeout(2500); // 3초에 사진이 생긴 게시물
+    const b = await vis();
+    await setSettings({ siteSettings: { x: { hideTextPosts: false } } });
+    await page.waitForTimeout(800);
+    const c = await vis();
+    record('[글만 있는 피드] 글만 숨김·사진/영상은 보임·늦게 뜬 사진은 다시 보임·끄면 모두 보임', !a.t1 && a.p1 && a.v1 && !a.late && b.late && !b.t1 && c.t1, { note: JSON.stringify({ 처음: a, 사진생긴뒤: b, 끈뒤: c }) });
+  } catch (err) {
+    record('[글만 있는 피드]', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ siteSettings: {}, hideTextPosts: false });
     await page.close();
   }
 }
