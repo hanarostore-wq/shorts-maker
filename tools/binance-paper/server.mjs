@@ -92,8 +92,15 @@ function readJson(file, fallback) {
 let config = readJson(configPath, defaultConfig);
 function saveConfig() { config.updatedAt = Date.now(); fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8'); }
 function savePaper() { paper.updatedAt = Date.now(); fs.writeFileSync(paperPath, JSON.stringify(paper, null, 2), 'utf8'); }
+function versionBook(slotId) { config.slotVersions ||= {}; const key=String(slotId); config.slotVersions[key] ||= { activeVersionId: null, items: [] }; return config.slotVersions[key]; }
+function versionRecord(slot, number) { return { id: `${slot.id}-${number}`, number: `${slot.id}-${number}`, name: slot.name || slot.definition?.슬롯이름 || `${slot.id}번 전략`, fileName: slot.fileName || null, definition: clone(slot.definition), enabledRuleIds: [...(slot.enabledRuleIds || [])], savedAt: Date.now() }; }
+function ensureSlotVersions() { for (const slot of config.slots.items) { if (!slot?.definition) continue; const book=versionBook(slot.id); const same=book.items.find((v)=>JSON.stringify(v.definition)===JSON.stringify(slot.definition) && JSON.stringify(v.enabledRuleIds)===JSON.stringify(slot.enabledRuleIds)); if (!same) book.items.push(versionRecord(slot, book.items.length + 1)); const current=same || book.items.at(-1); if (slot.id===config.activeSlot && !book.activeVersionId) book.activeVersionId=current.id; } }
+function addSlotVersion(slotId, definition, fileName, name) { const book=versionBook(slotId); const number=book.items.length+1; const value={ id: `${slotId}-${number}`, number: `${slotId}-${number}`, name: String(name || definition?.슬롯이름 || `${slotId}번 전략`).slice(0,80), fileName: fileName || null, definition: clone(definition), enabledRuleIds:[...(definition?.코인고르기규칙||[]),...(definition?.매수규칙||[]),...(definition?.매도규칙||[])].filter((r)=>r?.사용).map((r)=>r.규칙번호), savedAt:Date.now() }; book.items.push(value); return value; }
+function applySlotVersion(slotId, versionId) { const book=versionBook(slotId); const version=book.items.find((v)=>v.id===versionId); if (!version) throw new Error('선택한 전략 버전을 찾지 못했습니다'); const index=config.slots.items.findIndex((x)=>x.id===slotId); if(index<0) throw new Error('슬롯을 찾지 못했습니다'); config.slots.items[index]={ id:slotId, name:version.name, status:'적용 중', fileName:version.fileName, definition:clone(version.definition), enabledRuleIds:[...version.enabledRuleIds], note:`전략 버전 ${version.number} 적용` }; activateSlot(slotId); book.activeVersionId=version.id; return version; }
+
 config.slots = normalizeSlotShelf(config.slots);
 config.activeSlot = config.slots.activeId;
+ensureSlotVersions();
 saveConfig();
 let paper = readJson(paperPath, () => defaultPaper(config.paperInitialKrw));
 
@@ -186,6 +193,7 @@ function publicConfig() {
     activeSlot: config.activeSlot,
     slotCount: SLOT_COUNT,
     slots: config.slots.items.map(slotSummary),
+    slotVersions: clone(config.slotVersions || {}),
     symbol: market.symbol,
     interval: market.interval,
   };
@@ -319,17 +327,19 @@ async function refreshMarketCatalog() {
 
 function publicStreams() {
   const symbol = market.symbol.toLowerCase();
-  const common = [`${symbol}@ticker`, `!ticker@arr`, `${symbol}@depth20@100ms`, `${symbol}@aggTrade`, `${symbol}@kline_${market.interval}`];
+  const common = [`${symbol}@ticker`, `${symbol}@depth20@100ms`, `${symbol}@aggTrade`, `${symbol}@kline_${market.interval}`];
   if (isFutures) common.push(`${symbol}@markPrice@1s`);
   return common;
 }
+function wsText(data) { return typeof data === 'string' ? data : Buffer.from(data).toString('utf8'); }
 function connectCatalogStream() {
   if (catalogSocket && (catalogSocket.readyState === WebSocket.OPEN || catalogSocket.readyState === WebSocket.CONNECTING)) return;
   clearTimeout(catalogReconnectTimer);
   const base = isFutures ? FUTURES_WS : SPOT_WS;
-  try { catalogSocket = new WebSocket(`${base}/ws/!ticker@arr`); catalogSocket.addEventListener('message', (event) => { try { const rows = JSON.parse(String(event.data)); if (Array.isArray(rows)) applyAllTickers(rows); } catch {} }); catalogSocket.addEventListener('close', () => { catalogSocket = null; catalogReconnectTimer = setTimeout(connectCatalogStream, 3000); }); catalogSocket.addEventListener('error', () => { try { catalogSocket?.close(); } catch {} }); } catch { catalogReconnectTimer = setTimeout(connectCatalogStream, 3000); }
+  try { catalogSocket = new WebSocket(`${base}/ws/!ticker@arr`); catalogSocket.addEventListener('message', (event) => { try { const rows = JSON.parse(wsText(event.data)); if (Array.isArray(rows)) applyAllTickers(rows); } catch {} }); catalogSocket.addEventListener('close', () => { catalogSocket = null; catalogReconnectTimer = setTimeout(connectCatalogStream, 3000); }); catalogSocket.addEventListener('error', () => { try { catalogSocket?.close(); } catch {} }); } catch { catalogReconnectTimer = setTimeout(connectCatalogStream, 3000); }
 }
 function connectMarket() {
+  connectCatalogStream();
   if (!marketCatalog.some((row) => row.symbol === market.symbol)) { market.symbol = 'BTCUSDT'; config.symbol = 'BTCUSDT'; saveConfig(); }
   clearTimeout(reconnectTimer);
   if (publicSocket) { try { publicSocket.close(); } catch {} }
@@ -339,7 +349,7 @@ function connectMarket() {
     publicSocket = new WebSocket(url);
     publicSocket.addEventListener('open', () => { market.connected = true; market.error = ''; requestBroadcast(); });
     publicSocket.addEventListener('message', (event) => {
-      try { const payload = JSON.parse(String(event.data)).data || {}; if (Array.isArray(payload)) applyAllTickers(payload); else handleMarketEvent(payload); } catch { /* malformed message ignored */ }
+      try { const payload = JSON.parse(wsText(event.data)).data || {}; if (Array.isArray(payload)) applyAllTickers(payload); else handleMarketEvent(payload); } catch { /* malformed message ignored */ }
     });
     publicSocket.addEventListener('error', () => { market.error = 'Binance 실시간 시세 연결을 다시 시도합니다'; requestBroadcast(); });
     publicSocket.addEventListener('close', () => {
@@ -565,7 +575,7 @@ function uiCode(symbol) { return `USDT-${String(symbol || '').replace(/USDT$/, '
 function uiSymbol(code) { const base = String(code || '').replace(/^USDT-/, '').replace(/[^A-Z0-9]/g, ''); return base ? `${base}USDT` : market.symbol; }
 function uiTicker(row) { const symbol = row.symbol || market.symbol; const price = krw(num(row.price, market.price)); const rate = num(row.changePct, market.changePct) / 100; return { cd: uiCode(symbol), tp: price, scr: rate, scp: price * rate, hp: symbol === market.symbol ? krw(market.high24h) : price, lp: symbol === market.symbol ? krw(market.low24h) : price, atv24h: symbol === market.symbol ? market.volumeBase : 0, atp24h: krw(num(row.quoteVolume, market.volumeQuote)) }; }
 function uiPosition() { const p = paperPositionView(); return p ? { market: uiCode(p.symbol), qty: p.qty, avgPrice: p.entryKrw, mark: p.markKrw, cost: p.marginKrw, value: p.marginKrw + p.pnlKrw, netPnl: p.pnlKrw, netPct: p.pnlPct, heldSec: Math.floor((Date.now() - p.openedAt) / 1000) } : null; }
-function uiConfig() { return { mode: config.mode, autoTrading: config.autoTrading, markets: config.watchMarkets || [], slots: { activeId: config.activeSlot, items: config.slots.items }, trade: { orderMode: 'fixed', orderKrw: config.paperOrderKrw, orderPct: 10, maxPositions: 1, hardStopLossPct: 0 }, alerts: { voiceEnabled: false, voiceVolume: 0.7 }, screener: { enabled: true, candidates: marketCatalog.length, refreshSec: 3 }, strategyExport: { ready: true }, cost: { usdKrw: market.usdKrw || 1350 } }; }
+function uiConfig() { return { mode: config.mode, autoTrading: config.autoTrading, markets: config.watchMarkets || [], slots: { activeId: config.activeSlot, items: config.slots.items }, slotVersions: clone(config.slotVersions || {}), trade: { orderMode: 'fixed', orderKrw: config.paperOrderKrw, orderPct: 10, maxPositions: 1, hardStopLossPct: 0 }, alerts: { voiceEnabled: false, voiceVolume: 0.7 }, screener: { enabled: true, candidates: marketCatalog.length, refreshSec: 3 }, strategyExport: { ready: true }, cost: { usdKrw: market.usdKrw || 1350 } }; }
 function uiSnapshot() { const account = paperAccountView(); const pos = uiPosition(); const equity = account.totalKrw; const pnl = equity - account.initialKrw; const markets = marketCatalog.map((x) => ({ code: uiCode(x.symbol), ko: x.symbol.replace(/USDT$/, ''), en: x.symbol.replace(/USDT$/, ''), warning: false })); const tickers = marketCatalog.map(uiTicker); const selected = uiCode(market.symbol); const watch = markets.map((item, i) => ({ market: item.code, watched: true, warm: true, price: tickers.find((t) => t.cd === item.code)?.tp || 0, position: pos?.market === item.code ? pos : null, bidShare15: .5, last: { kind: 'watch', reason: 'Binance full-market monitoring' }, entryEvidence: { rules: [] }, rank: i + 1 })); return { markets, tickers, config: uiConfig(), summary: { equity, initialKrw: account.initialKrw, krw: account.availableKrw, totalPnl: pnl, totalPnlPct: account.initialKrw ? pnl / account.initialKrw * 100 : 0, realizedPnl: account.realizedKrw, feesPaid: 0, trades: account.trades.length, wins: 0, losses: 0, winRate: null, avgHoldSec: pos?.heldSec || 0, positions: pos ? [pos] : [], inflight: [], activeSlot: { id: config.activeSlot, name: activeSlot()?.name || `${config.activeSlot} slot`, rules: 0 }, effectiveDecisionMode: 'rule', jev: { label: 'Binance rule', totalCalls: 0, totalErrors: 0, totalCostUsd: 0, tokens: 0 }, startedAt: account.updatedAt, maxDrawdownPct: 0 }, watch, trades: account.trades.map((t) => ({ id: t.id, t: t.time, market: selected, side: /sell|close|정리|매도/i.test(t.type) ? 'sell' : 'buy', price: krw(market.price), qty: pos?.qty || 0, gross: t.amountKrw, fee: 0, net: t.amountKrw, pnl: t.pnlKrw, reason: t.detail, reasonKo: t.type, slot: { id: config.activeSlot, name: activeSlot()?.name || '' } })), decisions: [], equity: [[account.updatedAt, equity]], logs: [{ t: Date.now(), level: 'info', msg: 'Binance real-time feed connected' }], ob: { cd: selected, ask: market.asks.map((x) => ({ p: krw(x.price), s: x.qty })), bid: market.bids.map((x) => ({ p: krw(x.price), s: x.qty })), tas: 0, tbs: 0 }, status: { binance: market.connected, lastBinanceLatency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null }, screener: { enabled: true, rows: watch.map((x, i) => ({ code: x.market, rank: i + 1, delta: 0, score: 0 })) }, monitor: { current: { markets: marketCatalog.length, latency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null } } }; }
 // BINANCE_UI_COMPAT_END
 
@@ -631,6 +641,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/slots') {
       return json(res, 200, { ok: true, activeId: config.activeSlot, items: config.slots.items });
     }
+    if (req.method === 'POST' && url.pathname === '/api/slot-versions/add') { const body=await readBody(req); const slotId=Math.max(1,Math.min(SLOT_COUNT,Math.floor(num(body.slotId,1)))); let definition; try { definition=typeof body.content==='string'?JSON.parse(body.content):body.definition; } catch { throw new Error('전략 파일 형식이 아닙니다'); } if(!definition?.슬롯이름) throw new Error('전략 이름이 없는 파일입니다'); const v=addSlotVersion(slotId,definition,body.fileName,body.name); saveConfig(); return json(res,200,{ok:true,version:v,config:publicConfig()}); }
+    if (req.method === 'POST' && url.pathname === '/api/slot-versions/apply') { const body=await readBody(req); const v=applySlotVersion(Number(body.slotId),String(body.versionId)); saveConfig(); requestBroadcast(); return json(res,200,{ok:true,version:v,config:publicConfig()}); }
+    if (req.method === 'POST' && url.pathname === '/api/slot-versions/clone') { const body=await readBody(req); const book=versionBook(Number(body.slotId)); const from=book.items.find((v)=>v.id===body.versionId); if(!from) throw new Error('복사할 전략 버전을 찾지 못했습니다'); const v=addSlotVersion(Number(body.slotId),from.definition,from.fileName,`${from.name} 복사`); saveConfig(); return json(res,200,{ok:true,version:v,config:publicConfig()}); }
+    if (req.method === 'POST' && url.pathname === '/api/slot-versions/delete') { const body=await readBody(req); const book=versionBook(Number(body.slotId)); if(book.activeVersionId===body.versionId) throw new Error('적용 중인 버전은 다른 버전을 적용한 뒤 삭제하세요'); const i=book.items.findIndex((v)=>v.id===body.versionId); if(i<0) throw new Error('삭제할 전략 버전을 찾지 못했습니다'); book.items.splice(i,1); saveConfig(); return json(res,200,{ok:true,config:publicConfig()}); }
     if (req.method === 'POST' && url.pathname === '/api/slots/apply') {
       const body = await readBody(req);
       const slot = activateSlot(body.slotId);
