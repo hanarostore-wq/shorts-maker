@@ -129,11 +129,11 @@ function renderAutoCards() {
   $('#apToggle').className = 'btn primary';
   if (c.mode === 'live') {
     if (!live) {
-      $('#apCards').innerHTML = kpi('업비트 실전계좌', '불러오는 중', '업비트 Open API 잔고 조회 중');
+      $('#apCards').innerHTML = kpi('Binance 실전계좌', '불러오는 중', 'Binance API 잔고 조회 중');
       return;
     }
     if (!live.configured || live.error) {
-      $('#apCards').innerHTML = kpi('업비트 실전계좌', '연결 필요', live.error || '설정에서 Access Key와 Secret Key를 저장하세요', 'down');
+      $('#apCards').innerHTML = kpi('Binance 실전계좌', '연결 필요', live.error || '설정에서 Access Key와 Secret Key를 저장하세요', 'down');
       return;
     }
     const assetValue = (live.positions || []).reduce((a, p) => a + Number(p.value || 0), 0);
@@ -176,7 +176,7 @@ function renderAutoPositions() {
     }
     if (!live.configured || live.error) {
       $('#apPosSub').textContent = 'API 연결 필요';
-      $('#apPos').innerHTML = `<tbody><tr><td class="empty">${esc(live.error || '설정에서 업비트 Open API 키를 입력하세요')}</td></tr></tbody>`;
+      $('#apPos').innerHTML = `<tbody><tr><td class="empty">${esc(live.error || '설정에서 Binance API 키를 입력하세요')}</td></tr></tbody>`;
       return;
     }
     $('#apPosSub').textContent = `실전 ${live.positions.length}개 · ${fmtTime(live.updatedAt)}`;
@@ -230,7 +230,7 @@ function renderWatch() {
   rows.sort((a, b) => 0);
   const mode = S.summary?.effectiveDecisionMode === 'rule' ? '순수 규칙' : 'Jev 보조';
   const restoring = S.screener?.restored ? `저장 TOP ${S.screener.restoredRows}개를 유지 중입니다 · 새 체결·호가 확인 뒤 진입 판단을 다시 시작합니다` : null;
-  $('#apWatch').innerHTML = `<thead><tr><th class="l">코인</th><th class="c">구분</th><th>현재가</th><th>EMA30</th><th>EMA60</th><th>EMA100</th><th>EMA200</th><th class="c">리본 정렬·폭</th><th class="c">진입 구조</th><th>EMA30 기울기</th><th>EMA30 거리</th><th>캔들 몸통</th><th>호가 간격</th><th class="c">상태</th><th>최근 판단</th><th></th></tr></thead><tbody>${rows.join('') || `<tr><td colspan="16" class="empty">${S.config.screener?.enabled ? (restoring || `${mode} 모드가 원화마켓 전체를 실시간 분석 중입니다 · 약 1분 뒤 자동 감시 목록이 채워집니다`) : '감시 코인이 없습니다. TOP 자동 선별을 켜거나 코인을 고정하세요'}</td></tr>`}</tbody>`;
+  $('#apWatch').innerHTML = `<thead><tr><th class="l">코인</th><th class="c">구분</th><th>현재가</th><th>EMA30</th><th>EMA60</th><th>EMA100</th><th>EMA200</th><th class="c">리본 정렬·폭</th><th class="c">진입 구조</th><th>EMA30 기울기</th><th>EMA30 거리</th><th>캔들 몸통</th><th>호가 간격</th><th class="c">상태</th><th>최근 판단</th><th></th></tr></thead><tbody>${rows.join('') || `<tr><td colspan="16" class="empty">${S.config.screener?.enabled ? (restoring || `${mode} 모드가 Binance USDT 마켓 전체를 실시간 분석 중입니다 · 약 1분 뒤 자동 감시 목록이 채워집니다`) : '감시 코인이 없습니다. TOP 자동 선별을 켜거나 코인을 고정하세요'}</td></tr>`}</tbody>`;
 }
 
 const pctTxt = (v, d = 2) => (v == null ? '-' : fmtPct(v, d));
@@ -245,7 +245,7 @@ function renderScreener() {
   const held = new Set((S.summary?.positions || []).map((p) => p.market));
   const judging = new Set(S.summary?.inflight || []);
   $('#scrTitle').textContent = `${v.mode === 'jev' ? 'Jev 보조' : '순수 규칙'} 실시간 선별 TOP ${v.topN}`;
-  $('#scrSub').textContent = v.enabled ? `원화마켓 ${c.total ?? '-'}개 전체를 체결마다 다시 계산 · 동시 보유 ${S.config.trade.maxPositions}개까지만 매수` : '꺼짐 · 설정에서 켤 수 있습니다';
+  $('#scrSub').textContent = v.enabled ? `Binance USDT 마켓 ${c.total ?? '-'}개 전체를 체결마다 다시 계산 · 동시 보유 ${S.config.trade.maxPositions}개까지만 매수` : '꺼짐 · 설정에서 켤 수 있습니다';
   $('#scrMode').innerHTML = !v.enabled ? '<span class="pill skip">선별 꺼짐</span>' : v.mode === 'jev' ? '<span class="pill buy">Jev 보조</span>' : '<span class="pill warn">순수 규칙 · API 0회</span>';
   const lb = v.lastBatch;
   const excl = EXCL.filter(([k]) => c[k]).map(([k, t]) => `${t} ${c[k]}`).join(' · ');
@@ -276,7 +276,7 @@ function renderScreener() {
       <td class="c">${st}</td>
       <td><button class="btn sm" data-pin="${r.code}" data-on="${pinned ? '0' : '1'}">${pinned ? '고정됨' : '고정'}</button></td></tr>`;
   });
-  const empty = !v.enabled ? 'TOP 자동 선별이 꺼져 있습니다 · 설정에서 켜세요' : v.restored ? `저장 TOP ${v.restoredRows}개를 유지하며 새 실시간 데이터를 재확인 중입니다` : v.warmupLeft > 0 ? `원화마켓 전체 실시간 데이터를 모으는 중 · ${v.warmupLeft}초 뒤 TOP ${v.topN}이 채워집니다` : '조건을 통과한 코인이 없습니다 · 최소 거래대금이나 최대 호가 간격 기준을 확인하세요';
+  const empty = !v.enabled ? 'TOP 자동 선별이 꺼져 있습니다 · 설정에서 켜세요' : v.restored ? `저장 TOP ${v.restoredRows}개를 유지하며 새 실시간 데이터를 재확인 중입니다` : v.warmupLeft > 0 ? `Binance USDT 마켓 전체 실시간 데이터를 모으는 중 · ${v.warmupLeft}초 뒤 TOP ${v.topN}이 채워집니다` : '조건을 통과한 코인이 없습니다 · 최소 거래대금이나 최대 호가 간격 기준을 확인하세요';
   $('#scrTable').innerHTML = `<thead><tr><th class="c">순위</th><th class="l">코인</th><th class="l">선별 점수</th><th>${v.mode === 'jev' ? 'Jev' : '규칙'}</th><th>1분</th><th>5분</th><th>15분</th><th>5분 거래대금</th><th>매수 비중</th><th>5분 변동</th><th>호가 한 칸</th><th class="l">선정 근거</th><th>편입</th><th class="c">상태</th><th></th></tr></thead><tbody>${rows.join('') || `<tr><td colspan="15" class="empty">${empty}</td></tr>`}</tbody>`;
   $('#scrBench').innerHTML = (v.bench || []).map((b) => `<div class="bench" data-go="${b.code}"><span><b>${esc(nameOf(b.code))}</b> <em>${sym(b.code)}</em></span><span class="muted">${Math.round(b.final * 100)}점 · 5분 ${pctTxt(b.r5, 1)}</span></div>`).join('') || '<div class="muted" style="padding:6px 0">-</div>';
   $('#scrChanges').innerHTML = (v.changes || []).slice().reverse().slice(0, 8).map((e) => `<div class="chg"><span class="muted">${fmtTime(e.t)}</span>${e.added.length ? ` <b class="up">+${e.added.length > 3 ? e.added.length + '개' : e.added.map((x) => esc(nameOf(x))).join(', ')}</b>` : ''}${e.removed.length ? ` <b class="down">-${e.removed.length > 3 ? e.removed.length + '개' : e.removed.map((x) => esc(nameOf(x))).join(', ')}</b>` : ''}</div>`).join('') || '<div class="muted" style="padding:6px 0">아직 교체 없음</div>';
@@ -511,7 +511,7 @@ const SECTIONS = [
     ]
   },
   {
-    id: 'upbitKey', title: '업비트 Open API 연결 (실전투자용)', sub: '실전투자 모드 선택 시 실제 시장가 주문을 발송하는 키입니다',
+    id: 'upbitKey', title: 'Binance API 연결 (실전투자용)', sub: '실전투자 모드 선택 시 실제 시장가 주문을 발송하는 키입니다',
     fields: [
       { p: 'upbit.accessKey', label: 'Upbit Access Key', type: 'password', hint: '업비트 마이페이지 → Open API 관리에서 발급' },
       { p: 'upbit.secretKey', label: 'Upbit Secret Key', type: 'password', hint: '자산조회 + 주문 권한 필수' }
@@ -546,7 +546,7 @@ const SECTIONS = [
     ]
   },
   {
-    id: 'screener', title: 'TOP 자동 감시 선별', sub: '원화마켓 전체를 실시간 계산합니다. Jev 보조형은 Jev 점수를 합산하고 순수 규칙형은 실시간 규칙 점수만 사용합니다',
+    id: 'screener', title: 'TOP 자동 감시 선별', sub: 'Binance USDT 마켓 전체를 실시간 계산합니다. Jev 보조형은 Jev 점수를 합산하고 순수 규칙형은 실시간 규칙 점수만 사용합니다',
     fields: [
       { p: 'screener.enabled', label: 'TOP 자동 선별', type: 'select', bool: true, options: [['true', '켜기 · TOP 코인을 자동 감시'], ['false', '끄기 · 고정 코인만 감시']] },
       { p: 'screener.topN', label: '감시 TOP 개수', type: 'number', unit: '개', hint: '이 중 동시 보유 최대 개수만큼만 진입' },
@@ -577,7 +577,7 @@ const SECTIONS = [
     ]
   },
   {
-    id: 'scoreWeights', title: '순수 규칙형 TOP 점수 · 기준 · 가중치', sub: 'Jev를 끄면 아래 규칙 점수가 290개 원화마켓의 최종 TOP 순위를 직접 결정합니다 · 가중치 0 = 해당 요소 미반영',
+    id: 'scoreWeights', title: '순수 규칙형 TOP 점수 · 기준 · 가중치', sub: 'Jev를 끄면 아래 규칙 점수가 290개 Binance USDT 마켓의 최종 TOP 순위를 직접 결정합니다 · 가중치 0 = 해당 요소 미반영',
     fields: [
       { p: 'screener.liveScoreBias', label: '규칙 점수 통과 기준', type: 'number', step: 0.1, hint: '낮출수록 더 많은 코인이 상위 후보가 되고, 높일수록 강한 흐름만 TOP에 남습니다' },
       { p: 'screener.momentum1mWeight', label: '1분 모멘텀 가중치', type: 'number', step: 0.1, hint: '즉시 상승 속도 비중 · 너무 높으면 급등 추격 성향 증가' },
@@ -659,9 +659,9 @@ const SECTIONS = [
     ]
   },
   {
-    id: 'paper', title: '모의투자 체결', sub: '업비트 원화마켓 기준 · 실제 주문은 절대 전송하지 않습니다',
+    id: 'paper', title: '모의투자 체결', sub: '업비트 Binance USDT 마켓 기준 · 실제 주문은 절대 전송하지 않습니다',
     fields: [
-      { p: 'paper.feePct', label: '거래 수수료', type: 'number', unit: '%', step: 0.01, hint: '업비트 원화마켓 기본 0.05%' },
+      { p: 'paper.feePct', label: '거래 수수료', type: 'number', unit: '%', step: 0.01, hint: '업비트 Binance USDT 마켓 기본 0.05%' },
       { p: 'paper.slippagePct', label: '슬리피지', type: 'number', unit: '%', step: 0.01, hint: '호가를 따라 체결한 뒤 추가로 불리하게 반영' }
     ]
   }

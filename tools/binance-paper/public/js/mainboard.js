@@ -172,7 +172,7 @@ function stateBadge(w) {
 
 function topRows() {
   const rows = holdingRows();
-  if (!rows.length) return '<div class="table-empty">현재 보유 중인 코인이 없습니다 · 전체 원화마켓은 백그라운드에서 계속 분석합니다</div>';
+  if (!rows.length) return '<div class="table-empty">현재 보유 중인 코인이 없습니다 · 전체 Binance USDT 마켓은 백그라운드에서 계속 분석합니다</div>';
   return rows.map((w) => {
     const p = w.position;
     const latest = w.last?.reason || '상승 중 보유 · 고점 하락 익절 감시';
@@ -240,7 +240,7 @@ function serverMonitor() {
     <div class="server-monitor-head"><div><h3>BLACK PC 서버 상태</h3><span>5초마다 측정 · 최근 약 6분 기록</span></div><b class="${upbitReceiving ? 'connected' : 'disconnected'}">${upbitReceiving ? '업비트 수신 중' : '업비트 재연결 중'}</b></div>
     <div class="monitor-kpis"><span>감시 마켓 <b>${monitorInt(monitoredMarkets)}개</b></span><span>차트 자료 <b>${monitorInt(distribution.seedActive)}/${monitorInt(distribution.seedConcurrency)}개 처리</b></span><span>대기열 <b>${monitorInt(distribution.seedQueue)}개</b></span><span>실시간 수신 <b>${monitorNumber(current.messagesPerSec, '건/초')}</b></span></div>
     <div class="monitor-charts">${monitorChart('CPU 사용률', current.cpuPct, '%', history, 'cpuPct', cpuTone, 1)}${monitorChart('메모리 사용량', current.rssMb, 'MB', history, 'rssMb', 'memory', 1)}${monitorChart('업비트 실제 수신 지연', current.latencyMs, 'ms', history, 'latencyMs', 'latency')}</div>
-    <p class="monitor-note">전체 원화마켓을 BLACK PC에서 분석합니다 · 실제 수신 지연은 업비트 이벤트 시각과 BLACK PC 수신 시각의 차이 중앙값입니다 · 과거 차트 자료만 최대 ${fmtInt(distribution.seedConcurrency || 0)}개씩 나눠 불러옵니다</p>
+    <p class="monitor-note">전체 Binance USDT 마켓을 BLACK PC에서 분석합니다 · 실제 수신 지연은 업비트 이벤트 시각과 BLACK PC 수신 시각의 차이 중앙값입니다 · 과거 차트 자료만 최대 ${fmtInt(distribution.seedConcurrency || 0)}개씩 나눠 불러옵니다</p>
   </section>`;
 }
 
@@ -438,7 +438,7 @@ function mainHtml() {
           <div class="main-chart-coin">
             <img id="mainChartIcon" src="${coinIcon(current?.market || S.market)}" alt="" onerror="this.style.visibility='hidden'">
             <b id="mainChartName">${esc(nameOf(current?.market || S.market))}</b>
-            <small id="mainChartSym">${sym(current?.market || S.market)}/KRW</small>
+            <small id="mainChartSym">${sym(current?.market || S.market)}/USDT</small>
           </div>
           <div class="main-chart-tools" id="mainChartTools">
             ${['1', '3', '5', '15', '60', 'D'].map((u) => `<button type="button" data-main-unit="${u}" class="${MC.unit === u ? 'on' : ''}">${u === 'D' ? '일' : `${u}분`}</button>`).join('')}
@@ -449,7 +449,7 @@ function mainHtml() {
       </div>
       <section class="top30 panel-dark">
         <div class="panel-head">
-          <div><h2>현재 보유 중인 코인</h2><p>전체 원화마켓은 백그라운드에서 분석하고, 이곳에는 현재 보유 코인만 표시합니다</p></div>
+          <div><h2>현재 보유 중인 코인</h2><p>전체 Binance USDT 마켓은 백그라운드에서 분석하고, 이곳에는 현재 보유 코인만 표시합니다</p></div>
           <span>${current ? `${holdingRows().length}개 보유` : '보유 없음'}</span>
         </div>
         <div class="top-head"><span>코인</span><span>현재가/진입가</span><span>보유 손익 · 금액</span><span>수익 보호 상태</span><span>매도 · 매수 힘</span><span>상태</span></div>
@@ -858,7 +858,7 @@ async function loadMainChart() {
   const symEl = $('#mainChartSym');
   if (icon) { icon.src = coinIcon(market); icon.style.visibility = 'visible'; }
   if (name) name.textContent = nameOf(market);
-  if (symEl) symEl.textContent = `${sym(market)}/KRW`;
+  if (symEl) symEl.textContent = `${sym(market)}/USDT`;
   try {
     const rows = await api(`/api/candles?market=${market}&unit=${unit}&count=160`);
     if (id !== MC.reqId || !MC.candle) return;

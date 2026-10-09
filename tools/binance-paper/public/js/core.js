@@ -82,7 +82,7 @@ export const bus = {
 
 export const S = {
   cid: sessionStorage.getItem('mu-cid') || Math.random().toString(36).slice(2),
-  market: localStorage.getItem('mu-market') || 'KRW-BTC',
+  market: localStorage.getItem('binance-market') || 'USDT-BTC',
   markets: [],
   marketMap: new Map(),
   tickers: new Map(),
@@ -236,7 +236,7 @@ export function connect() {
 export async function setMarket(code) {
   if (!code || code === S.market) return;
   S.market = code;
-  localStorage.setItem('mu-market', code);
+  localStorage.setItem('binance-market', code);
   S.ob = null;
   S.viewTicker = S.tickers.get(code) || null;
   bus.emit('market', code);

@@ -27,7 +27,7 @@ function rankRow(code) { return S.screener?.rows?.find((r) => r.code === code) |
 
 function buildRow(m) {
   const row = h('div', { class: 'mrow', 'data-code': m.code });
-  row.innerHTML = `<span class="mrank"></span><span class="star">★</span><span class="nm"><b></b><em>${sym(m.code)}/KRW</em></span><span class="pr num"></span><span class="rt num"><b></b><em></em></span><span class="am num"></span>`;
+  row.innerHTML = `<span class="mrank"></span><span class="star">★</span><span class="nm"><b></b><em>${sym(m.code)}/USDT</em></span><span class="pr num"></span><span class="rt num"><b></b><em></em></span><span class="am num"></span>`;
   row.addEventListener('click', (e) => {
     if (e.target.classList.contains('star')) {
       e.stopPropagation();
@@ -148,7 +148,7 @@ function holdRow(code) {
   const m = S.marketMap.get(code);
   const row = h('div', { class: `mhold-row${code === S.market ? ' sel' : ''}`, 'data-code': code });
   const pnl = p?.netPnl ?? 0;
-  row.innerHTML = `<span class="hn"><b>${esc(m?.ko || code)}</b><em>${sym(code)}/KRW</em></span>
+  row.innerHTML = `<span class="hn"><b>${esc(m?.ko || code)}</b><em>${sym(code)}/USDT</em></span>
     <span class="hp num">${fmtPrice(p?.avgPrice)}</span>
     <span class="hp num">${fmtPrice(p?.mark)}</span>
     <span class="hp num ${upDown(pnl)}"><b>${fmtSigned(pnl, fmtInt)}원</b><em>${fmtPct(p?.netPct)}</em></span>`;
@@ -161,7 +161,7 @@ function renderList(force = false) {
   const box = $('#mList');
   setListHeader();
   if (!codes.length) {
-    const msg = ML.q ? '검색 결과가 없습니다' : ML.tab === 'hold' ? '보유 중인 코인이 없습니다' : ML.tab === 'auto' ? (S.screener?.enabled ? '자동 선별기가 원화마켓 전체를 실시간 분석 중입니다<br>약 1분 뒤 TOP 코인이 채워집니다' : '자동매매 감시 코인이 없습니다<br>설정에서 TOP 자동 선별을 켜거나 코인을 고정하세요') : '관심 코인이 없습니다 (★ 눌러 추가)';
+    const msg = ML.q ? '검색 결과가 없습니다' : ML.tab === 'hold' ? '보유 중인 코인이 없습니다' : ML.tab === 'auto' ? (S.screener?.enabled ? '자동 선별기가 Binance USDT 마켓 전체를 실시간 분석 중입니다<br>약 1분 뒤 TOP 코인이 채워집니다' : '자동매매 감시 코인이 없습니다<br>설정에서 TOP 자동 선별을 켜거나 코인을 고정하세요') : '관심 코인이 없습니다 (★ 눌러 추가)';
     box.innerHTML = `<div class="empty">${msg}</div>`;
     ML.order = [];
     return;
@@ -225,7 +225,7 @@ function renderHeader() {
   const icon = $('#coinIcon');
   if (icon.dataset.code !== code) { icon.dataset.code = code; icon.style.visibility = 'visible'; icon.src = coinIcon(code); }
   $('#coinName').textContent = m?.ko || code;
-  $('#coinSym').textContent = `${sym(code)}/KRW`;
+  $('#coinSym').textContent = `${sym(code)}/USDT`;
   const pos = posOf(code);
   $('#coinBadges').innerHTML = `${pos ? '<span class="badge hold">보유 중</span> ' : ''}${isWatched(code) ? `<span class="badge auto">자동매매 ${S.config?.autoTrading ? '감시 중' : '정지'}</span>` : '<span class="badge off">자동매매 꺼짐</span>'}${m?.warning ? ' <span class="badge warnb">유의</span>' : ''}`;
   if (!t) return;
