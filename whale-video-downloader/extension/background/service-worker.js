@@ -937,9 +937,35 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') chrome.action.setBadgeText({ text: '' }).catch(() => {});
   // 설치·업데이트 전에 열려 있던 탭에도 바로 버튼이 뜨도록 스크립트를 넣는다(새로고침 불필요).
   const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] }).catch(() => []);
+  // manifest 의 확장 쪽 스크립트 묶음을 모두 넣는다(사이트 전용 도구 x-tools·bsky-tools 등 포함 — 빠지면 차단·좋아요가 새로고침 전까지 안 됨)
+  const groups = (chrome.runtime.getManifest().content_scripts || []).filter((g) => g.world !== 'MAIN');
   for (const t of tabs) {
-    if (t.discarded) continue;
+    if (t.discarded || !t.url) continue;
     chrome.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: ['content/hook.js'], world: 'MAIN' }).catch(() => {});
-    chrome.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: ['content/sites.js', 'content/core.js'] }).catch(() => {});
+    for (const g of groups) {
+      if (!g.matches.some((m) => urlMatches(m, t.url))) continue;
+      chrome.scripting.executeScript({ target: { tabId: t.id, allFrames: !!g.all_frames }, files: g.js }).catch((err) => console.warn('[영상 다운로더] 업데이트 후 열린 탭에 스크립트 넣기 실패', g.js.join(','), err?.message || err));
+    }
   }
 });
+// 확장 match pattern(<all_urls>, *://*.host/*, *://host/*) 이 주소에 맞는가
+function urlMatches(pattern, url) {
+  if (pattern === '<all_urls>') return /^(https?|file|ftp):/.test(url);
+  const m = /^(\*|https?):\/\/([^/]+)(\/.*)$/.exec(pattern);
+  if (!m) return false;
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  const scheme = u.protocol.slice(0, -1);
+  if (m[1] === '*' ? !/^https?$/.test(scheme) : m[1] !== scheme) return false;
+  const host = m[2];
+  if (host.startsWith('*.')) {
+    const base = host.slice(2);
+    if (u.hostname !== base && !u.hostname.endsWith(`.${base}`)) return false;
+  } else if (host !== '*' && u.hostname !== host) return false;
+  const re = new RegExp(`^${m[3].replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`);
+  return re.test(u.pathname + u.search);
+}

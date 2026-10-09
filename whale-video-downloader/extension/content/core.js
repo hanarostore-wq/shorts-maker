@@ -154,13 +154,18 @@
   .aibadge{position:absolute;left:0;top:0;display:none;align-items:center;height:22px;padding:0 9px;border-radius:999px;pointer-events:auto;
     font:800 11.5px/1 inherit;color:#fff;letter-spacing:.02em;background:linear-gradient(135deg,#f59e0b,#ef4444);box-shadow:0 6px 16px -6px rgba(239,68,68,.8);white-space:nowrap}
   .aibadge.show{display:inline-flex}
-  .acts{position:absolute;left:0;top:0;display:none;gap:4px;pointer-events:auto}
+  .acts{position:absolute;left:0;top:0;display:none;flex-wrap:nowrap;align-items:center;width:max-content;height:22px;padding:0 2px;border-radius:999px;pointer-events:auto;
+    background:rgba(12,12,20,.55);box-shadow:0 2px 8px -2px rgba(0,0,0,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);writing-mode:horizontal-tb}
   .acts.show{display:inline-flex}
-  .act{all:unset;cursor:pointer;height:26px;padding:0 10px;border-radius:999px;color:#fff;font:700 11.5px/26px inherit;white-space:nowrap;background:rgba(20,20,30,.82);box-shadow:0 4px 12px -4px rgba(0,0,0,.6)}
-  .act:hover{filter:brightness(1.15)}
-  .act.f{background:linear-gradient(135deg,#0a7aff,#5b5cff)}
-  .act.b{background:linear-gradient(135deg,#4b5563,#1f2937)}
-  .act.l{background:linear-gradient(135deg,#ff3d6e,#ff7a3d)}
+  .act{all:unset;flex:none;display:inline-block;cursor:pointer;height:22px;padding:0 8px;color:#fff;font-size:11px;font-weight:700;line-height:22px;
+    white-space:nowrap;word-break:keep-all;writing-mode:horizontal-tb;opacity:.92;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+  .act+.act{border-left:1px solid rgba(255,255,255,.22)}
+  .act:hover{opacity:1;background:rgba(255,255,255,.12)}
+  .act:first-child{border-radius:999px 0 0 999px}
+  .act:last-child{border-radius:0 999px 999px 0}
+  .act.f{color:#8cc0ff}
+  .act.b{color:#e5e7eb}
+  .act.l{color:#ff9bb3}
   .act.busy{opacity:.55;pointer-events:none}
   .btn.downloaded{background:linear-gradient(135deg,#0fb57d,#34d399);box-shadow:0 8px 20px -8px rgba(16,185,129,.8),inset 0 1px 0 rgba(255,255,255,.35)}
   .btn.edit{cursor:grab;outline:2px dashed #fff;outline-offset:3px;animation:smdpulse 1.2s ease-in-out infinite}
@@ -175,10 +180,10 @@
   .panel.e h4 i{background:#ef4444}.panel.s h4 i{background:#10b981}
   .row{display:grid;grid-template-columns:40px 1fr;gap:8px;margin:5px 0;word-break:break-all}
   .row b{color:#9d9db3;font-weight:700}
-  .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:11px}
-  .acts button{all:unset;cursor:pointer;padding:7px 12px;border-radius:10px;font:700 12px/1 inherit;color:#e9e9f2;background:rgba(255,255,255,.08)}
-  .acts button:hover{background:rgba(255,255,255,.16)}
-  .acts button.pri{background:linear-gradient(135deg,#5b5cff,#9b4dff);color:#fff}
+  .pacts{display:flex;gap:8px;justify-content:flex-end;margin-top:11px}
+  .pacts button{all:unset;cursor:pointer;padding:7px 12px;border-radius:10px;font:700 12px/1 inherit;color:#e9e9f2;background:rgba(255,255,255,.08)}
+  .pacts button:hover{background:rgba(255,255,255,.16)}
+  .pacts button.pri{background:linear-gradient(135deg,#5b5cff,#9b4dff);color:#fff}
   `;
 
   // 확장프로그램이 다시 로드되면 이전 버전이 남긴 버튼을 치운다.
@@ -506,21 +511,21 @@
       p.innerHTML = `<h4><i>${ICON_OK}</i>${data.running ? '지금 받는 중' : '이미 받은 파일'}</h4>
         <div class="row"><b>안내</b><span>${escapeHtml(data.reason)}</span></div>
         ${data.where ? `<div class="row"><b>위치</b><span>${escapeHtml(data.where)}</span></div>` : ''}
-        <div class="acts"><button data-a="close">닫기</button>${data.downloadId != null ? '<button data-a="showdup">폴더 열기</button>' : ''}${data.running ? '' : '<button class="pri" data-a="force">다시 받기</button>'}</div>`;
+        <div class="pacts"><button data-a="close">닫기</button>${data.downloadId != null ? '<button data-a="showdup">폴더 열기</button>' : ''}${data.running ? '' : '<button class="pri" data-a="force">다시 받기</button>'}</div>`;
       entry.panelTimer = setTimeout(() => closePanel(entry), 12000);
     } else if (kind === 'e') {
       p.innerHTML = `<h4><i>${ICON_ERR}</i>다운로드 실패</h4>
         <div class="row"><b>단계</b><span>${escapeHtml(data.step)}</span></div>
         <div class="row"><b>원인</b><span>${escapeHtml(data.reason)}</span></div>
         <div class="row"><b>해결</b><span>${escapeHtml(data.action)}</span></div>
-        <div class="acts"><button data-a="close">닫기</button><button class="pri" data-a="retry">다시 시도</button></div>`;
+        <div class="pacts"><button data-a="close">닫기</button><button class="pri" data-a="retry">다시 시도</button></div>`;
     } else {
       p.innerHTML = `<h4><i>${ICON_OK}</i>저장 완료</h4>
         <div class="row"><b>파일</b><span>${escapeHtml(data.file)}</span></div>
         ${data.where ? `<div class="row"><b>위치</b><span>${escapeHtml(data.where)}</span></div>` : ''}
         ${data.quality ? `<div class="row"><b>화질</b><span>${escapeHtml(data.quality)}</span></div>` : ''}
         ${data.warning ? `<div class="row"><b>안내</b><span>${escapeHtml(data.warning)}</span></div>` : ''}
-        <div class="acts"><button data-a="close">닫기</button>${data.canShow ? '<button class="pri" data-a="show">폴더 열기</button>' : ''}</div>`;
+        <div class="pacts"><button data-a="close">닫기</button>${data.canShow ? '<button class="pri" data-a="show">폴더 열기</button>' : ''}</div>`;
       entry.panelTimer = setTimeout(() => closePanel(entry), data.warning ? 15000 : 6000);
     }
     p.addEventListener('click', (ev) => {
@@ -1837,17 +1842,17 @@
         entry.ai = aiInDom(entry);
         if (entry.ai && isImg) entry.badge.textContent = 'AI 이미지';
       }
-      // 팔로우·차단·좋아요 줄: 다운로드 버튼 바로 아래(영상 아래쪽이 모자라면 위)
+      // 팔로우·차단·좋아요 줄: 사진·영상 맨 위에 얇게(오른쪽 맞춤). 다운로드 버튼과 겹치면 버튼 왼쪽으로
       if (entry.acts) {
         const want = settings.postActions !== false && !editMode;
         entry.acts.classList.toggle('show', want);
         if (want) {
-          const ah = 26;
-          const aw = entry.acts.offsetWidth || 170;
-          let ay = y + bh + 6;
-          if (ay + o.top + ah > r.bottom) ay = y - ah - 6;
-          // 다운로드 버튼 오른쪽 끝에 맞추고, 사진·영상 왼쪽 밖으로는 나가지 않게
-          const ax = Math.max(r.left - o.left + 4, x + bw - aw);
+          const ah = 22;
+          const aw = entry.acts.offsetWidth || 130;
+          const left = r.left - o.left + 4;
+          const ay = Math.max(r.top, 0) - o.top + 6;
+          let ax = Math.max(left, r.right - o.left - aw - 6);
+          if (ax < x + bw + 4 && ax + aw > x - 4 && ay < y + bh + 4 && ay + ah > y - 4) ax = Math.max(left, x - aw - 6);
           const atf = `translate3d(${Math.round(ax)}px,${Math.round(ay)}px,0)`;
           if (entry.atf !== atf) {
             entry.atf = atf;

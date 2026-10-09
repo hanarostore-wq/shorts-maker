@@ -365,6 +365,23 @@ const toastHist = (page) => page.evaluate(() => document.querySelector('smd-toas
     await page.evaluate(() => document.getElementById('fp2').scrollIntoView({ block: 'center' }));
     await page.waitForTimeout(2000);
     const floats = await page.evaluate(() => document.querySelectorAll('smd-float').length);
+    // 위치·크기: 사진·영상 맨 위 안쪽에 얇은 한 줄(글자가 세로로 쌓이지 않음), 다운로드 버튼과 안 겹침
+    const lay = await page.evaluate(() => {
+      const r = document.getElementById('fp2').getBoundingClientRect();
+      for (const h of document.querySelectorAll('smd-anchor')) {
+        const a = h.shadowRoot?.querySelector('.acts.show');
+        if (!a) continue;
+        const ar = a.getBoundingClientRect();
+        if (!(ar.right > r.left && ar.left < r.right && ar.top >= r.top - 40 && ar.bottom <= r.bottom + 40)) continue;
+        const b = h.shadowRoot.querySelector('.btn.show')?.getBoundingClientRect();
+        const acts = [...a.querySelectorAll('.act')].map((x) => Math.round(x.getBoundingClientRect().height));
+        const overlap = !!b && ar.left < b.right && ar.right > b.left && ar.top < b.bottom && ar.bottom > b.top;
+        const cs = getComputedStyle(a.querySelector('.act')); return { top: Math.round(ar.top - r.top), h: Math.round(ar.height), inside: ar.left >= r.left && ar.right <= r.right, acts, overlap, dbg: [cs.height, cs.lineHeight, cs.display, cs.fontSize, cs.writingMode, cs.paddingTop, Math.round(a.querySelector('.act').getBoundingClientRect().width), Math.round(ar.width), Math.round(r.top), Math.round(r.height)].join('|') };
+      }
+      return null;
+    });
+    record('[팔로우·차단·좋아요] 사진·영상 맨 위에 얇은 한 줄(높이 24px 이하, 다운로드 버튼과 안 겹침)', !!lay && lay.top >= 0 && lay.top <= 12 && lay.h <= 24 && lay.inside && lay.acts.every((x) => x <= 24) && !lay.overlap, { note: JSON.stringify(lay) });
+    await page.locator('#fp2').screenshot({ path: path.join(SHOTS, 'acts-top.png') }).catch(() => {});
     const c1 = await clickAct(page, '#fp2', 'l');
     await page.waitForTimeout(1300);
     const like = await page.evaluate(() => ({ lk1: window.__lk1 || 0, lk2: window.__lk2 || 0, clk: window.__clk || 0, label: document.getElementById('lk2').getAttribute('aria-label') }));
