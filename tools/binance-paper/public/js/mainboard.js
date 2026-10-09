@@ -553,7 +553,7 @@ function openCapital() {
         trade: tradeSettings,
         userTrade: tradeSettings,
       });
-      acceptConfig(c);
+      acceptConfig(c.config || c);
       closeModal();
       toast('모의 시작 금액과 주문 투자금액을 저장했습니다 · 시작 금액은 아래 초기화 때 적용됩니다');
     } catch (e) {
