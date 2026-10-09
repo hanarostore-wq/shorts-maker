@@ -1119,7 +1119,8 @@ if (!only || only === 'place' || '배치'.includes(only)) {
 // ── 블루스카이 팔로우 버튼 ──
 {
   const page = await ctx.newPage();
-  page.on('dialog', (d) => d.accept());
+  let unfollowAsks = 0; // 언팔로우 확인 창(확장이 띄우면 안 됨)
+  page.on('dialog', (d) => { if (/팔로우를 취소/.test(d.message())) unfollowAsks++; d.accept(); });
   try {
     await page.goto('https://bsky.app/feedfollow', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2000);
@@ -1145,7 +1146,7 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     await page.waitForTimeout(800);
     const s2 = await state();
     const r2 = log.slice(l2).find((l) => l.bskyFollow === 'delete');
-    record('[블루스카이] 팔로잉 누르기(확인) → 언팔로우', s2.alice === '팔로우' && r2?.rkey === '3kalice', { note: `${s2.alice} · ${JSON.stringify(r2)}` });
+    record('[블루스카이] 팔로잉 누르기 → 확인 창 없이 바로 언팔로우', s2.alice === '팔로우' && r2?.rkey === '3kalice' && unfollowAsks === 0, { note: `${s2.alice} · 확인 창 ${unfollowAsks}번 · ${JSON.stringify(r2)}` });
     await page.locator('#b-expired smd-bfollow button').click();
     await page.waitForTimeout(800);
     const err = await page.locator('#b-expired smd-bfollow').evaluate((h) => h.shadowRoot.querySelector('.err')?.textContent || '');
@@ -2020,7 +2021,8 @@ if (!only || only === 'place' || '배치'.includes(only)) {
 // ── X 팔로우 버튼 + 소리 자동 켜기 ──
 if (!only || only === 'x' || '팔로우'.includes(only)) {
   const page = await ctx.newPage();
-  page.on('dialog', (d) => d.accept());
+  let unfollowAsks = 0; // 언팔로우 확인 창(확장이 띄우면 안 됨)
+  page.on('dialog', (d) => { if (/팔로우를 취소/.test(d.message())) unfollowAsks++; d.accept(); });
   try {
     await page.goto('https://x.com/explore', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2500);
@@ -2062,7 +2064,7 @@ if (!only || only === 'x' || '팔로우'.includes(only)) {
     await page.waitForTimeout(800);
     const s2 = await state();
     const req2 = log.slice(logStart2).find((l) => l.follow === 'destroy');
-    record('[X] 팔로잉 누르기(확인) → X 메뉴·확인 창으로 실제 언팔로우', s2.followed_user === '팔로우' && req2?.ok && req2.user_id === '1001' && req2.tx === 'PAGE-TX', { note: `${s2.followed_user} · 요청 ${JSON.stringify(req2)}` });
+    record('[X] 팔로잉 누르기 → 확인 창 없이 X 메뉴로 실제 언팔로우', s2.followed_user === '팔로우' && req2?.ok && req2.user_id === '1001' && req2.tx === 'PAGE-TX' && unfollowAsks === 0, { note: `${s2.followed_user} · 확인 창 ${unfollowAsks}번 · 요청 ${JSON.stringify(req2)}` });
 
     // 쿠키가 없으면 단계·원인·해결 안내
     await page.evaluate(() => (document.cookie = 'ct0=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'));

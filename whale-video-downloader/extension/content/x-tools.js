@@ -152,7 +152,7 @@
     let u = SITES.xUsers.get(key) || { screenName: entry.sn };
     if (onlyFollow && u.following === true) return { already: true }; // 자동 팔로우: 이미 팔로우 중이면 그대로
     const unfollow = u.following === true;
-    if (unfollow && !onlyFollow && !window.confirm(`@${entry.sn} 님 팔로우를 취소할까요?`)) return;
+    // 언팔로우도 확인 창 없이 바로(사용자 요청)
     // 1) X 화면의 ⋯ 메뉴로(실제로 팔로우됨)
     entry.btn.classList.add('busy');
     let via = 'nomenu';

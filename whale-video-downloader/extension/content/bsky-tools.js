@@ -147,7 +147,7 @@
     let u = users.get(e.handle);
     if (onlyFollow && u?.following) return { already: true }; // 자동 팔로우: 이미 팔로우 중이면 그대로
     const unfollow = !!u?.following;
-    if (unfollow && !window.confirm(`@${e.handle} 님 팔로우를 취소할까요?`)) return { canceled: true };
+    // 언팔로우도 확인 창 없이 바로(사용자 요청)
     e.btn.classList.add('busy');
     try {
       if (!u?.did) {
