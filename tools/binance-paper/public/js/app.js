@@ -1,7 +1,7 @@
 import { $, $$, bus, S, connect, disconnect, api, setToken, fmtInt, fmtPct, toast, tradeNotice } from './core.js?v=1.10.56';
 import { initExchange } from './exchange.js?v=1.10.56';
 import { initPages, onRoute, toggleAuto } from './pages.js?v=1.10.56';
-import { initMainBoard, onMainRoute } from './mainboard.js?v=1.10.62';
+import { initMainBoard, onMainRoute } from './mainboard.js?v=1.10.63';
 
 const ROUTES = ['main', 'exchange', 'auto', 'investments', 'settings'];
 // This is the owner's active YuJin Traders conversation. Opening the named popup at
@@ -35,7 +35,7 @@ function updateTopMeta() {
   const sum = S.summary || {};
   const j = sum.jev || {};
   const metaVer = $('#metaVersion');
-  const clientVer = 'v1.10.62';
+  const clientVer = 'v1.10.63';
   if (metaVer) metaVer.textContent = `${clientVer}`;
 
   const metaLat = $('#metaLatency');
