@@ -1,7 +1,7 @@
-import { $, $$, bus, S, connect, disconnect, api, setToken, fmtInt, fmtPct, toast, tradeNotice } from './core.js?v=1.10.97';
-import { initExchange } from './exchange.js?v=1.10.97';
-import { initPages, onRoute, toggleAuto } from './pages.js?v=1.10.97';
-import { initMainBoard, onMainRoute } from './mainboard.js?v=1.10.97';
+import { $, $$, bus, S, connect, disconnect, api, setToken, fmtInt, fmtPct, toast, tradeNotice } from './core.js?v=1.10.101';
+import { initExchange } from './exchange.js?v=1.10.101';
+import { initPages, onRoute, toggleAuto } from './pages.js?v=1.10.101';
+import { initMainBoard, onMainRoute } from './mainboard.js?v=1.10.101';
 
 const ROUTES = ['main', 'exchange', 'auto', 'investments', 'settings'];
 // This is the owner's active YuJin Traders conversation. Opening the named popup at

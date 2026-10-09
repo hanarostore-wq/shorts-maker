@@ -157,6 +157,7 @@ let privateKeepAlive = null;
 let reconnectTimer = null;
 let clients = new Set();
 let broadcastTimer = null;
+const chartCache = new Map();
 let liveAccount = { configured: false, ready: false, refreshedAt: 0, error: 'API 키를 입력하면 실제 계좌를 확인합니다', balances: [], positions: [], orders: [], trades: [], events: [] };
 
 function num(value, fallback = 0) { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
@@ -244,6 +245,51 @@ async function publicJson(url) {
   const response = await fetch(url, { signal: AbortSignal.timeout(10_000), headers: { 'user-agent': 'BLACK-BinanceTerminal/2.0' } });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
+}
+
+function chartInterval(value) {
+  return ({ '1': '1m', '3': '3m', '5': '5m', '15': '15m', '30': '30m', '60': '1h', '240': '4h', D: '1d' })[String(value || '1')]
+    || market.interval || '1m';
+}
+function chartCacheKey(symbol, interval) { return `${symbol}:${interval}`; }
+function chartLivePrice(symbol) {
+  return num(marketCatalog.find((row) => row.symbol === symbol)?.price, symbol === market.symbol ? market.price : 0);
+}
+async function refreshChartCache(symbol, interval, limit) {
+  const key = chartCacheKey(symbol, interval);
+  const base = isFutures ? FUTURES_REST : SPOT_DATA;
+  const endpoint = isFutures ? '/fapi/v1/klines' : '/api/v3/klines';
+  const raw = await publicJson(`${base}${endpoint}?symbol=${symbol}&interval=${interval}&limit=${limit}`);
+  const rows = (Array.isArray(raw) ? raw : []).map(([t, o, h, l, c, v]) => ({ t: num(t), o: num(o), h: num(h), l: num(l), c: num(c), v: num(v) })).filter((row) => row.t && row.c);
+  const entry = { rows, updatedAt: Date.now(), pending: null };
+  chartCache.set(key, entry);
+  while (chartCache.size > 80) chartCache.delete(chartCache.keys().next().value);
+  return entry;
+}
+async function uiCandles(symbol, rawUnit, rawLimit) {
+  const interval = chartInterval(rawUnit);
+  const limit = Math.max(30, Math.min(300, Math.floor(num(rawLimit, 160))));
+  const key = chartCacheKey(symbol, interval);
+  let entry = chartCache.get(key);
+  const stale = !entry || Date.now() - entry.updatedAt > 15_000;
+  if (stale && !entry?.pending) {
+    const pending = refreshChartCache(symbol, interval, limit).catch(() => null).finally(() => {
+      const current = chartCache.get(key); if (current) current.pending = null;
+    });
+    if (entry) entry.pending = pending;
+    else {
+      await pending;
+      entry = chartCache.get(key);
+    }
+  }
+  entry ||= { rows: [] };
+  const rows = entry.rows.slice(-limit).map((row) => ({ ...row }));
+  const last = rows.at(-1);
+  const live = chartLivePrice(symbol);
+  // REST 캔들은 1분 단위로 닫히므로, 마지막 봉에는 전체 마켓 스트림의 최신가를 합쳐
+  // 화면에서 초 단위로 현재가·고가·저가가 계속 움직이도록 한다.
+  if (last && live > 0) { last.c = live; last.h = Math.max(last.h, live); last.l = Math.min(last.l, live); }
+  return rows.map((row) => ({ t: row.t, o: krw(row.o), h: krw(row.h), l: krw(row.l), c: krw(row.c), v: row.v }));
 }
 
 async function refreshUsdKrw() {
@@ -390,7 +436,7 @@ function connectCatalogStream() {
   } catch { catalogReconnectTimer=setTimeout(connectCatalogStream,3000); }
 }
 function bookStats(symbol) { const b=catalogBooks.get(symbol); if(!b||!b.bid||!b.ask||!b.bidQty||!b.askQty)return null; return {lead:(b.bidQty/b.askQty-1)*100, spread:(b.ask-b.bid)/((b.ask+b.bid)/2)*100}; }
-function applyCatalogBook(data) { const symbol=String(data?.s||''); const bid=num(data?.b); const ask=num(data?.a); const bidQty=num(data?.B); const askQty=num(data?.A); if(!symbol.endsWith('USDT')||!bid||!ask)return; catalogBooks.set(symbol,{bid,ask,bidQty,askQty,t:Date.now()}); const base=marketCatalog.find(x=>x.symbol===symbol); recordCatalogTick(symbol,(bid+ask)/2,base?.quoteVolume||0); const now=Date.now(); if(now-lastBookBroadcastAt>500){lastBookBroadcastAt=now;requestBroadcast();} }
+function applyCatalogBook(data) { const symbol=String(data?.s||''); const bid=num(data?.b); const ask=num(data?.a); const bidQty=num(data?.B); const askQty=num(data?.A); if(!symbol.endsWith('USDT')||!bid||!ask)return; const mid=(bid+ask)/2; catalogBooks.set(symbol,{bid,ask,bidQty,askQty,t:Date.now()}); const index=marketCatalog.findIndex((item)=>item.symbol===symbol); if(index>=0) marketCatalog[index]={...marketCatalog[index],price:mid}; const base=marketCatalog[index]; recordCatalogTick(symbol,mid,base?.quoteVolume||0); const now=Date.now(); if(now-lastBookBroadcastAt>500){lastBookBroadcastAt=now;requestBroadcast();} }
 function connectCatalogBookStream() { if(catalogBookSocket && (catalogBookSocket.readyState===WebSocket.OPEN||catalogBookSocket.readyState===WebSocket.CONNECTING))return; clearTimeout(catalogBookReconnectTimer); const base=isFutures?FUTURES_WS:SPOT_WS; try { catalogBookSocket=new WebSocket(`${base}/ws/!bookTicker`); catalogBookSocket.addEventListener('message',(event)=>{try{applyCatalogBook(JSON.parse(wsText(event.data)));}catch{}}); catalogBookSocket.addEventListener('close',()=>{catalogBookSocket=null;catalogBookReconnectTimer=setTimeout(connectCatalogBookStream,3000);}); catalogBookSocket.addEventListener('error',()=>{try{catalogBookSocket?.close();}catch{}});}catch{catalogBookReconnectTimer=setTimeout(connectCatalogBookStream,3000);} }
 
 function connectMarket() {
@@ -730,7 +776,7 @@ function uiDupontEvidence(symbol) {
     ]
   };
 }
-function uiSnapshot() { const account = paperAccountView(); const positions = (account.positions || []).map(uiPositionFrom); const pos = positions.find((item) => item.market === uiCode(market.symbol)) || positions[0] || null; const equity = account.totalKrw; const pnl = equity - account.initialKrw; const markets = marketCatalog.map((x) => ({ code: uiCode(x.symbol), ko: x.symbol.replace(/USDT$/, ''), en: x.symbol.replace(/USDT$/, ''), warning: false })); const tickers = marketCatalog.map(uiTicker); const legacyHeld = positions.filter((position) => !markets.some((item) => item.code === position.market)); for (const position of legacyHeld) { const name = String(position.market || '').replace(/^USDT-/, ''); markets.push({ code: position.market, ko: name, en: name, warning: false }); tickers.push({ cd: position.market, tp: position.mark || position.avgPrice || 0, op: position.avgPrice || 0, hp: position.mark || position.avgPrice || 0, lp: position.mark || position.avgPrice || 0, atp24h: 0, scr: 0, scp: 0 }); } const selected = uiCode(market.symbol); const monitored = markets.map((item, i) => ({ market: item.code, watched: true, warm: true, price: tickers.find((t) => t.cd === item.code)?.tp || 0, position: positions.find((position) => position.market === item.code) || null, bidShare15: .5, last: { kind: 'watch', reason: 'Binance full-market monitoring' }, entryEvidence: { rules: uiDupontEvidence(uiSymbol(item.code)).entry }, exitEvidence: { rules: uiDupontEvidence(uiSymbol(item.code)).exit }, rank: i + 1 })); const watch = monitored.filter((item) => item.position || item.market === selected); return { markets, tickers, config: uiConfig(), summary: { equity, initialKrw: account.initialKrw, krw: account.availableKrw, totalPnl: pnl, totalPnlPct: account.initialKrw ? pnl / account.initialKrw * 100 : 0, realizedPnl: account.realizedKrw, feesPaid: 0, trades: account.trades.length, wins: 0, losses: 0, winRate: null, avgHoldSec: pos?.heldSec || 0, positions, inflight: [], activeSlot: { id: config.activeSlot, name: activeSlot()?.name || `${config.activeSlot} slot`, rules: 0 }, effectiveDecisionMode: 'rule', jev: { label: 'Binance rule', totalCalls: 0, totalErrors: 0, totalCostUsd: 0, tokens: 0 }, startedAt: account.updatedAt, maxDrawdownPct: 0 }, watch, trades: account.trades.map((t) => ({ id: t.id, t: t.time, market: selected, side: /sell|close|정리|매도/i.test(t.type) ? 'sell' : 'buy', price: krw(market.price), qty: pos?.qty || 0, gross: t.amountKrw, fee: 0, net: t.amountKrw, pnl: t.pnlKrw, reason: t.detail, reasonKo: t.type, slot: { id: config.activeSlot, name: activeSlot()?.name || '' } })), decisions: [], equity: [[account.updatedAt, equity]], logs: [...(paper.events || []).map((x)=>({t:x.time,level:'info',msg:x.message})), { t: Date.now(), level: 'info', msg: 'Binance 실시간 시세 수신' }], ob: { cd: selected, ask: market.asks.map((x) => ({ p: krw(x.price), s: x.qty })), bid: market.bids.map((x) => ({ p: krw(x.price), s: x.qty })), tas: 0, tbs: 0 }, status: { binance: market.connected, lastBinanceLatency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null }, screener: { enabled: true, rows: monitored.map((x, i) => ({ code: x.market, rank: i + 1, delta: 0, score: 0 })) }, monitor: { current: { markets: marketCatalog.length, latency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null } } }; }
+function uiSnapshot() { const account = paperAccountView(); const positions = (account.positions || []).map(uiPositionFrom); const pos = positions.find((item) => item.market === uiCode(market.symbol)) || positions[0] || null; const equity = account.totalKrw; const pnl = equity - account.initialKrw; const markets = marketCatalog.map((x) => ({ code: uiCode(x.symbol), ko: x.symbol.replace(/USDT$/, ''), en: x.symbol.replace(/USDT$/, ''), warning: false, chartAvailable: true })); const tickers = marketCatalog.map(uiTicker); const legacyHeld = positions.filter((position) => !markets.some((item) => item.code === position.market)); for (const position of legacyHeld) { const name = String(position.market || '').replace(/^USDT-/, ''); markets.push({ code: position.market, ko: name, en: name, warning: false, chartAvailable: false }); tickers.push({ cd: position.market, tp: position.mark || position.avgPrice || 0, op: position.avgPrice || 0, hp: position.mark || position.avgPrice || 0, lp: position.mark || position.avgPrice || 0, atp24h: 0, scr: 0, scp: 0 }); } const selected = uiCode(market.symbol); const monitored = markets.map((item, i) => ({ market: item.code, watched: true, warm: true, price: tickers.find((t) => t.cd === item.code)?.tp || 0, position: positions.find((position) => position.market === item.code) || null, bidShare15: .5, last: { kind: 'watch', reason: 'Binance full-market monitoring' }, entryEvidence: { rules: uiDupontEvidence(uiSymbol(item.code)).entry }, exitEvidence: { rules: uiDupontEvidence(uiSymbol(item.code)).exit }, rank: i + 1 })); const watch = monitored.filter((item) => item.position || item.market === selected); return { markets, tickers, config: uiConfig(), summary: { equity, initialKrw: account.initialKrw, krw: account.availableKrw, totalPnl: pnl, totalPnlPct: account.initialKrw ? pnl / account.initialKrw * 100 : 0, realizedPnl: account.realizedKrw, feesPaid: 0, trades: account.trades.length, wins: 0, losses: 0, winRate: null, avgHoldSec: pos?.heldSec || 0, positions, inflight: [], activeSlot: { id: config.activeSlot, name: activeSlot()?.name || `${config.activeSlot} slot`, rules: 0 }, effectiveDecisionMode: 'rule', jev: { label: 'Binance rule', totalCalls: 0, totalErrors: 0, totalCostUsd: 0, tokens: 0 }, startedAt: account.updatedAt, maxDrawdownPct: 0 }, watch, trades: account.trades.map((t) => ({ id: t.id, t: t.time, market: selected, side: /sell|close|정리|매도/i.test(t.type) ? 'sell' : 'buy', price: krw(market.price), qty: pos?.qty || 0, gross: t.amountKrw, fee: 0, net: t.amountKrw, pnl: t.pnlKrw, reason: t.detail, reasonKo: t.type, slot: { id: config.activeSlot, name: activeSlot()?.name || '' } })), decisions: [], equity: [[account.updatedAt, equity]], logs: [...(paper.events || []).map((x)=>({t:x.time,level:'info',msg:x.message})), { t: Date.now(), level: 'info', msg: 'Binance 실시간 시세 수신' }], ob: { cd: selected, ask: market.asks.map((x) => ({ p: krw(x.price), s: x.qty })), bid: market.bids.map((x) => ({ p: krw(x.price), s: x.qty })), tas: 0, tbs: 0 }, status: { binance: market.connected, lastBinanceLatency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null }, screener: { enabled: true, rows: monitored.map((x, i) => ({ code: x.market, rank: i + 1, delta: 0, score: 0 })) }, monitor: { current: { markets: marketCatalog.length, latency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null } } }; }
 // BINANCE_UI_COMPAT_END
 
 function snapshot(includeMarkets = true) {
@@ -774,7 +820,13 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
   try {
     if (req.method === 'GET' && url.pathname === '/api/state') return json(res, 200, uiSnapshot());
-    if (req.method === 'GET' && url.pathname === '/api/candles') return json(res, 200, market.candles.map((x) => ({ t: x.t, o: krw(x.o), h: krw(x.h), l: krw(x.l), c: krw(x.c), v: x.v })));
+    if (req.method === 'GET' && url.pathname === '/api/candles') {
+      const requestedCode = url.searchParams.get('market');
+      const requested = safeSymbol(uiSymbol(requestedCode));
+      if (requestedCode && !requested) return json(res, 200, []);
+      const symbol = requested || market.symbol;
+      return json(res, 200, await uiCandles(symbol, url.searchParams.get('unit'), url.searchParams.get('count')));
+    }
     if (req.method === 'GET' && url.pathname === '/api/ticks') return json(res, 200, market.trades.map((x) => ({ trade_price: krw(x.price), trade_volume: x.qty, ask_bid: x.buy ? 'BID' : 'ASK', timestamp: x.time })));
     if (req.method === 'GET' && url.pathname === '/api/days') return json(res, 200, []);
     if (req.method === 'GET' && url.pathname === '/api/auth') return json(res, 200, { required: false, ok: true });

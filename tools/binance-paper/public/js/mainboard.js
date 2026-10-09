@@ -1,12 +1,12 @@
-import { toggleAuto } from './pages.js?v=1.10.97';
-import { $, $$, bus, S, api, esc, fmtDur, fmtInt, fmtKrw, fmtPct, fmtPrice, fmtQty, fmtTime, nameOf, sym, setMarket, toast, upDown, coinIcon } from './core.js?v=1.10.97';
-import { parseKrwAmount } from './amount.js?v=1.10.97';
+import { toggleAuto } from './pages.js?v=1.10.101';
+import { $, $$, bus, S, api, esc, fmtDur, fmtInt, fmtKrw, fmtPct, fmtPrice, fmtQty, fmtTime, nameOf, sym, setMarket, toast, upDown, coinIcon } from './core.js?v=1.10.101';
+import { parseKrwAmount } from './amount.js?v=1.10.101';
 
 // =====================================================================================
 // Left Binance Chart in Mainboard
 // =====================================================================================
 const KST = 9 * 3600;
-const MC = { chart: null, candle: null, vol: null, unit: localStorage.getItem('mu-unit') || '1', data: [], market: null, lines: [], reqId: 0 };
+const MC = { chart: null, candle: null, vol: null, unit: localStorage.getItem('mu-unit') || '1', data: [], market: null, lines: [], reqId: 0, poll: null, liveBusy: false };
 
 const MAIN_VIEW_KEY = 'yujin-main-view-v1';
 function storedView() { try { return JSON.parse(localStorage.getItem(MAIN_VIEW_KEY) || '{}'); } catch { return {}; } }
@@ -227,7 +227,7 @@ function assetTrend() {
   const all = [...(S.equity || [])]; const m = S.summary || {};
   const age = { '1일': 86400e3, '7일': 7 * 86400e3, '30일': 30 * 86400e3, '전체': Infinity }[trendRange];
   const eq = all.filter(([t]) => age === Infinity || t >= Date.now() - age).slice(-160);
-  const d = linePath(eq, 420, 76); const positive = Number(m.totalPnl || 0) >= 0;
+  const d = linePath(eq, 420, 76) || 'M0,76'; const positive = Number(m.totalPnl || 0) >= 0;
   return `<section class="asset-trend panel-dark"><div class="trend-head"><div><h3>자산 추이</h3><span class="trend-ranges">${['1일','7일','30일','전체'].map((x) => `<button data-trend-range="${x}" class="${x === trendRange ? 'on' : ''}" type="button">${x}</button>`).join('')}</span></div><b>총 자산 ${money(m.equity || 0)}</b><strong class="${positive ? 'up' : 'down'}">${fmtPct(m.totalPnlPct || 0)}</strong></div><svg viewBox="0 0 420 76" preserveAspectRatio="none" aria-label="총 평가 자산 추이"><defs><linearGradient id="assetFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#d94a4a" stop-opacity=".34"/><stop offset="1" stop-color="#d94a4a" stop-opacity="0"/></linearGradient></defs><path d="${d} L420,76 L0,76 Z" fill="url(#assetFill)"/><path d="${d}" fill="none" stroke="${positive ? '#ef5350' : '#3c7fe8'}" stroke-width="2.1"/></svg><div class="trend-foot"><span>시작 ${money(m.initialKrw || 0)}</span><span>평가금액 ${money(m.equity || 0)}</span><span>누적 ${signedMoney(m.totalPnl || 0)}</span></div></section>`;
 }
 
@@ -874,14 +874,24 @@ function initMainChart() {
   MC.vol = MC.chart.addHistogramSeries({ priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false });
   MC.chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
   loadMainChart();
+  startMainChartLiveSync();
 }
 
-async function loadMainChart() {
+function startMainChartLiveSync() {
+  if (MC.poll) return;
+  MC.poll = setInterval(async () => {
+    if (MC.liveBusy || !MC.chart || document.hidden || !location.hash.startsWith('#/main')) return;
+    MC.liveBusy = true;
+    try { await loadMainChart(true); } finally { MC.liveBusy = false; }
+  }, 1000);
+}
+
+async function loadMainChart(live = false) {
   const market = S.market || holdingRows()[0]?.market || 'KRW-BTC';
   const unit = MC.unit || '1';
   const id = ++MC.reqId;
   const loader = $('#mainChartLoading');
-  if (loader) loader.classList.add('on');
+  if (!live && loader) loader.classList.add('on');
   const icon = $('#mainChartIcon');
   const name = $('#mainChartName');
   const symEl = $('#mainChartSym');
@@ -896,12 +906,12 @@ async function loadMainChart() {
     MC.vol.setData(rows.map((c) => ({ time: Math.floor(c.t / 1000) + KST, value: c.v, color: c.c >= c.o ? 'rgba(239,83,80,0.45)' : 'rgba(60,127,232,0.45)' })));
     drawMainChartPriceLines();
     requestAnimationFrame(() => {
-      if (MC.chart && rows.length) {
+      if (!live && MC.chart && rows.length) {
         MC.chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, rows.length - 80), to: rows.length + 4 });
       }
     });
   } catch {} finally {
-    if (id === MC.reqId && loader) loader.classList.remove('on');
+    if (!live && id === MC.reqId && loader) loader.classList.remove('on');
   }
 }
 

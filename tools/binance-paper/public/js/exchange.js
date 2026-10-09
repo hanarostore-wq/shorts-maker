@@ -1,4 +1,4 @@
-import { $, $$, h, esc, fmtPrice, fmtKrw, fmtInt, fmtPct, fmtSigned, fmtQty, fmtMillion, fmtDur, fmtTime, ago, upDown, sym, bus, S, saveFavs, nameOf, api, setMarket, toast, orderNotice, coinIcon, refreshLiveAccount } from './core.js?v=1.10.97';
+import { $, $$, h, esc, fmtPrice, fmtKrw, fmtInt, fmtPct, fmtSigned, fmtQty, fmtMillion, fmtDur, fmtTime, ago, upDown, sym, bus, S, saveFavs, nameOf, api, setMarket, toast, orderNotice, coinIcon, refreshLiveAccount } from './core.js?v=1.10.101';
 
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const posOf = (code) => S.config?.mode === 'live'
@@ -9,6 +9,24 @@ const isWatched = (code) => S.watch.some((w) => w.market === code && w.watched);
 const isPinned = (code) => !!S.config?.markets?.includes(code);
 const rankOf = (code) => S.screener?.rows?.find((r) => r.code === code)?.rank ?? null;
 const watchSig = () => S.watch.filter((w) => w.watched).map((w) => w.market).sort().join();
+
+// Binance PAPER 서버는 듀퐁 전략 전용의 간결한 설정을 제공한다.
+// 예전 EMA 진단 화면이 없는 ribbon/signal 객체를 읽어 실시간 렌더를 멈추지 않게 한다.
+function terminalConfig(value = {}) {
+  return {
+    ...value,
+    trade: { orderMode: 'fixed', orderKrw: 10_000, orderPct: 10, maxPositions: 1, ...(value.trade || {}) },
+    signal: { callGapSec: 0, maxTickPct: 100, maxSpreadPct: 100, ...(value.signal || {}) },
+    ribbon: {
+      enabled: false, blockBearRibbon: false, requireFullBullAlignment: false,
+      minRibbonWidthPct: 0, minEma30SlopePct: 0, minCandleBodyPct: 0,
+      minBreakoutPct: 0, pullbackLookbackBars: 1, maxPullbackDistancePct: 100,
+      entryStructure: 'relaxed', ...(value.ribbon || {})
+    },
+    rule: { maxEntryRank: Number.MAX_SAFE_INTEGER, minRet30Pct: -Infinity, minBuyRatio30: 0, minImbalance15: 0, minVolSpike: 0, ...(value.rule || {}) },
+    paper: { feePct: 0, slippagePct: 0, ...(value.paper || {}) }
+  };
+}
 
 // =====================================================================================
 // Market list (right side)
@@ -686,6 +704,7 @@ function entryCheck(key, ok, label, actual, threshold, note = '') {
 }
 
 function entryDiagnostics(code, w, c, watched, pos) {
+  c = terminalConfig(c);
   const r = c.ribbon, row = rankRow(code), sum = S.summary || {};
   const usingJev = sum.effectiveDecisionMode === 'jev';
   const rule = c.rule || {};
@@ -769,7 +788,7 @@ function renderAutoTab() {
   const box = $('#otab-auto');
   if (!box.classList.contains('on') || !S.config) return;
   const code = S.market;
-  const c = S.config;
+  const c = terminalConfig(S.config);
   const usingJev = S.summary?.effectiveDecisionMode === 'jev';
   const decisionName = usingJev ? 'Jev 판단' : '규칙 판단';
   const s = c.signal;

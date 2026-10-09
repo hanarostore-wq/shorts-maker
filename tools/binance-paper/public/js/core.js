@@ -188,7 +188,7 @@ export function connect() {
     initialReceived = true;
     S.markets = d.markets;
     S.marketMap = new Map(d.markets.map((m) => [m.code, m]));
-    const heldMarket = d.summary?.positions?.[0]?.market;
+    const heldMarket = d.summary?.positions?.find((position) => d.markets?.some((item) => item.code === position.market && item.chartAvailable !== false))?.market;
     if (heldMarket && S.marketMap.has(heldMarket)) {
       S.market = heldMarket;
       localStorage.setItem('binance-market', heldMarket);
@@ -251,12 +251,15 @@ export function connect() {
 }
 
 export async function setMarket(code) {
-  if (!code || code === S.market) return;
-  S.market = code;
-  localStorage.setItem('binance-market', code);
-  S.ob = null;
-  S.viewTicker = S.tickers.get(code) || null;
-  bus.emit('market', code);
+  if (!code) return;
+  const changed = code !== S.market;
+  if (changed) {
+    S.market = code;
+    localStorage.setItem('binance-market', code);
+    S.ob = null;
+    S.viewTicker = S.tickers.get(code) || null;
+    bus.emit('market', code);
+  }
   try {
     const r = await api('/api/view', { cid: S.cid, market: code });
     if (S.market !== code) return;
