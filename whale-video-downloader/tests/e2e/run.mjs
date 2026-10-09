@@ -852,7 +852,7 @@ if (!only || only === 'image' || '사진'.includes(only)) {
       await btn.click();
       const saved = await waitFile(before, 30000);
       const out = saved ? execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_name,width,height', '-of', 'csv=p=0', saved]).toString().trim() : '';
-      const ok = !!saved && saved.endsWith(`.${ext}`) && out.includes(`${w},${h}`) && path.basename(path.dirname(path.dirname(saved))) === '사진';
+      const ok = !!saved && saved.endsWith(`.${ext}`) && out.includes(`${w},${h}`) && path.basename(path.dirname(saved)) === '사진'; // 사진은 한 폴더(다운로드/사진)
       record(`[사진] ${label}`, ok, { note: saved ? `${path.relative(DL, saved)} · ${out}` : '파일 없음', ms: Date.now() - t0 });
     } catch (err) {
       record(`[사진] ${label}`, false, { note: err.message.split('\n')[0] });
@@ -1411,7 +1411,7 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     const saved = await waitFile(before, 30000);
     const folder = saved ? path.basename(path.dirname(saved)) : '';
     const name = saved ? path.basename(saved) : '';
-    record('[나라 구분] 한국어 화면이어도 원문이 일본어면 일본 폴더 + [일본] 표시', folder === '일본' && /^\[일본\]/.test(name), { note: saved ? `${folder}/${name}` : '저장 안 됨' });
+    record('[나라 구분] 한국어 화면이어도 원문이 일본어면 [일본] 표시(사진은 한 폴더 "사진")', folder === '사진' && /^\[일본\]/.test(name), { note: saved ? `${folder}/${name}` : '저장 안 됨' });
   } catch (err) {
     record('[나라 구분]', false, { note: err.message.split('\n')[0] });
   } finally {
@@ -1528,6 +1528,23 @@ if (!only || only === 'place' || '배치'.includes(only)) {
       const saved = await waitFile(before, 60000);
       got[key] = saved ? path.relative(DL, saved).split(path.sep).slice(0, -1).join('/') : '저장 안 됨';
     }
+    // 사진: 사이트·나라로 나누지 않고 다운로드/사진 한 곳(끄면 예전처럼 나눔)
+    const photoDir = async () => {
+      await page.goto('https://www.example-videos.com/photos', { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      const before = new Set(listFiles(DL));
+      await page.locator('img.photo').first().hover();
+      await page.waitForTimeout(500);
+      await page.locator('img.photo').first().locator('xpath=..').locator('smd-anchor .btn.show').first().click();
+      const saved = await waitFile(before, 60000);
+      return saved ? path.relative(DL, saved).split(path.sep).slice(0, -1).join('/') : '저장 안 됨';
+    };
+    await setSettings({ siteFolderMap: { generic: '일반' } });
+    got['사진'] = await photoDir();
+    await setSettings({ photosOneFolder: false });
+    got['사진(끔)'] = await photoDir();
+    await setSettings({ photosOneFolder: true });
+    record("[폴더] 사진은 한 폴더(다운로드/사진) — 사이트 폴더·나라로 안 나눔, 끄면 예전처럼", got['사진'] === '다운로드/사진' && /^다운로드\/일반\/사진\//.test(got['사진(끔)']), { note: JSON.stringify({ 사진: got['사진'], 끔: got['사진(끔)'] }) });
     record("[폴더] 최상위 폴더 '다운로드'(업데이트 시 자동): 다운로드/유튜브/…, 다운로드/영상 1분30초 이하/…", top === '다운로드' && got['유튜브'] === '다운로드/유튜브/영상 1분30초 이하/한국' && got['일반'] === '다운로드/영상 1분30초 이하/한국', { note: JSON.stringify({ 최상위: top, ...got }) });
   } catch (err) {
     record('[폴더] 최상위 폴더', false, { note: err.message.split('\n')[0] });

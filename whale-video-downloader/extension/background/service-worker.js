@@ -427,6 +427,8 @@ function siteFolderOf(job) {
 function saveFolder(job, settings) {
   // 모든 파일은 최상위 폴더(기본 '다운로드') 안에: 다운로드/(사이트 폴더)/(1분30초 이하·초과·사진)/(나라)
   if (job.request?.playMode) return [sanitizeFolder(settings.subfolder), '팟플레이어 재생'].filter(Boolean).join('/');
+  // 사진은 한 폴더에 모두: 다운로드/사진 (사이트·나라로 나누지 않음, 설정에서 끌 수 있음)
+  if (job.request?.kind === 'image' && settings.photosOneFolder !== false) return [sanitizeFolder(settings.subfolder), FOLDERS.image].filter(Boolean).join('/');
   const parts = [sanitizeFolder(settings.subfolder)];
   // 사이트 폴더: '사이트별 폴더' 전체 켜기 > 지원 사이트 탭에서 사이트마다 넣은 폴더 이름(같은 이름이면 한 폴더로 합쳐짐) > 없으면 다운로드 폴더 그대로
   const own = (settings.siteFolderMap || {})[job.site];
