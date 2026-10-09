@@ -438,7 +438,7 @@ function records() {
 
 function mainHtml() {
   const current = selected(); const entry = current?.entryEvidence?.rules || []; const exit = current?.exitEvidence?.rules || [];
-  const active = activeSlot();
+  const active = activeSlot(); const dupontActive = String(active?.name || active?.definition?.슬롯이름 || '').includes('듀퐁 박스권 PAPER 대체형');
   const dataNotice = current ? dataCollectionNotice(current) : '';
   const ruleStatus = applyStatus || dataNotice || '체크한 규칙은 동시에 판단합니다 · 빨강 통과 · 파랑 대기 · 회색 해당 없음';
   const ruleStatusClass = applyStatus ? 'saved' : dataNotice ? 'collecting' : '';
@@ -477,7 +477,7 @@ function mainHtml() {
         <div class="top-scroll">${topRows()}</div>
       </section>
     </section>
-    <section class="rule-layout">${ruleCard('매수 조건 · 체크된 규칙 동시 판단', entry, '코인고르기규칙')}${ruleCard('진입 조건 · 체크된 규칙 동시 판단', entry, '매수규칙')}${ruleCard('매도 조건 · 체크된 규칙 동시 판단', exit, '매도규칙')}${selectedCoinCard()}</section>
+    <section class="rule-layout">${ruleCard(dupontActive ? '듀퐁 실행 근거 · 실시간 흐름과 자동 박스' : '매수 조건 · 체크된 규칙 동시 판단', entry, '코인고르기규칙')}${ruleCard(dupontActive ? '듀퐁 진입 근거 · 박스 구간과 호가 간격' : '진입 조건 · 체크된 규칙 동시 판단', entry, '매수규칙')}${ruleCard(dupontActive ? '듀퐁 청산 계획 · 신규 진입부터 적용' : '매도 조건 · 체크된 규칙 동시 판단', exit, '매도규칙')}${selectedCoinCard()}</section>
     ${tradeChunkTrend()}
     <section class="records panel-dark">${recordPanelInner()}</section>
     ${serverMonitor()}
