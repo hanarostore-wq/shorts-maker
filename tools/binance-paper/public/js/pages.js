@@ -1,5 +1,5 @@
-import { $, $$, h, esc, fmtPrice, fmtKrw, fmtInt, fmtPct, fmtSigned, fmtQty, fmtDur, fmtTime, ago, upDown, sym, bus, S, nameOf, api, setMarket, toast, orderNotice, coinIcon, authUrl } from './core.js?v=1.10.68';
-import { decisionPill } from './exchange.js?v=1.10.68';
+import { $, $$, h, esc, fmtPrice, fmtKrw, fmtInt, fmtPct, fmtSigned, fmtQty, fmtDur, fmtTime, ago, upDown, sym, bus, S, nameOf, api, setMarket, toast, orderNotice, coinIcon, authUrl } from './core.js?v=1.10.69';
+import { decisionPill } from './exchange.js?v=1.10.69';
 
 const coinCell = (code) => `<div class="coin"><img src="${coinIcon(code)}" onerror="this.style.visibility='hidden'" alt=""><div><b>${esc(nameOf(code))}</b> <em>${sym(code)}</em></div></div>`;
 const signed = (v) => `<span class="${upDown(v)}">${fmtSigned(v, fmtInt)}</span>`;

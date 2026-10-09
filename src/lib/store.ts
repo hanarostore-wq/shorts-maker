@@ -71,8 +71,15 @@ type TraderTrade = {
 
 type TraderRuntime = { health: TraderHealth; lastTrade: TraderTrade | null } | { error: string };
 
+type BinanceRuntimeLog = { t?: number; msg?: string; level?: string };
+type BinanceRuntime =
+  | { kind: "spot" | "futures"; markets: number; autoTrading: boolean; mode: string; positions: number; logs: BinanceRuntimeLog[] }
+  | { kind: "spot" | "futures"; error: string };
+
 const TRADER_ORIGIN = (process.env.YUJIN_TRADERS_ORIGIN || "http://127.0.0.1:7070").replace(/\/$/, "");
 const COLLAB_SYNC_STATUS_PATH = process.env.YUJIN_COLLAB_SYNC_STATUS_PATH || "C:/ProgramData/YuJinTraders/collaboration-sync/status.json";
+const BINANCE_SPOT_ORIGIN = (process.env.BINANCE_SPOT_PAPER_ORIGIN || "http://127.0.0.1:7081").replace(/\/$/, "");
+const BINANCE_FUTURES_ORIGIN = (process.env.BINANCE_FUTURES_PAPER_ORIGIN || "http://127.0.0.1:7082").replace(/\/$/, "");
 
 type CollaborationRuntime = {
   phase?: string;
@@ -108,13 +115,37 @@ async function inspectTraderRuntime(): Promise<TraderRuntime> {
   }
 }
 
-function upsertTraderLog(state: State, id: string, message: string) {
+async function inspectBinanceRuntime(kind: "spot" | "futures", origin: string): Promise<BinanceRuntime> {
+  try {
+    const response = await fetch(`${origin}/api/state`, { cache: "no-store", signal: AbortSignal.timeout(2_500) });
+    if (!response.ok) return { kind, error: `상태 조회 HTTP ${response.status}` };
+    const body = await response.json() as {
+      config?: { autoTrading?: boolean; mode?: string };
+      summary?: { positions?: unknown[] };
+      monitor?: { current?: { markets?: number } };
+      markets?: unknown[];
+      logs?: BinanceRuntimeLog[];
+    };
+    return {
+      kind,
+      markets: Array.isArray(body.markets) ? body.markets.length : Number(body.monitor?.current?.markets || 0),
+      autoTrading: body.config?.autoTrading === true,
+      mode: body.config?.mode || "paper",
+      positions: Array.isArray(body.summary?.positions) ? body.summary.positions.length : 0,
+      logs: Array.isArray(body.logs) ? body.logs : [],
+    };
+  } catch (error) {
+    return { kind, error: `상태 조회 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}` };
+  }
+}
+
+function upsertTraderLog(state: State, id: string, message: string, occurredAt = Date.now(), agentId = "c_yujin") {
   const coin = state.departments.find((department) => department.id === "coin");
-  const agent = coin?.agents.find((item) => item.id === "c_yujin");
+  const agent = coin?.agents.find((item) => item.id === agentId);
   if (!coin || !agent) return;
   const entry: LogEntry = {
     id,
-    time: new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }),
+    time: new Date(occurredAt).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }),
     departmentId: "coin",
     agentId: agent.id,
     agentName: agent.name,
@@ -154,6 +185,38 @@ function applyTraderRuntime(state: State, runtime: TraderRuntime) {
   const tradeId = `trader-fill-${trade.time}-${trade.market}-${trade.side}`;
   const detail = [trade.pnl && `손익 ${trade.pnl}원`, trade.pnlPct && `${trade.pnlPct}%`, trade.reason].filter(Boolean).join(" · ");
   upsertTraderLog(state, tradeId, `PAPER ${trade.side} 체결 · ${trade.market}${detail ? ` · ${detail}` : ""}`);
+}
+
+function applyBinanceRuntime(state: State, runtime: BinanceRuntime) {
+  const coin = state.departments.find((department) => department.id === "coin");
+  const agentId = runtime.kind === "spot" ? "c_binance_spot" : "c_binance_futures";
+  const agent = coin?.agents.find((item) => item.id === agentId);
+  if (!coin || !agent) return;
+  const label = runtime.kind === "spot" ? "바이낸스 현물" : "바이낸스 선물";
+  if ("error" in runtime) {
+    agent.status = "offline";
+    agent.task = `⚠ ${label} ${runtime.error}`.slice(0, 180);
+    upsertTraderLog(state, `binance-${runtime.kind}-runtime`, `⚠ ${label} ${runtime.error}`, Date.now(), agentId);
+    return;
+  }
+  agent.status = runtime.autoTrading ? "active" : "standby";
+  agent.task = `${label} ${runtime.markets}개 분석 · PAPER · 자동매매 ${runtime.autoTrading ? "ON" : "OFF"} · 보유 ${runtime.positions}개`;
+  upsertTraderLog(
+    state,
+    `binance-${runtime.kind}-runtime`,
+    `${label} 전체 USDT ${runtime.markets}개 분석 정상 · PAPER · 자동매매 ${runtime.autoTrading ? "ON" : "OFF"} · 보유 ${runtime.positions}개`,
+    Date.now(),
+    agentId,
+  );
+  const events = runtime.logs
+    .filter((entry) => typeof entry.msg === "string" && /PAPER|자동|체결|매수|매도|정리|초기화|후보/.test(entry.msg))
+    .slice(0, 8)
+    .reverse();
+  for (const event of events) {
+    const at = Number(event.t) || Date.now();
+    const message = event.msg!.slice(0, 180);
+    upsertTraderLog(state, `binance-${runtime.kind}-event-${at}-${message.slice(0, 24)}`, `${label} ${message}`, at, agentId);
+  }
 }
 
 function applyCollaborationRuntime(state: State, runtime: CollaborationRuntime | null) {
@@ -623,13 +686,17 @@ export async function updateLocalConcatJob(input: {
 
 export async function getState(): Promise<State> {
   const state = await readState();
-  const [pendingApprovals, tasks, policy, traderRuntime] = await Promise.all([
+  const [pendingApprovals, tasks, policy, traderRuntime, binanceSpotRuntime, binanceFuturesRuntime] = await Promise.all([
     listApprovals({ state: "pending" }),
     listTasks(),
     getPolicy(),
     inspectTraderRuntime(),
+    inspectBinanceRuntime("spot", BINANCE_SPOT_ORIGIN),
+    inspectBinanceRuntime("futures", BINANCE_FUTURES_ORIGIN),
   ]);
   applyTraderRuntime(state, traderRuntime);
+  applyBinanceRuntime(state, binanceSpotRuntime);
+  applyBinanceRuntime(state, binanceFuturesRuntime);
   applyCollaborationRuntime(state, inspectCollaborationRuntime());
   const storeDepartment = state.departments.find((department) => department.id === "store");
   const approvalAgent = storeDepartment?.agents.find((agent) => agent.id === "s7");

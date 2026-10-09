@@ -1,6 +1,6 @@
-import { toggleAuto } from './pages.js?v=1.10.68';
-import { $, $$, bus, S, api, esc, fmtDur, fmtInt, fmtKrw, fmtPct, fmtPrice, fmtQty, fmtTime, nameOf, sym, setMarket, toast, upDown, coinIcon } from './core.js?v=1.10.68';
-import { parseKrwAmount } from './amount.js?v=1.10.68';
+import { toggleAuto } from './pages.js?v=1.10.69';
+import { $, $$, bus, S, api, esc, fmtDur, fmtInt, fmtKrw, fmtPct, fmtPrice, fmtQty, fmtTime, nameOf, sym, setMarket, toast, upDown, coinIcon } from './core.js?v=1.10.69';
+import { parseKrwAmount } from './amount.js?v=1.10.69';
 
 // =====================================================================================
 // Left Binance Chart in Mainboard
@@ -534,6 +534,8 @@ function openCapital() {
   bindKrwInput('#capitalKrw', '#capitalKrwPreview');
   $('#saveCapital').addEventListener('click', async () => {
     try {
+      const initialKrw = paperMode ? parseKrwAmount($('#capitalInitialKrw')?.value) : null;
+      if (paperMode && !(initialKrw >= 10000)) return toast('모의 투자 시작 금액은 10,000원 이상으로 입력하세요', 'err');
       const orderKrw = parseKrwAmount($('#capitalKrw')?.value);
       if (!(orderKrw >= 0)) return toast('한 번 주문금액을 숫자 또는 1억 형식으로 입력하세요', 'err');
       const tradeSettings = {
@@ -545,10 +547,15 @@ function openCapital() {
       const saveButton = $('#saveCapital');
       saveButton.disabled = true;
       saveButton.textContent = '저장하는 중';
-      const c = await api('/api/config', { trade: tradeSettings, userTrade: tradeSettings });
+      const c = await api('/api/config', {
+        paperInitialKrw: initialKrw,
+        paperOrderKrw: orderKrw,
+        trade: tradeSettings,
+        userTrade: tradeSettings,
+      });
       acceptConfig(c);
       closeModal();
-      toast('주문 투자금액을 저장했습니다 · 다음 주문부터 바로 적용됩니다');
+      toast('모의 시작 금액과 주문 투자금액을 저장했습니다 · 시작 금액은 아래 초기화 때 적용됩니다');
     } catch (e) {
       const saveButton = $('#saveCapital');
       if (saveButton) { saveButton.disabled = false; saveButton.textContent = '투자금액 저장'; }
