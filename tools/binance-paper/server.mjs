@@ -396,14 +396,14 @@ function recordPaperTrade(type, detail, amountKrw, pnlKrw = null) {
 function paperOrder(body) {
   const action = String(body.action || '').toLowerCase();
   const amountKrw = Math.max(10_000, Math.floor(num(body.amountKrw, config.paperOrderKrw)));
-  if (!market.price || !market.usdKrw) throw new Error('실시간 Binance 시세와 환율을 받은 뒤 주문할 수 있습니다');
-  const position = paperPositionView();
   if (action === 'reset') {
     const initialKrw = Math.max(10_000, Math.floor(num(body.initialKrw, config.paperInitialKrw)));
     config.paperInitialKrw = initialKrw; config.paperOrderKrw = Math.min(Math.max(10_000, amountKrw), initialKrw); saveConfig();
     paper = defaultPaper(initialKrw); savePaper();
     return { ok: true, message: `${initialKrw.toLocaleString('ko-KR')}원 PAPER 계좌를 완전히 초기화했습니다` };
   }
+  if (!market.price || !market.usdKrw) throw new Error('실시간 Binance 시세와 환율을 받은 뒤 주문할 수 있습니다');
+  const position = paperPositionView();
   if (action === 'close') {
     if (!position) throw new Error('정리할 PAPER 보유분이 없습니다');
     paper.availableKrw += position.marginKrw + position.pnlKrw;
