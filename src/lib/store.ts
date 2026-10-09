@@ -272,6 +272,11 @@ function healState(state: State): State {
     coin.agents = structuredClone(freshCoinAgents);
   }
   state.projects = state.projects || [];
+  for (const freshProject of projects) {
+    if (!state.projects.some((project) => project.id === freshProject.id)) {
+      state.projects.push(structuredClone(freshProject));
+    }
+  }
   const freshBlogProject = projects.find((project) => project.id === "p4");
   const blogProject = state.projects.find((project) => project.id === "p4");
   if (blogProject) { blogProject.departmentId = "blog"; blogProject.agentCount = 0; blogProject.leadAgent = "미배정"; }

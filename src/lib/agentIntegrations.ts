@@ -16,6 +16,8 @@ export type AgentTool =
   | "tradingEvidence"
   | "tradingAnalytics"
   | "tradingCollaboration"
+  | "binanceSpotPaper"
+  | "binanceFuturesPaper"
   | "coinTrading"
   | "stockTrading"
   | "assetManagement"
@@ -38,6 +40,8 @@ export const AGENT_TOOLS: Record<string, AgentTool> = {
   c_grok: "tradingCollaboration",
   c_manus: "tradingCollaboration",
   c_gpt: "tradingCollaboration",
+  c_binance_spot: "binanceSpotPaper",
+  c_binance_futures: "binanceFuturesPaper",
   o5: "storage",
   s1: "sourcingWorker",
   s11: "sourcingManagement",

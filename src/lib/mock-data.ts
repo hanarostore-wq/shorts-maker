@@ -25,6 +25,8 @@ export const departments: Department[] = [
     icon: "₿",
     agents: [
       { id: "c_yujin", name: "업비트", task: "YuJin Traders 자동매매 관제 · 클릭하면 전체 화면을 엽니다", status: "active" },
+      { id: "c_binance_spot", name: "바이낸스 현물", task: "원화 기준 가상 자산으로 현물 매수·매도 연습 · PAPER 전용", status: "standby" },
+      { id: "c_binance_futures", name: "바이낸스 선물", task: "원화 기준 가상 증거금으로 롱·숏 연습 · PAPER 전용", status: "standby" },
       { id: "c_trade_analyst", name: "체결분석가", task: "체결·차트·진입·매도·익절·손절 근거 내보내기 검증 대기", status: "standby" },
       { id: "c_gemini", name: "제미나이", task: "제미나이 슬롯 제안·추가·삭제·적용 이력 관리 대기", status: "standby" },
       { id: "c_claude", name: "클로드", task: "클로드 슬롯 제안·추가·삭제·적용 이력 관리 대기", status: "standby" },
@@ -54,5 +56,7 @@ export const projects: Project[] = [
   { id: "p3", name: "쇼츠 팩토리", departmentId: "shorts", agentCount: 0, leadAgent: "미배정" },
   { id: "p4", name: "블로그 자동화", departmentId: "blog", agentCount: 0, leadAgent: "미배정" },
   { id: "p5", name: "업비트 현물 단타", departmentId: "coin", agentCount: 1, leadAgent: "업비트" },
+  { id: "p6", name: "바이낸스 현물 PAPER", departmentId: "coin", agentCount: 1, leadAgent: "바이낸스 현물" },
+  { id: "p7", name: "바이낸스 선물 PAPER", departmentId: "coin", agentCount: 1, leadAgent: "바이낸스 선물" },
 
 ];
