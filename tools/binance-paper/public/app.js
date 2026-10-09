@@ -34,7 +34,7 @@ function isLive() { return state?.config?.mode === 'live'; }
 function baseAsset() { return String(state?.market?.symbol || '').replace('USDT', ''); }
 function currentPosition() { return currentAccount().position || currentAccount().positions?.[0] || null; }
 
-function update(next) { state = next; render(); }
+function update(next) { state = { ...(state || {}), ...next, markets: next.markets || state?.markets || [] }; render(); }
 function render() {
   if (!state) return;
   const m = state.market; const a = currentAccount(); const c = state.config;
@@ -58,10 +58,13 @@ function render() {
 function renderMarkets() {
   const m = state.market; const list = $('#marketList');
   const term = String($('#marketSearch').value || '').toUpperCase();
-  const items = (state.markets || []).filter((symbol) => symbol.includes(term));
-  list.innerHTML = items.map((symbol) => {
-    const selected = symbol === m.symbol; const price = selected ? `${won(m.priceKrw)}` : '선택'; const change = selected ? pct(m.changePct) : '실시간';
-    return `<button class="market-row ${selected ? 'active' : ''}" data-symbol="${symbol}"><span><b>${escape(niceSymbol(symbol))}</b><small>${symbol}</small></span><span class="price">${price}</span><span class="${selected && Number(m.changePct) < 0 ? 'down' : 'up'}">${change}</span></button>`;
+  const items = (state.markets || []).filter((item) => String(item.symbol || item).includes(term));
+  list.innerHTML = items.map((item) => {
+    const entry = typeof item === 'string' ? { symbol: item } : item;
+    const symbol = entry.symbol; const selected = symbol === m.symbol;
+    const price = selected ? won(m.priceKrw) : (entry.price ? usd(entry.price, entry.price < 1 ? 6 : 2) : '시세 수신 중');
+    const changeValue = selected ? Number(m.changePct) : Number(entry.changePct || 0);
+    return `<button class="market-row ${selected ? 'active' : ''}" data-symbol="${symbol}"><span><b>${escape(niceSymbol(symbol))}</b><small>${symbol}</small></span><span class="price">${price}</span><span class="${changeValue < 0 ? 'down' : 'up'}">${pct(changeValue)}</span></button>`;
   }).join('') || '<div class="empty-row">찾는 마켓이 없습니다</div>';
   $$('.market-row[data-symbol]').forEach((button) => button.addEventListener('click', async () => { try { await api('/api/select', { symbol: button.dataset.symbol }); toast(`${niceSymbol(button.dataset.symbol)} 실시간 화면으로 전환했습니다`); } catch (error) { toast(error.message, true); } }));
 }

@@ -19,6 +19,7 @@ const FUTURES_REST = process.env.BINANCE_FUTURES_REST || 'https://fapi.binance.c
 const SPOT_WS = 'wss://stream.binance.com:9443';
 const FUTURES_WS = 'wss://fstream.binance.com';
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT', 'LINKUSDT', 'SUIUSDT'];
+let marketCatalog = SYMBOLS.map((symbol) => ({ symbol, price: 0, changePct: 0, quoteVolume: 0 }));
 
 fs.mkdirSync(dataDir, { recursive: true });
 
@@ -94,7 +95,10 @@ function num(value, fallback = 0) { const n = Number(value); return Number.isFin
 function fixed(value, decimals = 6) { return Number(num(value).toFixed(decimals)); }
 function nowKst() { return new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false }); }
 function krw(usd) { return num(usd) * num(market.usdKrw); }
-function safeSymbol(symbol) { return SYMBOLS.includes(String(symbol || '').toUpperCase()) ? String(symbol).toUpperCase() : null; }
+function safeSymbol(symbol) {
+  const candidate = String(symbol || '').toUpperCase();
+  return marketCatalog.some((item) => item.symbol === candidate) ? candidate : null;
+}
 function publicConfig() { return { mode: config.mode, hasApiKey: Boolean(config.apiKey && config.secretKey), apiKeyHint: config.apiKey ? `${config.apiKey.slice(0, 5)}••••${config.apiKey.slice(-3)}` : '', paperInitialKrw: config.paperInitialKrw, paperOrderKrw: config.paperOrderKrw, futuresLeverage: config.futuresLeverage, autoTrading: config.autoTrading, activeSlot: config.activeSlot, symbol: market.symbol, interval: market.interval }; }
 
 function signedQuery(params = {}) {
@@ -198,6 +202,29 @@ function applyTicker(data) {
   market.changePct = num(data.priceChangePercent ?? data.P, market.changePct);
   market.volumeBase = num(data.volume ?? data.v, market.volumeBase);
   market.volumeQuote = num(data.quoteVolume ?? data.q, market.volumeQuote);
+}
+
+async function refreshMarketCatalog() {
+  try {
+    const [exchangeInfo, tickers] = await Promise.all([
+      publicJson(isFutures ? `${FUTURES_REST}/fapi/v1/exchangeInfo` : `${SPOT_DATA}/api/v3/exchangeInfo`),
+      publicJson(isFutures ? `${FUTURES_REST}/fapi/v1/ticker/24hr` : `${SPOT_DATA}/api/v3/ticker/24hr`),
+    ]);
+    const allowed = new Set((exchangeInfo.symbols || [])
+      .filter((item) => item.status === 'TRADING' && item.quoteAsset === 'USDT' && (isFutures || item.isSpotTradingAllowed !== false))
+      .map((item) => item.symbol));
+    const next = (Array.isArray(tickers) ? tickers : [])
+      .filter((item) => allowed.has(item.symbol))
+      .map((item) => ({
+        symbol: item.symbol,
+        price: num(item.lastPrice),
+        changePct: num(item.priceChangePercent),
+        quoteVolume: num(item.quoteVolume),
+      }))
+      .sort((left, right) => right.quoteVolume - left.quoteVolume);
+    if (next.length) marketCatalog = next;
+  } catch { /* the previous catalog remains usable while a public API is temporarily unavailable */ }
+  requestBroadcast();
 }
 
 function publicStreams() {
@@ -429,7 +456,7 @@ async function liveOrder(body) {
 }
 
 function accountView() { return config.mode === 'live' ? liveAccount : paperAccountView(); }
-function snapshot() {
+function snapshot(includeMarkets = true) {
   const account = accountView();
   const priceKrw = krw(market.price);
   return {
@@ -437,14 +464,14 @@ function snapshot() {
     config: publicConfig(),
     market: { ...market, priceKrw, bidKrw: krw(market.bid), askKrw: krw(market.ask), markKrw: krw(market.markPrice), indexKrw: krw(market.indexPrice) },
     account,
-    markets: SYMBOLS,
+    ...(includeMarkets ? { markets: marketCatalog } : {}),
   };
 }
 function requestBroadcast() {
   if (broadcastTimer) return;
   broadcastTimer = setTimeout(() => {
     broadcastTimer = null;
-    const line = `event: state\ndata: ${JSON.stringify(snapshot())}\n\n`;
+    const line = `event: state\ndata: ${JSON.stringify(snapshot(false))}\n\n`;
     for (const client of clients) { try { client.write(line); } catch { clients.delete(client); } }
   }, 90);
 }
@@ -510,9 +537,11 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+await refreshMarketCatalog();
 await seedMarket();
 connectMarket();
 setInterval(() => { seedMarket(); }, 12 * 60_000).unref();
+setInterval(() => { refreshMarketCatalog(); }, 10 * 60_000).unref();
 setInterval(() => { if (config.mode === 'live' && config.apiKey && config.secretKey) refreshLiveAccount(); }, 45_000).unref();
 server.listen(port, '127.0.0.1', () => console.log(`[${new Date().toISOString()}] Binance ${kind} terminal v2 listening at 127.0.0.1:${port}`));
 process.on('SIGTERM', async () => { await stopPrivateStream(); server.close(() => process.exit(0)); });
