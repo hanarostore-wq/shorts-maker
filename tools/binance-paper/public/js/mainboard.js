@@ -77,13 +77,34 @@ function recordPanelInner() {
 function slotRuleRows(active, group, evidence = []) {
   const enabled = new Set(active?.enabledRuleIds || []);
   const live = new Map((evidence || []).filter((r) => r.group === group).map((r) => [r.id, r]));
-  return (active?.definition?.[group] || [])
+  const rows = (active?.definition?.[group] || [])
     .filter((r) => r.사용 && enabled.has(r.규칙번호))
     .map((r) => ({
       id: r.규칙번호, name: r.이름, description: r.쉬운설명, group,
       type: r.종류, value: r.값, unit: r.단위, status: '자료 부족', actual: null,
       ...live.get(r.규칙번호)
     }));
+  return compactDupontExitRows(active, rows);
+}
+const DUPONT_EXIT_IDS = ['듀퐁-손절주의', '듀퐁-손절확인', '듀퐁-손절회복', '듀퐁-비상손절'];
+function ruleIds(rule) { return rule?.sourceIds || [rule?.id || rule?.규칙번호].filter(Boolean); }
+function compactDupontExitRows(slot, rows = []) {
+  if (!String(slot?.name || slot?.definition?.슬롯이름 || '').includes('듀퐁 박스권 PAPER 대체형')) return rows;
+  const lossRows = rows.filter((rule) => DUPONT_EXIT_IDS.includes(String(rule?.id || rule?.규칙번호 || '')));
+  if (lossRows.length !== DUPONT_EXIT_IDS.length) return rows;
+  const first = rows.findIndex((rule) => DUPONT_EXIT_IDS.includes(String(rule?.id || rule?.규칙번호 || '')));
+  const status = lossRows.some((rule) => rule.status === '통과') ? '통과' : lossRows.some((rule) => rule.status === '대기') ? '대기' : '자료 부족';
+  const merged = {
+    ...lossRows[0], id: '듀퐁-손절안전묶음', 규칙번호: '듀퐁-손절안전묶음',
+    name: '손절 주의 · 확인 · 회복 · 비상 손절', 이름: '손절 주의 · 확인 · 회복 · 비상 손절',
+    description: '순손실 -0.25%부터 3초 확인 · 0.06% 회복 시 취소 · -0.40% 즉시 정리',
+    쉬운설명: '순손실 -0.25%부터 3초 확인 · 0.06% 회복 시 취소 · -0.40% 즉시 정리',
+    status, actual: null, sourceIds: [...DUPONT_EXIT_IDS], composite: true,
+    적용: lossRows.every((rule) => rule.적용 !== false)
+  };
+  const compact = rows.filter((rule) => !DUPONT_EXIT_IDS.includes(String(rule?.id || rule?.규칙번호 || '')));
+  compact.splice(first, 0, merged);
+  return compact;
 }
 const holdingRows = () => [...(S.watch || [])].filter((row) => !!row.position).sort((a, b) => {
   // 메인 보유표는 실현 전 현재 손익 금액이 가장 큰 코인을 항상 맨 위에 둔다.
@@ -256,7 +277,7 @@ function ruleCard(title, rules, group = null) {
   const active = activeSlot(); const enabled = new Set(slotDraft?.enabledRuleIds || active?.enabledRuleIds || []);
   const own = active && group ? slotRuleRows(active, group, rules) : (group ? (rules || []).filter((r) => r.group === group) : (rules || []));
   if (!active) return `<section class="rule-card panel-dark"><div class="rule-title"><h3>${title}</h3></div><p class="rule-empty">슬롯 파일을 적용하면 이곳에 쉬운 설명과 현재값이 나옵니다</p></section>`;
-  const rows = own.length ? own.map((r) => `<div class="rule-row state-${r.status === '통과' ? 'pass' : r.status === '자료 부족' ? 'empty' : 'wait'}"><label class="rule-check"><input type="checkbox" data-rule="${esc(r.id)}" ${enabled.has(r.id) ? 'checked' : ''}><span class="sr-only">${stateName(r.status)}</span></label><div class="rule-body"><b class="${exitRuleTitleClass(r)}">${esc(r.name)}</b><small>${esc(r.description)}</small>${ruleGraph(r)}</div><button class="rule-toggle ${enabled.has(r.id) ? 'on' : 'off'}" data-rule-toggle="${esc(r.id)}" type="button">${enabled.has(r.id) ? 'ON' : 'OFF'}</button><button class="copy-rule" data-copy-rule="${esc(r.id)}" type="button">복사</button></div>`).join('') : '<p class="rule-empty">이 슬롯에서 선택한 항목이 없습니다</p>';
+  const rows = own.length ? own.map((r) => { const ids = ruleIds(r); const checked = ids.every((id) => enabled.has(id)); return `<div class="rule-row state-${r.status === '통과' ? 'pass' : r.status === '자료 부족' ? 'empty' : 'wait'}"><label class="rule-check"><input type="checkbox" data-rule="${esc(r.id)}" data-rule-ids="${esc(ids.join(','))}" ${checked ? 'checked' : ''}><span class="sr-only">${stateName(r.status)}</span></label><div class="rule-body"><b class="${exitRuleTitleClass(r)}">${esc(r.name)}</b><small>${esc(r.description)}</small>${ruleGraph(r)}</div><button class="rule-toggle ${checked ? 'on' : 'off'}" data-rule-toggle="${esc(r.id)}" type="button">${checked ? 'ON' : 'OFF'}</button>${r.composite ? '' : `<button class="copy-rule" data-copy-rule="${esc(r.id)}" type="button">복사</button>`}</div>`; }).join('') : '<p class="rule-empty">이 슬롯에서 선택한 항목이 없습니다</p>';
   return `<section class="rule-card panel-dark"><div class="rule-title"><div><h3>${title}</h3><span>${esc(active.name)} · 슬롯 관리에서 체크를 바꾼 뒤 위 저장 버튼을 누르세요</span></div></div>${rows}</section>`;
 }
 
@@ -472,13 +493,13 @@ function versionOptions(slot) { const book=slotVersionBook(slot); return (book.i
 function openSlots() {
   const shelf=S.config?.slots; if(!shelf) return toast('슬롯 정보를 받는 중입니다'); selectedSlotId=selectedSlotId||1;
   const slot=shelf.items.find((x)=>x.id===selectedSlotId)||shelf.items[0]; const cards=shelf.items.map((x)=>`<button class="slot-card ${x.id===selectedSlotId?'selected':''} ${x.status==='적용 중'?'active':''}" data-slot-select="${x.id}" type="button"><b>${x.id}번 슬롯</b><strong>${esc(x.definition?x.name:'비어 있음')}</strong><span>${x.status}</span></button>`).join('');
-  const rules=slot.rules||[...(slot.definition?.코인고르기규칙||[]),...(slot.definition?.매수규칙||[]),...(slot.definition?.매도규칙||[])].map((r)=>({...r, 적용:(slot.enabledRuleIds||[]).includes(r.규칙번호)})); const versions=slotVersionBook(slot); const versionUi=`<div class="slot-file"><b>전략 버전</b><select id="slotVersionSelect">${versionOptions(slot)}</select><button data-slot-version-apply="${slot.id}" type="button">적용</button><button data-slot-version-copy="${slot.id}" type="button">복사</button><button class="danger-link" data-slot-version-delete="${slot.id}" type="button">삭제</button><small>현재 적용 ${esc(versions.activeVersionId||'-')}</small></div>`;
-  const detail=slot.definition?`<div class="slot-detail-head"><div><b>${slot.id}번 슬롯</b><h3>${esc(slot.name)}</h3></div><div class="slot-detail-actions"><button class="main-primary" id="slotApply" type="button">ON OFF 규칙 저장·적용</button></div></div><p>${esc(slot.definition.전략설명)}</p>${versionUi}<div class="slot-file"><b>새 전략 버전 추가</b><span>파일을 추가하면 기존 버전은 보관됩니다</span><button data-slot-file="${slot.id}" type="button">파일 추가</button></div><div class="slot-rule-preview">${rules.map((r)=>`<label><input type="checkbox" data-slot-rule="${esc(r.규칙번호)}" ${r.적용?'checked':''}><b>${esc(r.이름)}</b><span>${esc(r.쉬운설명)}</span></label>`).join('')}</div>`:`<div class="slot-detail-head"><div><b>${slot.id}번 슬롯</b><h3>비어 있음</h3></div></div>${versionUi}<button class="main-primary" data-slot-file="${slot.id}" type="button">+ 첫 전략 버전 추가</button>`;
+  const rawRules=slot.rules||[...(slot.definition?.코인고르기규칙||[]),...(slot.definition?.매수규칙||[]),...(slot.definition?.매도규칙||[])].map((r)=>({...r, 적용:(slot.enabledRuleIds||[]).includes(r.규칙번호)})); const rules=compactDupontExitRows(slot,rawRules); const versions=slotVersionBook(slot); const versionUi=`<div class="slot-file"><b>전략 버전</b><select id="slotVersionSelect">${versionOptions(slot)}</select><button data-slot-version-apply="${slot.id}" type="button">적용</button><button data-slot-version-copy="${slot.id}" type="button">복사</button><button class="danger-link" data-slot-version-delete="${slot.id}" type="button">삭제</button><small>현재 적용 ${esc(versions.activeVersionId||'-')}</small></div>`;
+  const detail=slot.definition?`<div class="slot-detail-head"><div><b>${slot.id}번 슬롯</b><h3>${esc(slot.name)}</h3></div><div class="slot-detail-actions"><button class="main-primary" id="slotApply" type="button">ON OFF 규칙 저장·적용</button></div></div><p>${esc(slot.definition.전략설명)}</p>${versionUi}<div class="slot-file"><b>새 전략 버전 추가</b><span>파일을 추가하면 기존 버전은 보관됩니다</span><button data-slot-file="${slot.id}" type="button">파일 추가</button></div><div class="slot-rule-preview">${rules.map((r)=>`<label><input type="checkbox" data-slot-rule="${esc(r.규칙번호)}" data-slot-rule-ids="${esc(ruleIds(r).join(','))}" ${ruleIds(r).every((id)=>(slot.enabledRuleIds||[]).includes(id))?'checked':''}><b>${esc(r.이름)}</b><span>${esc(r.쉬운설명)}</span></label>`).join('')}</div>`:`<div class="slot-detail-head"><div><b>${slot.id}번 슬롯</b><h3>비어 있음</h3></div></div>${versionUi}<button class="main-primary" data-slot-file="${slot.id}" type="button">+ 첫 전략 버전 추가</button>`;
   mountModal('슬롯 관리 · 버전 보관함',`<div class="slot-manager"><div class="slot-grid">${cards}</div><div class="slot-detail">${detail}</div></div><input id="slotFileInput" type="file" accept=".yujin-slot.json,application/json" hidden>`,'slot-manager-modal'); bindSlotModal(slot);
 }
 async function slotVersionAction(action, slotId) { const versionId=$('#slotVersionSelect')?.value; if(!versionId)return toast('전략 버전을 선택하세요','err'); if(action==='delete'&&!confirm('선택한 전략 버전만 삭제할까요?'))return; try { const r=await api(`/api/slot-versions/${action}`,{slotId,versionId}); acceptConfig(r.config); if(action==='apply'){slotDraft=null;closeModal();} else openSlots(); toast(action==='apply'?'전략 버전을 적용했습니다':action==='clone'?'전략 버전을 복사했습니다':'선택한 전략 버전을 삭제했습니다'); } catch(e){toast(e.message,'err');} }
 function bindSlotModal(slot) { $('#mainModal').addEventListener('click',(e)=>{const select=e.target.closest('[data-slot-select]'); if(select){selectedSlotId=Number(select.dataset.slotSelect);openSlots();return;} const file=e.target.closest('[data-slot-file]');if(file){$('#slotFileInput').dataset.slotId=file.dataset.slotFile;$('#slotFileInput').click();return;} if(e.target.closest('#slotApply'))return applySlotFromModal(slot.id); const apply=e.target.closest('[data-slot-version-apply]');if(apply)return slotVersionAction('apply',Number(apply.dataset.slotVersionApply));const copy=e.target.closest('[data-slot-version-copy]');if(copy)return slotVersionAction('clone',Number(copy.dataset.slotVersionCopy));const del=e.target.closest('[data-slot-version-delete]');if(del)return slotVersionAction('delete',Number(del.dataset.slotVersionDelete));}); $('#slotFileInput')?.addEventListener('change',async(e)=>{const file=e.target.files?.[0];if(!file)return;try{const content=await file.text();const r=await api('/api/slot-versions/add',{slotId:Number(e.target.dataset.slotId),fileName:file.name,content});acceptConfig(r.config);toast('새 전략 버전을 보관했습니다 · 드롭다운에서 선택 후 적용하세요');openSlots();}catch(err){toast(err.message,'err');}});}
-function checkedModalRules() { return [...document.querySelectorAll('[data-slot-rule]:checked')].map((x) => x.dataset.slotRule); }
+function checkedModalRules() { return [...new Set([...document.querySelectorAll('[data-slot-rule]:checked')].flatMap((x) => String(x.dataset.slotRuleIds || x.dataset.slotRule || '').split(',').filter(Boolean)))]; }
 async function applySlotFromModal(id) { try { const r = await api('/api/slots/apply', { slotId: id, enabledRuleIds: checkedModalRules() }); acceptConfig(r.config); slotDraft = null; closeModal(); toast('체크한 규칙으로 슬롯을 적용했습니다'); } catch (e) { toast(e.message, 'err'); } }
 async function removeSlot(id) { if (!confirm(`${id}번 슬롯을 비울까요? 자동매매 켜짐은 유지되고, 새 슬롯을 저장할 때까지 신규 진입만 기다립니다.`)) return; try { const r = await api('/api/slots/remove', { slotId: id }); acceptConfig(r.config); slotDraft = null; openSlots(); } catch (e) { toast(e.message, 'err'); } }
 function acceptConfig(c) { if (!c) return; S.config = c; bus.emit('cfg', c); }
@@ -671,7 +692,7 @@ function bindBoard() {
     const active = activeSlot(); if (!active) return;
     slotDraft ||= { slotId: active.id, enabledRuleIds: [...active.enabledRuleIds] };
     if (slotDraft.slotId !== active.id) slotDraft = { slotId: active.id, enabledRuleIds: [...active.enabledRuleIds] };
-    const set = new Set(slotDraft.enabledRuleIds); if (e.target.checked) set.add(e.target.dataset.rule); else set.delete(e.target.dataset.rule); slotDraft.enabledRuleIds = [...set];
+    const set = new Set(slotDraft.enabledRuleIds); const ids = String(e.target.dataset.ruleIds || e.target.dataset.rule || '').split(',').filter(Boolean); if (e.target.checked) ids.forEach((id) => set.add(id)); else ids.forEach((id) => set.delete(id)); slotDraft.enabledRuleIds = [...set];
   });
   const markInteracting = () => {
     lastInteraction = Date.now();
