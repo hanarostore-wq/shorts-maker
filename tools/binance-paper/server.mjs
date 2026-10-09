@@ -9,6 +9,7 @@ const isFutures = kind === 'futures';
 const port = Number(process.env.PORT || (isFutures ? 7082 : 7081));
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
 const PUBLIC = path.join(ROOT, 'public');
+const SLOT_PRESETS_PATH = path.join(ROOT, 'upbit-slot-presets.json');
 const dataDir = process.env.PAPER_DATA_DIR || `C:/ProgramData/BinanceTerminal/${kind}`;
 const configPath = path.join(dataDir, 'terminal-config.json');
 const paperPath = path.join(dataDir, 'paper-account.json');
@@ -19,9 +20,41 @@ const FUTURES_REST = process.env.BINANCE_FUTURES_REST || 'https://fapi.binance.c
 const SPOT_WS = 'wss://stream.binance.com:9443';
 const FUTURES_WS = 'wss://fstream.binance.com';
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT', 'LINKUSDT', 'SUIUSDT'];
+const SLOT_COUNT = 5;
 let marketCatalog = SYMBOLS.map((symbol) => ({ symbol, price: 0, changePct: 0, quoteVolume: 0 }));
 
 fs.mkdirSync(dataDir, { recursive: true });
+
+function clone(value) { return JSON.parse(JSON.stringify(value)); }
+function defaultSlotShelf() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(SLOT_PRESETS_PATH, 'utf8').replace(/^\uFEFF/, ''));
+    const items = (raw.items || []).filter((item) => Number(item?.id) >= 1 && Number(item?.id) <= SLOT_COUNT && item?.definition)
+      .sort((left, right) => left.id - right.id)
+      .map((item) => ({ ...clone(item), status: item.id === Number(raw.activeId) ? '적용 중' : '검사 완료' }));
+    if (items.length !== SLOT_COUNT) throw new Error('slot preset count');
+    const activeId = items.some((item) => item.id === Number(raw.activeId)) ? Number(raw.activeId) : 1;
+    return { version: 1, activeId, items };
+  } catch {
+    return {
+      version: 1,
+      activeId: 1,
+      items: Array.from({ length: SLOT_COUNT }, (_, index) => ({
+        id: index + 1,
+        name: `${index + 1}번 업비트 동기화 슬롯`,
+        status: index === 0 ? '적용 중' : '검사 완료',
+        definition: { 슬롯이름: `${index + 1}번 업비트 동기화 슬롯`, 전략설명: '업비트 슬롯 프리셋을 불러오는 중입니다', 사용가능모드: ['모의투자'], 주문설정: { 주문방식: '고정금액', 주문금액원: 10_000, 동시보유수: 1 } },
+        enabledRuleIds: [],
+      })),
+    };
+  }
+}
+function normalizeSlotShelf(source) {
+  const shelf = defaultSlotShelf();
+  const requested = Number(source?.activeId);
+  if (shelf.items.some((item) => item.id === requested)) shelf.activeId = requested;
+  return shelf;
+}
 
 const defaultConfig = () => ({
   mode: 'paper',
@@ -32,6 +65,7 @@ const defaultConfig = () => ({
   futuresLeverage: 1,
   autoTrading: false,
   activeSlot: 1,
+  slots: defaultSlotShelf(),
   symbol: 'BTCUSDT',
   interval: '1m',
   updatedAt: Date.now(),
@@ -51,9 +85,12 @@ function readJson(file, fallback) {
   catch { return fallback(); }
 }
 let config = readJson(configPath, defaultConfig);
-let paper = readJson(paperPath, () => defaultPaper(config.paperInitialKrw));
 function saveConfig() { config.updatedAt = Date.now(); fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8'); }
 function savePaper() { paper.updatedAt = Date.now(); fs.writeFileSync(paperPath, JSON.stringify(paper, null, 2), 'utf8'); }
+config.slots = normalizeSlotShelf(config.slots);
+config.activeSlot = config.slots.activeId;
+saveConfig();
+let paper = readJson(paperPath, () => defaultPaper(config.paperInitialKrw));
 
 const market = {
   symbol: config.symbol,
@@ -99,7 +136,53 @@ function safeSymbol(symbol) {
   const candidate = String(symbol || '').toUpperCase();
   return marketCatalog.some((item) => item.symbol === candidate) ? candidate : null;
 }
-function publicConfig() { return { mode: config.mode, hasApiKey: Boolean(config.apiKey && config.secretKey), apiKeyHint: config.apiKey ? `${config.apiKey.slice(0, 5)}••••${config.apiKey.slice(-3)}` : '', paperInitialKrw: config.paperInitialKrw, paperOrderKrw: config.paperOrderKrw, futuresLeverage: config.futuresLeverage, autoTrading: config.autoTrading, activeSlot: config.activeSlot, symbol: market.symbol, interval: market.interval }; }
+function slotOrder(slot) {
+  const order = slot?.definition?.주문설정 || {};
+  return { type: order.주문방식 || '고정금액', amountKrw: num(order.주문금액원), ratio: num(order.주문가능원화비율), maxPositions: Math.max(1, Math.floor(num(order.동시보유수, 1))) };
+}
+function slotSummary(slot) {
+  const definition = slot?.definition || {};
+  const enabled = (group) => Array.isArray(definition[group]) ? definition[group].filter((rule) => rule?.사용).length : 0;
+  return {
+    id: slot.id,
+    name: slot.name || definition.슬롯이름 || `${slot.id}번 슬롯`,
+    status: slot.id === config.activeSlot ? '적용 중' : '검사 완료',
+    description: definition.전략설명 || '',
+    modes: definition.사용가능모드 || ['모의투자'],
+    decision: definition.판단방식 || '규칙만 사용',
+    order: slotOrder(slot),
+    ruleCounts: { selection: enabled('코인고르기규칙'), entry: enabled('매수규칙'), exit: enabled('매도규칙') },
+  };
+}
+function activeSlot() { return config.slots.items.find((slot) => slot.id === config.activeSlot) || config.slots.items[0]; }
+function activateSlot(slotId) {
+  const id = Math.max(1, Math.min(SLOT_COUNT, Math.floor(num(slotId, config.activeSlot))));
+  const slot = config.slots.items.find((item) => item.id === id);
+  if (!slot?.definition) throw new Error(`${id}번 슬롯 정의를 찾지 못했습니다`);
+  const requiredMode = config.mode === 'live' ? '실전투자' : '모의투자';
+  if (!slot.definition.사용가능모드?.includes(requiredMode)) throw new Error(`${slot.name}은 ${requiredMode}에서 사용할 수 없습니다`);
+  config.activeSlot = slot.id;
+  config.slots.activeId = slot.id;
+  const order = slotOrder(slot);
+  if (order.type === '고정금액' && order.amountKrw >= 10_000) config.paperOrderKrw = order.amountKrw;
+  return slot;
+}
+function publicConfig() {
+  return {
+    mode: config.mode,
+    hasApiKey: Boolean(config.apiKey && config.secretKey),
+    apiKeyHint: config.apiKey ? `${config.apiKey.slice(0, 5)}••••${config.apiKey.slice(-3)}` : '',
+    paperInitialKrw: config.paperInitialKrw,
+    paperOrderKrw: config.paperOrderKrw,
+    futuresLeverage: config.futuresLeverage,
+    autoTrading: config.autoTrading,
+    activeSlot: config.activeSlot,
+    slotCount: SLOT_COUNT,
+    slots: config.slots.items.map(slotSummary),
+    symbol: market.symbol,
+    interval: market.interval,
+  };
+}
 
 function signedQuery(params = {}) {
   const search = new URLSearchParams();
@@ -505,15 +588,30 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req); const interval = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d'].includes(body.interval) ? body.interval : null; if (!interval) throw new Error('지원하지 않는 차트 시간입니다');
       market.interval = interval; config.interval = interval; saveConfig(); await seedMarket(); connectMarket(); return json(res, 200, snapshot());
     }
+    if (req.method === 'GET' && url.pathname === '/api/slots') {
+      return json(res, 200, { ok: true, activeId: config.activeSlot, items: config.slots.items });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/slots/apply') {
+      const body = await readBody(req);
+      const slot = activateSlot(body.slotId);
+      saveConfig();
+      requestBroadcast();
+      return json(res, 200, { ok: true, message: `${slot.name} 적용 · 주문금액 ${slotOrder(slot).amountKrw.toLocaleString('ko-KR')}원`, config: publicConfig() });
+    }
     if (req.method === 'POST' && url.pathname === '/api/config') {
       const body = await readBody(req);
       if (body.mode && !['paper', 'live'].includes(body.mode)) throw new Error('투자 모드는 PAPER 또는 LIVE만 가능합니다');
+      const requestedSlotId = body.activeSlot === undefined ? config.activeSlot : Math.max(1, Math.min(SLOT_COUNT, Math.floor(num(body.activeSlot, config.activeSlot))));
+      const requestedSlot = config.slots.items.find((slot) => slot.id === requestedSlotId);
+      const requestedMode = body.mode || config.mode;
+      const requiredMode = requestedMode === 'live' ? '실전투자' : '모의투자';
+      if (!requestedSlot?.definition?.사용가능모드?.includes(requiredMode)) throw new Error(`${requestedSlot?.name || `${requestedSlotId}번 슬롯`}은 ${requiredMode}에서 사용할 수 없습니다`);
       if (body.mode) config.mode = body.mode;
       if (body.paperInitialKrw !== undefined) config.paperInitialKrw = Math.max(10_000, Math.floor(num(body.paperInitialKrw, config.paperInitialKrw)));
       if (body.paperOrderKrw !== undefined) config.paperOrderKrw = Math.max(10_000, Math.floor(num(body.paperOrderKrw, config.paperOrderKrw)));
       if (body.futuresLeverage !== undefined) config.futuresLeverage = Math.max(1, Math.min(125, Math.floor(num(body.futuresLeverage, config.futuresLeverage))));
       if (body.autoTrading !== undefined) config.autoTrading = Boolean(body.autoTrading);
-      if (body.activeSlot !== undefined) config.activeSlot = Math.max(1, Math.min(10, Math.floor(num(body.activeSlot, config.activeSlot))));
+      if (body.activeSlot !== undefined) activateSlot(body.activeSlot);
       const updatingKeys = body.apiKey !== undefined || body.secretKey !== undefined;
       if (body.apiKey !== undefined) config.apiKey = String(body.apiKey || '').trim();
       if (body.secretKey !== undefined) config.secretKey = String(body.secretKey || '').trim();

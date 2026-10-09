@@ -28,6 +28,12 @@ async function api(path, body) {
   if (payload.state) update(payload.state);
   return payload;
 }
+async function getJson(path) {
+  const response = await fetch(path, { cache: 'no-store' });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.ok === false) throw new Error(payload.error || '요청을 처리하지 못했습니다');
+  return payload;
+}
 function currentAccount() { return state?.account || {}; }
 function isFutures() { return state?.kind === 'futures'; }
 function isLive() { return state?.config?.mode === 'live'; }
@@ -123,6 +129,8 @@ function setupInteractions() {
   $$('.quick-amount button').forEach((button) => button.addEventListener('click', () => { const ratio = Number(button.dataset.ratio); const available = Number(currentAccount().availableKrw || 0); $('#orderAmount').value = Math.floor(available * ratio); renderOrderPanel(); }));
   $('#orderSubmit').addEventListener('click', submitOrder);
   $$('[data-open-settings]').forEach((button) => button.addEventListener('click', openSettings));
+  $$('[data-open-slots]').forEach((button) => button.addEventListener('click', openSlots));
+  $$('[data-close-slots]').forEach((button) => button.addEventListener('click', () => $('#slotsDialog').close()));
   $$('.mode-switch button').forEach((button) => button.addEventListener('click', () => { pendingMode = button.dataset.mode; updateModeButtons(); }));
   $('#settingsForm').addEventListener('submit', saveSettings); $('#paperReset').addEventListener('click', resetPaper); $('#confirmLiveOrder').addEventListener('click', sendLiveOrder); $('#cancelLiveOrder').addEventListener('click', () => $('#confirmDialog').close());
   window.addEventListener('resize', () => state && renderChart(state.market));
@@ -131,6 +139,24 @@ function openSettings() {
   if (!state) return; const c = state.config; pendingMode = c.mode; updateModeButtons(); $('#paperInitial').value = c.paperInitialKrw || ''; $('#paperOrder').value = c.paperOrderKrw || ''; $('#futuresLeverage').value = c.futuresLeverage || 1; $('#autoTrading').value = String(Boolean(c.autoTrading)); $('#activeSlot').value = String(c.activeSlot || 1); $('#apiKey').value = ''; $('#secretKey').value = ''; const account = currentAccount(); $('#apiStatus').textContent = c.hasApiKey ? (account.ready ? `API Key ${c.apiKeyHint} 연결됨 · 마지막 실계좌 갱신 ${new Date(account.refreshedAt || Date.now()).toLocaleTimeString('ko-KR')}` : account.error) : '아직 API Key가 없습니다 · PAPER 모드는 키 없이 바로 쓸 수 있습니다'; $('#settingsDialog').showModal();
 }
 function updateModeButtons() { $$('.mode-switch button').forEach((button) => button.classList.toggle('active', button.dataset.mode === pendingMode)); }
+function slotRules(definition, group) { return (definition?.[group] || []).filter((rule) => rule?.사용).map((rule) => `<li><b>${escape(rule.이름)}</b><span>${escape(rule.값)}${rule.단위 && rule.단위 !== '참·거짓' ? ` ${escape(rule.단위)}` : ''}</span></li>`).join('') || '<li class="slot-empty">사용 규칙 없음</li>'; }
+function renderSlots(payload) {
+  const activeId = Number(payload.activeId || state?.config?.activeSlot || 1);
+  const items = payload.items || [];
+  $('#slotSummary').innerHTML = `<b>${isFutures() ? 'USDⓈ-M 선물' : '현물'} · 5개 전략 슬롯</b><span>현재 ${activeId}번 적용 · 업비트 운영본의 주문 설정과 규칙을 동일하게 복제했습니다</span>`;
+  $('#slotList').innerHTML = items.map((slot) => {
+    const d = slot.definition || {}; const order = d.주문설정 || {}; const active = Number(slot.id) === activeId;
+    return `<article class="slot-card ${active ? 'active' : ''}"><header><div><span class="slot-id">SLOT ${slot.id}</span><h3>${escape(slot.name || d.슬롯이름 || `${slot.id}번 슬롯`)}</h3><p>${escape(d.전략설명 || '전략 설명이 없습니다')}</p></div><span class="slot-status ${active ? 'on' : ''}">${active ? '적용 중' : '준비 완료'}</span></header><div class="slot-metrics"><span><small>주문 방식</small><b>${escape(order.주문방식 || '고정금액')}</b></span><span><small>한 번 주문</small><b>${won(order.주문금액원 || 0)}</b></span><span><small>동시 보유</small><b>${Number(order.동시보유수 || 0)}개</b></span><span><small>사용 모드</small><b>${escape((d.사용가능모드 || []).join(' · '))}</b></span></div><details><summary>적용 규칙 보기 <span>선별 ${(d.코인고르기규칙 || []).filter((rule) => rule.사용).length} · 진입 ${(d.매수규칙 || []).filter((rule) => rule.사용).length} · 매도 ${(d.매도규칙 || []).filter((rule) => rule.사용).length}</span></summary><div class="slot-rule-columns"><section><h4>종목 선별</h4><ul>${slotRules(d, '코인고르기규칙')}</ul></section><section><h4>진입 규칙</h4><ul>${slotRules(d, '매수규칙')}</ul></section><section><h4>매도 · 리스크</h4><ul>${slotRules(d, '매도규칙')}</ul></section></div></details><footer><span>${escape(d.판단방식 || '규칙만 사용')} · Binance PAPER에만 설정 동기화</span><button class="slot-apply" data-slot-id="${slot.id}" ${active ? 'disabled' : ''}>${active ? '현재 적용 중' : '이 슬롯 적용'}</button></footer></article>`;
+  }).join('');
+  $$('.slot-apply').forEach((button) => button.addEventListener('click', async () => {
+    try { const result = await api('/api/slots/apply', { slotId: Number(button.dataset.slotId) }); state.config = result.config; payload.activeId = result.config.activeSlot; render(); renderSlots(payload); toast(result.message || `${button.dataset.slotId}번 슬롯을 적용했습니다`); }
+    catch (error) { toast(error.message, true); }
+  }));
+}
+async function openSlots() {
+  try { const payload = await getJson('/api/slots'); renderSlots(payload); $('#slotsDialog').showModal(); }
+  catch (error) { toast(`전략 슬롯을 불러오지 못했습니다: ${error.message}`, true); }
+}
 async function saveSettings(event) { event.preventDefault(); const key = $('#apiKey').value.trim(); const secret = $('#secretKey').value.trim(); const body = { mode: pendingMode, paperInitialKrw: inputNumber($('#paperInitial').value), paperOrderKrw: inputNumber($('#paperOrder').value), futuresLeverage: inputNumber($('#futuresLeverage').value, 1), autoTrading: $('#autoTrading').value === 'true', activeSlot: inputNumber($('#activeSlot').value, 1) }; if (key) body.apiKey = key; if (secret) body.secretKey = secret; try { await api('/api/config', body); $('#settingsDialog').close(); toast('로컬 Binance 설정을 저장했습니다'); } catch (error) { toast(error.message, true); } }
 async function resetPaper() { const initial = inputNumber($('#paperInitial').value, state.config.paperInitialKrw); if (!confirm(`${won(initial)} PAPER 계좌를 완전히 초기화할까요? 보유분·PAPER 주문·PAPER 거래기록이 모두 지워집니다`)) return; try { await api('/api/reset', { initialKrw: initial, orderKrw: inputNumber($('#paperOrder').value, state.config.paperOrderKrw) }); toast('PAPER 계좌를 완전히 초기화했습니다'); } catch (error) { toast(error.message, true); } }
 function buildOrderBody(confirmLive = false) { const amount = Math.max(10_000, inputNumber($('#orderAmount').value)); const position = currentPosition(); const b = { action: selectedAction, orderType: selectedOrderType, amountKrw: amount, limitPrice: inputNumber($('#limitPrice').value), leverage: inputNumber($('#leverage').value, state.config.futuresLeverage || 1), confirmLive }; if (selectedAction === 'sell') { const holding = currentAccount().balances?.find((item) => item.asset === baseAsset()); b.qty = holding?.free || 0; } if (selectedAction === 'close') b.closeSide = position?.side === 'SHORT' ? 'BUY' : 'SELL'; return b; }

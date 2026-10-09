@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Binance 로컬 트레이딩 터미널</title>
-  <link rel="stylesheet" href="/app.css?v=2.0.0">
+  <link rel="stylesheet" href="/app.css?v=2.1.0">
 </head>
 <body>
   <div id="app" class="terminal">
     <header class="topbar">
       <div class="brand"><img src="https://bin.bnbstatic.com/static/images/common/favicon.ico" alt="Binance"><b>BINANCE</b><span class="brand-divider"></span><strong id="terminalTitle">현물</strong><span class="local-badge">BLACK PC LOCAL</span></div>
-      <nav class="top-nav" aria-label="주요 메뉴"><button class="active">거래</button><button data-open-settings>자동매매</button><button data-open-settings>지갑</button><button data-open-settings>주문</button><button data-open-settings>전략 슬롯</button></nav>
+      <nav class="top-nav" aria-label="주요 메뉴"><button class="active">거래</button><button data-open-settings>자동매매</button><button data-open-settings>지갑</button><button data-open-settings>주문</button><button data-open-slots>전략 슬롯</button></nav>
       <div class="top-actions"><span class="connection" id="connection">시세 연결 중</span><button class="mode-chip" id="modeChip" data-open-settings>PAPER</button><button class="settings-trigger" data-open-settings title="API·투자금·자동매매 설정">⚙ 설정</button></div>
     </header>
 
@@ -88,14 +88,23 @@
     <form method="dialog" class="settings-card" id="settingsForm">
       <header><div><b>Binance 로컬 설정</b><small>모든 설정은 BLACK PC에만 저장됩니다</small></div><button value="cancel" class="icon-close" aria-label="닫기">✕</button></header>
       <section class="setting-group"><h3>투자 모드</h3><div class="mode-switch"><button type="button" data-mode="paper">PAPER 모의계좌</button><button type="button" data-mode="live">LIVE 실계좌</button></div><p class="setting-note">LIVE는 API 키를 입력해도 주문 확인창을 한 번 더 통과해야 실제 주문이 전송됩니다</p></section>
-      <section class="setting-grid"><label><span>PAPER 시작 금액</span><input id="paperInitial" inputmode="numeric" placeholder="100000000"><em>KRW</em></label><label><span>PAPER 한 번 주문 금액</span><input id="paperOrder" inputmode="numeric" placeholder="1000000"><em>KRW</em></label><label class="futures-only"><span>선물 기본 레버리지</span><input id="futuresLeverage" inputmode="numeric" placeholder="1"><em>배</em></label><label><span>자동매매</span><select id="autoTrading"><option value="false">꺼짐 · 수동 주문만</option><option value="true">켜짐 · 적용 슬롯 규칙 사용</option></select></label><label><span>적용 슬롯</span><select id="activeSlot"><option value="1">1번 슬롯</option><option value="2">2번 슬롯</option><option value="3">3번 슬롯</option><option value="4">4번 슬롯</option></select></label></section>
+      <section class="setting-grid"><label><span>PAPER 시작 금액</span><input id="paperInitial" inputmode="numeric" placeholder="100000000"><em>KRW</em></label><label><span>PAPER 한 번 주문 금액</span><input id="paperOrder" inputmode="numeric" placeholder="1000000"><em>KRW</em></label><label class="futures-only"><span>선물 기본 레버리지</span><input id="futuresLeverage" inputmode="numeric" placeholder="1"><em>배</em></label><label><span>자동매매</span><select id="autoTrading"><option value="false">꺼짐 · 수동 주문만</option><option value="true">켜짐 · 적용 슬롯 규칙 사용</option></select></label><label><span>적용 슬롯</span><select id="activeSlot"><option value="1">1번 슬롯</option><option value="2">2번 슬롯</option><option value="3">3번 슬롯</option><option value="4">4번 슬롯</option><option value="5">5번 슬롯</option></select></label></section>
       <section class="setting-group api-group"><h3>Binance API 연결</h3><p class="setting-note">API Key와 Secret Key는 이 로컬 서버의 보호된 폴더에만 보관됩니다. 채팅·GitHub·관제실 로그에는 저장되지 않습니다</p><label><span>API Key</span><input id="apiKey" autocomplete="off" placeholder="입력한 키는 화면에 다시 표시하지 않습니다"></label><label><span>Secret Key</span><input id="secretKey" type="password" autocomplete="new-password" placeholder="새 키를 입력할 때만 작성"></label><div id="apiStatus" class="api-status">연결 상태 확인 중</div></section>
       <footer><button type="button" id="paperReset" class="danger-lite">PAPER 계좌 완전 초기화</button><button value="save" class="save-settings">설정 저장</button></footer>
     </form>
   </dialog>
 
+  <dialog id="slotsDialog" class="slots-dialog">
+    <section class="slots-card">
+      <header><div><b>업비트 동기화 전략 슬롯</b><small>현물·선물 각각 1~5번 · 업비트 운영 규칙·주문 설정을 같은 값으로 복제</small></div><button class="icon-close" data-close-slots aria-label="닫기">✕</button></header>
+      <div id="slotSummary" class="slot-summary">슬롯 정보를 불러오는 중</div>
+      <div id="slotList" class="slot-list"></div>
+      <footer><span>선택한 슬롯을 적용하면 해당 슬롯의 고정 주문금액도 함께 반영됩니다</span><button data-close-slots>닫기</button></footer>
+    </section>
+  </dialog>
+
   <dialog id="confirmDialog" class="confirm-dialog"><section class="confirm-card"><header><b>실계좌 주문 최종 확인</b><span>LIVE</span></header><p id="confirmText">-</p><div class="confirm-details" id="confirmDetails"></div><p class="warning">확인하면 Binance API로 실제 주문이 전송됩니다. 주문 금액과 방향을 다시 확인하세요</p><footer><button id="cancelLiveOrder">취소</button><button id="confirmLiveOrder" class="danger">실제 주문 전송</button></footer></section></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="/app.js?v=2.0.0"></script>
+  <script type="module" src="/app.js?v=2.1.0"></script>
 </body>
 </html>
