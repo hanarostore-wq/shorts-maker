@@ -41,9 +41,9 @@ function updateTopMeta() {
   const metaLat = $('#metaLatency');
   if (metaLat) {
     const parts = [];
-    if (st.lastUpbitLatency != null) {
-      parts.push(`Binance 수신 간격 ${Math.round(st.lastUpbitLatency)}ms`);
-    } else if (st.upbit) {
+    if (st.lastBinanceLatency != null) {
+      parts.push(`Binance 수신 간격 ${Math.round(st.lastBinanceLatency)}ms`);
+    } else if (st.binance) {
       parts.push('Binance 정상 수신');
     } else {
       parts.push('Binance 연결 대기');
@@ -61,9 +61,9 @@ function renderChips() {
   updateTopMeta();
   applyTheme();
   const st = S.status || {};
-  const up = $('#chipUpbit');
-  up.className = `chip ${S.connected && st.upbit ? 'ok' : 'bad'}`;
-  up.title = S.connected ? (st.upbit ? 'Binance 실시간 시세 수신 중' : 'Binance 연결 재시도 중') : '서버 연결 끊김';
+  const up = $('#chipBinance');
+  up.className = `chip ${S.connected && st.binance ? 'ok' : 'bad'}`;
+  up.title = S.connected ? (st.binance ? 'Binance 실시간 시세 수신 중' : 'Binance 연결 재시도 중') : '서버 연결 끊김';
   const m = S.summary;
   if (m) {
     const j = m.jev;

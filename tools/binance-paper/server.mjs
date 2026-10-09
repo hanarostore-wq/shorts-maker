@@ -9,7 +9,7 @@ const isFutures = kind === 'futures';
 const port = Number(process.env.PORT || (isFutures ? 7082 : 7081));
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
 const PUBLIC = path.join(ROOT, 'public');
-const SLOT_PRESETS_PATH = path.join(ROOT, 'upbit-slot-presets.json');
+const SLOT_PRESETS_PATH = path.join(ROOT, 'binance-slot-presets.json');
 const dataDir = process.env.PAPER_DATA_DIR || `C:/ProgramData/BinanceTerminal/${kind}`;
 const configPath = path.join(dataDir, 'terminal-config.json');
 const paperPath = path.join(dataDir, 'paper-account.json');
@@ -41,9 +41,9 @@ function defaultSlotShelf() {
       activeId: 1,
       items: Array.from({ length: SLOT_COUNT }, (_, index) => ({
         id: index + 1,
-        name: `${index + 1}번 업비트 동기화 슬롯`,
+        name: `${index + 1}번 Binance 전용 슬롯`,
         status: index === 0 ? '적용 중' : '검사 완료',
-        definition: { 슬롯이름: `${index + 1}번 업비트 동기화 슬롯`, 전략설명: '업비트 슬롯 프리셋을 불러오는 중입니다', 사용가능모드: ['모의투자'], 주문설정: { 주문방식: '고정금액', 주문금액원: 10_000, 동시보유수: 1 } },
+        definition: { 슬롯이름: `${index + 1}번 Binance 전용 슬롯`, 전략설명: 'Binance 슬롯 프리셋을 불러오는 중입니다', 사용가능모드: ['모의투자'], 주문설정: { 주문방식: '고정금액', 주문금액원: 10_000, 동시보유수: 1 } },
         enabledRuleIds: [],
       })),
     };
@@ -560,14 +560,14 @@ async function liveOrder(body) {
 
 function accountView() { return config.mode === 'live' ? liveAccount : paperAccountView(); }
 
-// UPBIT_UI_COMPAT_START
+// BINANCE_UI_COMPAT_START
 function uiCode(symbol) { return `USDT-${String(symbol || '').replace(/USDT$/, '')}`; }
 function uiSymbol(code) { const base = String(code || '').replace(/^USDT-/, '').replace(/[^A-Z0-9]/g, ''); return base ? `${base}USDT` : market.symbol; }
 function uiTicker(row) { const symbol = row.symbol || market.symbol; const price = krw(num(row.price, market.price)); const rate = num(row.changePct, market.changePct) / 100; return { cd: uiCode(symbol), tp: price, scr: rate, scp: price * rate, hp: symbol === market.symbol ? krw(market.high24h) : price, lp: symbol === market.symbol ? krw(market.low24h) : price, atv24h: symbol === market.symbol ? market.volumeBase : 0, atp24h: krw(num(row.quoteVolume, market.volumeQuote)) }; }
 function uiPosition() { const p = paperPositionView(); return p ? { market: uiCode(p.symbol), qty: p.qty, avgPrice: p.entryKrw, mark: p.markKrw, cost: p.marginKrw, value: p.marginKrw + p.pnlKrw, netPnl: p.pnlKrw, netPct: p.pnlPct, heldSec: Math.floor((Date.now() - p.openedAt) / 1000) } : null; }
 function uiConfig() { return { mode: config.mode, autoTrading: config.autoTrading, markets: config.watchMarkets || [], slots: { activeId: config.activeSlot, items: config.slots.items }, trade: { orderMode: 'fixed', orderKrw: config.paperOrderKrw, orderPct: 10, maxPositions: 1, hardStopLossPct: 0 }, alerts: { voiceEnabled: false, voiceVolume: 0.7 }, screener: { enabled: true, candidates: marketCatalog.length, refreshSec: 3 }, strategyExport: { ready: true }, cost: { usdKrw: market.usdKrw || 1350 } }; }
-function uiSnapshot() { const account = paperAccountView(); const pos = uiPosition(); const equity = account.totalKrw; const pnl = equity - account.initialKrw; const markets = marketCatalog.map((x) => ({ code: uiCode(x.symbol), ko: x.symbol.replace(/USDT$/, ''), en: x.symbol.replace(/USDT$/, ''), warning: false })); const tickers = marketCatalog.map(uiTicker); const selected = uiCode(market.symbol); const watch = markets.map((item, i) => ({ market: item.code, watched: true, warm: true, price: tickers.find((t) => t.cd === item.code)?.tp || 0, position: pos?.market === item.code ? pos : null, bidShare15: .5, last: { kind: 'watch', reason: 'Binance full-market monitoring' }, entryEvidence: { rules: [] }, rank: i + 1 })); return { markets, tickers, config: uiConfig(), summary: { equity, initialKrw: account.initialKrw, krw: account.availableKrw, totalPnl: pnl, totalPnlPct: account.initialKrw ? pnl / account.initialKrw * 100 : 0, realizedPnl: account.realizedKrw, feesPaid: 0, trades: account.trades.length, wins: 0, losses: 0, winRate: null, avgHoldSec: pos?.heldSec || 0, positions: pos ? [pos] : [], inflight: [], activeSlot: { id: config.activeSlot, name: activeSlot()?.name || `${config.activeSlot} slot`, rules: 0 }, effectiveDecisionMode: 'rule', jev: { label: 'Binance rule', totalCalls: 0, totalErrors: 0, totalCostUsd: 0, tokens: 0 }, startedAt: account.updatedAt, maxDrawdownPct: 0 }, watch, trades: account.trades.map((t) => ({ id: t.id, t: t.time, market: selected, side: /sell|close|정리|매도/i.test(t.type) ? 'sell' : 'buy', price: krw(market.price), qty: pos?.qty || 0, gross: t.amountKrw, fee: 0, net: t.amountKrw, pnl: t.pnlKrw, reason: t.detail, reasonKo: t.type, slot: { id: config.activeSlot, name: activeSlot()?.name || '' } })), decisions: [], equity: [[account.updatedAt, equity]], logs: [{ t: Date.now(), level: 'info', msg: 'Binance real-time feed connected' }], ob: { cd: selected, ask: market.asks.map((x) => ({ p: krw(x.price), s: x.qty })), bid: market.bids.map((x) => ({ p: krw(x.price), s: x.qty })), tas: 0, tbs: 0 }, status: { upbit: market.connected, lastUpbitLatency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null }, screener: { enabled: true, rows: watch.map((x, i) => ({ code: x.market, rank: i + 1, delta: 0, score: 0 })) }, monitor: { current: { markets: marketCatalog.length, latency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null } } }; }
-// UPBIT_UI_COMPAT_END
+function uiSnapshot() { const account = paperAccountView(); const pos = uiPosition(); const equity = account.totalKrw; const pnl = equity - account.initialKrw; const markets = marketCatalog.map((x) => ({ code: uiCode(x.symbol), ko: x.symbol.replace(/USDT$/, ''), en: x.symbol.replace(/USDT$/, ''), warning: false })); const tickers = marketCatalog.map(uiTicker); const selected = uiCode(market.symbol); const watch = markets.map((item, i) => ({ market: item.code, watched: true, warm: true, price: tickers.find((t) => t.cd === item.code)?.tp || 0, position: pos?.market === item.code ? pos : null, bidShare15: .5, last: { kind: 'watch', reason: 'Binance full-market monitoring' }, entryEvidence: { rules: [] }, rank: i + 1 })); return { markets, tickers, config: uiConfig(), summary: { equity, initialKrw: account.initialKrw, krw: account.availableKrw, totalPnl: pnl, totalPnlPct: account.initialKrw ? pnl / account.initialKrw * 100 : 0, realizedPnl: account.realizedKrw, feesPaid: 0, trades: account.trades.length, wins: 0, losses: 0, winRate: null, avgHoldSec: pos?.heldSec || 0, positions: pos ? [pos] : [], inflight: [], activeSlot: { id: config.activeSlot, name: activeSlot()?.name || `${config.activeSlot} slot`, rules: 0 }, effectiveDecisionMode: 'rule', jev: { label: 'Binance rule', totalCalls: 0, totalErrors: 0, totalCostUsd: 0, tokens: 0 }, startedAt: account.updatedAt, maxDrawdownPct: 0 }, watch, trades: account.trades.map((t) => ({ id: t.id, t: t.time, market: selected, side: /sell|close|정리|매도/i.test(t.type) ? 'sell' : 'buy', price: krw(market.price), qty: pos?.qty || 0, gross: t.amountKrw, fee: 0, net: t.amountKrw, pnl: t.pnlKrw, reason: t.detail, reasonKo: t.type, slot: { id: config.activeSlot, name: activeSlot()?.name || '' } })), decisions: [], equity: [[account.updatedAt, equity]], logs: [{ t: Date.now(), level: 'info', msg: 'Binance real-time feed connected' }], ob: { cd: selected, ask: market.asks.map((x) => ({ p: krw(x.price), s: x.qty })), bid: market.bids.map((x) => ({ p: krw(x.price), s: x.qty })), tas: 0, tbs: 0 }, status: { binance: market.connected, lastBinanceLatency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null }, screener: { enabled: true, rows: watch.map((x, i) => ({ code: x.market, rank: i + 1, delta: 0, score: 0 })) }, monitor: { current: { markets: marketCatalog.length, latency: market.lastMessageAt ? Date.now() - market.lastMessageAt : null } } }; }
+// BINANCE_UI_COMPAT_END
 
 function snapshot(includeMarkets = true) {
   const account = accountView();
@@ -665,7 +665,7 @@ const server = http.createServer(async (req, res) => {
       requestBroadcast(); return json(res, 200, { ok: true, ...result, state: snapshot() });
     }
     if (req.method === 'POST' && url.pathname === '/api/reset') {
-      const body = await readBody(req); const result = paperOrder({ action: 'reset', initialKrw: body.initialKrw, amountKrw: body.orderKrw }); requestBroadcast(); return json(res, 200, result);
+      const body = await readBody(req); const result = paperOrder({ action: 'reset', initialKrw: body.initialKrw, amountKrw: body.orderKrw }); const ui = uiSnapshot(); requestBroadcast(); return json(res, 200, { ...result, initialKrw: config.paperInitialKrw, summary: ui.summary, config: ui.config });
     }
     if (req.method === 'POST' && url.pathname === '/api/live/refresh') { await refreshLiveAccount(); return json(res, 200, snapshot()); }
     if (req.method === 'GET') return staticFile(req, res, url.pathname);

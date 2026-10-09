@@ -3,7 +3,7 @@ import { $, $$, bus, S, api, esc, fmtDur, fmtInt, fmtKrw, fmtPct, fmtPrice, fmtQ
 import { parseKrwAmount } from './amount.js?v=1.10.56';
 
 // =====================================================================================
-// Left Upbit Chart in Mainboard
+// Left Binance Chart in Mainboard
 // =====================================================================================
 const KST = 9 * 3600;
 const MC = { chart: null, candle: null, vol: null, unit: localStorage.getItem('mu-unit') || '1', data: [], market: null, lines: [], reqId: 0 };
@@ -230,17 +230,17 @@ function monitorChart(title, value, suffix, history, key, tone, digits = 0) {
 function serverMonitor() {
   const monitor = S.monitor || {};
   const history = Array.isArray(monitor.history) ? monitor.history : [];
-  const current = monitor.current || history.at(-1) || { latencyMs: S.status?.avgUpbitLatency ?? S.status?.lastUpbitLatency ?? null };
+  const current = monitor.current || history.at(-1) || { latencyMs: S.status?.avgBinanceLatency ?? S.status?.lastBinanceLatency ?? null };
   const distribution = monitor.distribution || {};
   const monitorInt = (value) => value == null || !Number.isFinite(Number(value)) ? '-' : fmtInt(Number(value));
   const monitoredMarkets = Number(distribution.markets) > 0 ? Number(distribution.markets) : S.markets.length;
-  const upbitReceiving = distribution.upbitReceiving ?? !!S.status?.upbit;
+  const binanceReceiving = distribution.binanceReceiving ?? !!S.status?.binance;
   const cpuTone = Number(current.cpuPct || 0) >= 80 ? 'warn' : 'cpu';
   return `<section class="server-monitor panel-dark" aria-label="BLACK PC 서버 상태">
-    <div class="server-monitor-head"><div><h3>BLACK PC 서버 상태</h3><span>5초마다 측정 · 최근 약 6분 기록</span></div><b class="${upbitReceiving ? 'connected' : 'disconnected'}">${upbitReceiving ? '업비트 수신 중' : '업비트 재연결 중'}</b></div>
+    <div class="server-monitor-head"><div><h3>BLACK PC 서버 상태</h3><span>5초마다 측정 · 최근 약 6분 기록</span></div><b class="${binanceReceiving ? 'connected' : 'disconnected'}">${binanceReceiving ? 'Binance 수신 중' : 'Binance 재연결 중'}</b></div>
     <div class="monitor-kpis"><span>감시 마켓 <b>${monitorInt(monitoredMarkets)}개</b></span><span>차트 자료 <b>${monitorInt(distribution.seedActive)}/${monitorInt(distribution.seedConcurrency)}개 처리</b></span><span>대기열 <b>${monitorInt(distribution.seedQueue)}개</b></span><span>실시간 수신 <b>${monitorNumber(current.messagesPerSec, '건/초')}</b></span></div>
-    <div class="monitor-charts">${monitorChart('CPU 사용률', current.cpuPct, '%', history, 'cpuPct', cpuTone, 1)}${monitorChart('메모리 사용량', current.rssMb, 'MB', history, 'rssMb', 'memory', 1)}${monitorChart('업비트 실제 수신 지연', current.latencyMs, 'ms', history, 'latencyMs', 'latency')}</div>
-    <p class="monitor-note">전체 Binance USDT 마켓을 BLACK PC에서 분석합니다 · 실제 수신 지연은 업비트 이벤트 시각과 BLACK PC 수신 시각의 차이 중앙값입니다 · 과거 차트 자료만 최대 ${fmtInt(distribution.seedConcurrency || 0)}개씩 나눠 불러옵니다</p>
+    <div class="monitor-charts">${monitorChart('CPU 사용률', current.cpuPct, '%', history, 'cpuPct', cpuTone, 1)}${monitorChart('메모리 사용량', current.rssMb, 'MB', history, 'rssMb', 'memory', 1)}${monitorChart('Binance 실제 수신 지연', current.latencyMs, 'ms', history, 'latencyMs', 'latency')}</div>
+    <p class="monitor-note">전체 Binance USDT 마켓을 BLACK PC에서 분석합니다 · 실제 수신 지연은 Binance 이벤트 시각과 BLACK PC 수신 시각의 차이 중앙값입니다 · 과거 차트 자료만 최대 ${fmtInt(distribution.seedConcurrency || 0)}개씩 나눠 불러옵니다</p>
   </section>`;
 }
 
@@ -500,9 +500,9 @@ async function removeSlot(id) { if (!confirm(`${id}번 슬롯을 비울까요? �
 function acceptConfig(c) { if (!c) return; S.config = c; bus.emit('cfg', c); }
 
 function openConnection() {
-  const c = S.config || {}; const u = c.upbit || {}; const j = c.jev || {};
-  mountModal('연결', `<div class="form-stack"><label>투자 방식<select id="cMode"><option value="paper" ${c.mode === 'paper' ? 'selected' : ''}>모의투자</option><option value="live" ${c.mode === 'live' ? 'selected' : ''}>실전투자</option></select></label><p class="modal-note">모의와 실전은 같은 슬롯과 같은 근거를 씁니다. 체결되는 곳만 달라집니다.</p><label>업비트 접근 키<input id="cAccess" type="password" placeholder="${u.hasKeys ? '저장됨 · 바꾸려면 새 키 입력' : '업비트 접근 키'}"></label><label>업비트 비밀 키<input id="cSecret" type="password" placeholder="${u.hasKeys ? '저장됨 · 바꾸려면 새 키 입력' : '업비트 비밀 키'}"></label><label>Jev 연결 방식<select id="cJevProvider"><option value="auto" ${j.provider === 'auto' ? 'selected' : ''}>자동</option><option value="typesafe" ${j.provider === 'typesafe' ? 'selected' : ''}>TypeSafe 직접</option><option value="openrouter" ${j.provider === 'openrouter' ? 'selected' : ''}>OpenRouter</option><option value="rule" ${j.provider === 'rule' ? 'selected' : ''}>규칙 판단기</option></select></label><label>Jev 키<input id="cJevKey" type="password" placeholder="${j.hasTypesafeKey || j.hasOpenrouterKey ? '저장됨 · 바꾸려면 새 키 입력' : 'Jev 키'}"></label><button id="saveConnection" class="main-primary" type="button">연결 정보 저장</button></div>`);
-  $('#saveConnection').addEventListener('click', async () => { try { const patch = { mode: $('#cMode').value, jev: { provider: $('#cJevProvider').value }, upbit: {} }; if ($('#cAccess').value) patch.upbit.accessKey = $('#cAccess').value; if ($('#cSecret').value) patch.upbit.secretKey = $('#cSecret').value; if ($('#cJevKey').value) patch.jev.typesafeKey = $('#cJevKey').value; const c2 = await api('/api/config', patch); acceptConfig(c2); closeModal(); toast('연결 정보를 저장했습니다'); } catch (e) { toast(e.message, 'err'); } });
+  const c = S.config || {}; const u = c.binance || {}; const j = c.jev || {};
+  mountModal('연결', `<div class="form-stack"><label>투자 방식<select id="cMode"><option value="paper" ${c.mode === 'paper' ? 'selected' : ''}>모의투자</option><option value="live" ${c.mode === 'live' ? 'selected' : ''}>실전투자</option></select></label><p class="modal-note">모의와 실전은 같은 슬롯과 같은 근거를 씁니다. 체결되는 곳만 달라집니다.</p><label>Binance 접근 키<input id="cAccess" type="password" placeholder="${u.hasKeys ? '저장됨 · 바꾸려면 새 키 입력' : 'Binance 접근 키'}"></label><label>Binance 비밀 키<input id="cSecret" type="password" placeholder="${u.hasKeys ? '저장됨 · 바꾸려면 새 키 입력' : 'Binance 비밀 키'}"></label><label>Jev 연결 방식<select id="cJevProvider"><option value="auto" ${j.provider === 'auto' ? 'selected' : ''}>자동</option><option value="typesafe" ${j.provider === 'typesafe' ? 'selected' : ''}>TypeSafe 직접</option><option value="openrouter" ${j.provider === 'openrouter' ? 'selected' : ''}>OpenRouter</option><option value="rule" ${j.provider === 'rule' ? 'selected' : ''}>규칙 판단기</option></select></label><label>Jev 키<input id="cJevKey" type="password" placeholder="${j.hasTypesafeKey || j.hasOpenrouterKey ? '저장됨 · 바꾸려면 새 키 입력' : 'Jev 키'}"></label><button id="saveConnection" class="main-primary" type="button">연결 정보 저장</button></div>`);
+  $('#saveConnection').addEventListener('click', async () => { try { const patch = { mode: $('#cMode').value, jev: { provider: $('#cJevProvider').value }, binance: {} }; if ($('#cAccess').value) patch.binance.accessKey = $('#cAccess').value; if ($('#cSecret').value) patch.binance.secretKey = $('#cSecret').value; if ($('#cJevKey').value) patch.jev.typesafeKey = $('#cJevKey').value; const c2 = await api('/api/config', patch); acceptConfig(c2); closeModal(); toast('연결 정보를 저장했습니다'); } catch (e) { toast(e.message, 'err'); } });
 }
 
 function koreanKrw(amount) {
@@ -544,7 +544,7 @@ function openCapital() {
     : `<div class="fixed-cost"><b>모의 투자 시작 금액</b><span>실전투자 중에는 적용되지 않습니다</span></div>`;
   const resetArea = paperMode
     ? `<section class="account-reset"><b>모의 계좌 초기화</b><span>위 모의 투자 시작 금액으로 보유 코인·거래내역·손익을 비우고 새로 시작합니다</span><button id="resetAccount" class="main-danger" type="button">모의 계좌 초기화</button></section>`
-    : `<section class="account-reset disabled"><b>모의 계좌 초기화</b><span>실전투자 중에는 사용할 수 없습니다 · 업비트 실제 자산은 바뀌지 않습니다</span></section>`;
+    : `<section class="account-reset disabled"><b>모의 계좌 초기화</b><span>실전투자 중에는 사용할 수 없습니다 · Binance 실제 자산은 바뀌지 않습니다</span></section>`;
   mountModal('투자금액과 거래 비용', `<div class="form-stack">${paperCapitalField}<label>주문 방식<select id="capitalMode"><option value="fixed" ${t.orderMode === 'fixed' ? 'selected' : ''}>고정 금액</option><option value="percent" ${t.orderMode === 'percent' ? 'selected' : ''}>보유 원화 비율</option></select></label><label>한 번 주문금액<input id="capitalKrw" inputmode="numeric" value="${fmtInt(Math.round(t.orderKrw || 0))}"><span id="capitalKrwPreview" class="capital-money-preview"></span></label><label>보유 원화 사용 비율<input id="capitalPct" inputmode="decimal" value="${t.orderPct || 0}"></label><label>동시에 보유할 코인 수<input id="capitalPos" inputmode="numeric" value="${t.maxPositions || 1}"></label><div class="fixed-cost"><b>고정 거래 비용</b><span>거래 수수료 ${p.feePct || 0}% · 미끄러짐 ${p.slippagePct || 0}%</span><small>이 값은 체결 결과를 현실적으로 보기 위한 고정값입니다</small></div><button id="saveCapital" class="main-primary" type="button">투자금액 저장</button>${resetArea}</div>`);
   bindKrwInput('#capitalInitialKrw', '#capitalInitialPreview');
   bindKrwInput('#capitalKrw', '#capitalKrwPreview');
@@ -693,7 +693,7 @@ function bindBoard() {
   window.addEventListener('scroll', markInteracting, { passive: true });
   root.addEventListener('scroll', markInteracting, { capture: true, passive: true });
   $('#slotHeader').addEventListener('click', openSlots);
-  $('#chipUpbit')?.addEventListener('click', openConnection);
+  $('#chipBinance')?.addEventListener('click', openConnection);
   $('#capitalHeader').addEventListener('click', openCapital);
   $('#voiceHeader').addEventListener('click', () => { const a = S.config?.alerts || {}; mountModal('음성 볼륨', `<div class="form-stack"><label>체결 음성 안내<select id="voiceOn"><option value="true" ${a.voiceEnabled ? 'selected' : ''}>켜기</option><option value="false" ${!a.voiceEnabled ? 'selected' : ''}>끄기</option></select></label><label>볼륨 <input id="voiceRange" type="range" min="0" max="100" value="${Math.round((a.voiceVolume || 0) * 100)}"><output id="voiceOut">${Math.round((a.voiceVolume || 0) * 100)}%</output></label><button id="saveVoice" class="main-primary" type="button">음성 설정 저장</button></div>`); $('#voiceRange').addEventListener('input', () => { $('#voiceOut').textContent = `${$('#voiceRange').value}%`; }); $('#saveVoice').addEventListener('click', async () => { try { const c = await api('/api/config', { alerts: { voiceEnabled: $('#voiceOn').value === 'true', voiceVolume: Number($('#voiceRange').value) / 100 } }); acceptConfig(c); closeModal(); } catch (e) { toast(e.message, 'err'); } }); });
   $('#chipJev')?.addEventListener('click', toggleJev);

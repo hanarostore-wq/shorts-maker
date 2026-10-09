@@ -406,7 +406,7 @@ function drawPriceLines(force = false) {
 }
 
 // =====================================================================================
-// Order book (Upbit layout: asks + info box on top, trade tape + bids below)
+// Order book (Binance layout: asks + info box on top, trade tape + bids below)
 // =====================================================================================
 const OB = { asks: [], bids: [], info: null, tape: null, centered: false, tapeRows: [] };
 
@@ -637,21 +637,21 @@ function initOrderPanel() {
     if (ORDER_TYPE.buy !== 'market') return toast(`${ORDER_TYPE.buy === 'limit' ? '지정가' : '예약가'}는 현재 가격 확인·입력만 지원합니다 · 시장가 자동 체결로 바뀌지 않습니다`, 'err');
     const krw = parseNum($('#buyKrw').value);
     if (krw < 5000) return toast('최소 주문금액은 5,000원입니다', 'err');
-    if (S.config?.mode === 'live' && !confirm(`${nameOf(S.market)}을(를) 업비트 시장가로 ${fmtInt(krw)}원 실전 매수합니다.\n주문 접수 후 취소가 어렵습니다. 계속할까요?`)) return;
+    if (S.config?.mode === 'live' && !confirm(`${nameOf(S.market)}을(를) Binance 시장가로 ${fmtInt(krw)}원 실전 매수합니다.\n주문 접수 후 취소가 어렵습니다. 계속할까요?`)) return;
     try {
       const r = await api('/api/order', { market: S.market, side: 'buy', krw });
       $('#buyKrw').value = '';
-      if (r.live) { toast('업비트 실전 매수 주문을 접수했습니다'); await refreshLiveAccount(true); }
+      if (r.live) { toast('Binance 실전 매수 주문을 접수했습니다'); await refreshLiveAccount(true); }
     } catch (e) { orderNotice('cancel', { market: S.market, message: e.message }); }
   });
   $('#sellBtn').addEventListener('click', async () => {
     if (ORDER_TYPE.sell !== 'market') return toast(`${ORDER_TYPE.sell === 'limit' ? '지정가' : '예약가'}는 현재 가격 확인·입력만 지원합니다 · 시장가 자동 체결로 바뀌지 않습니다`, 'err');
     const ratio = clamp(parseNum($('#sellRatio').value), 0, 100) / 100;
     if (!ratio) return toast('매도 비율을 입력하세요', 'err');
-    if (S.config?.mode === 'live' && !confirm(`${nameOf(S.market)} 보유 가능 수량의 ${(ratio * 100).toFixed(0)}%를 업비트 시장가로 실전 매도합니다.\n주문 접수 후 취소가 어렵습니다. 계속할까요?`)) return;
+    if (S.config?.mode === 'live' && !confirm(`${nameOf(S.market)} 보유 가능 수량의 ${(ratio * 100).toFixed(0)}%를 Binance 시장가로 실전 매도합니다.\n주문 접수 후 취소가 어렵습니다. 계속할까요?`)) return;
     try {
       const r = await api('/api/order', { market: S.market, side: 'sell', ratio });
-      if (r.live) { toast('업비트 실전 매도 주문을 접수했습니다'); await refreshLiveAccount(true); }
+      if (r.live) { toast('Binance 실전 매도 주문을 접수했습니다'); await refreshLiveAccount(true); }
     } catch (e) { orderNotice('cancel', { market: S.market, message: e.message }); }
   });
 
@@ -664,10 +664,10 @@ function initOrderPanel() {
       try { S.config = await api('/api/watch', { market: S.market, on }); toast(on ? `${nameOf(S.market)} 고정 감시 시작 · 자동 선별과 상관없이 항상 감시` : `${nameOf(S.market)} 고정 해제${rankOf(S.market) ? ' · 자동 TOP에 있는 동안은 계속 감시' : ''}`); renderOrderPanel(); refreshTags(); renderHeader(); }
       catch (err) { toast(err.message, 'err'); }
     } else if (act === 'sellnow') {
-      if (S.config?.mode === 'live' && !confirm(`${nameOf(S.market)} 전량을 업비트 시장가로 실전 매도합니다.\n주문 접수 후 취소가 어렵습니다. 계속할까요?`)) return;
+      if (S.config?.mode === 'live' && !confirm(`${nameOf(S.market)} 전량을 Binance 시장가로 실전 매도합니다.\n주문 접수 후 취소가 어렵습니다. 계속할까요?`)) return;
       try {
         const r = await api('/api/order', { market: S.market, side: 'sell', ratio: 1 });
-        if (r.live) { toast('업비트 실전 전량 매도 주문을 접수했습니다'); await refreshLiveAccount(true); }
+        if (r.live) { toast('Binance 실전 전량 매도 주문을 접수했습니다'); await refreshLiveAccount(true); }
       } catch (err) { orderNotice('cancel', { market: S.market, message: err.message }); }
     } else if (act === 'goto-settings') location.hash = '#/settings';
   });
@@ -703,7 +703,7 @@ function entryDiagnostics(code, w, c, watched, pos) {
   checks.push(['run', !!c.autoTrading, '자동매매 운전', c.autoTrading ? '켜짐' : '꺼짐', '켜짐', c.autoTrading ? '' : '설정에서 자동매매를 켜야 신규 진입합니다']);
   checks.push(['pos', !pos, '동일 코인 보유', pos ? '이미 보유 중' : '미보유', '미보유', pos ? `보유 중에는 중복 매수하지 않고 ${usingJev ? 'Jev 청산 판단' : '규칙 청산'}만 합니다` : '']);
   checks.push(['slots', (sum.positions?.length || 0) < c.trade.maxPositions, '동시 보유 한도', `${sum.positions?.length || 0}개`, `${c.trade.maxPositions}개 미만`, (sum.positions?.length || 0) >= c.trade.maxPositions ? `기존 보유분을 ${usingJev ? 'Jev가 매도' : '규칙 매도'}하면 다시 진입을 검토합니다` : '']);
-  checks.push(['krw', orderKrw >= 5000 && Number(sum.krw || 0) >= orderKrw, '주문가능 원화', `${fmtInt(sum.krw || 0)}원`, orderRule, orderKrw < 5000 ? '계산된 주문금액이 업비트 최소 주문 5,000원보다 작습니다' : '']);
+  checks.push(['krw', orderKrw >= 5000 && Number(sum.krw || 0) >= orderKrw, '주문가능 원화', `${fmtInt(sum.krw || 0)}원`, orderRule, orderKrw < 5000 ? '계산된 주문금액이 Binance 최소 주문 5,000원보다 작습니다' : '']);
   checks.push(['strat', !!r.enabled, 'EMA30 상승 전략', r.enabled ? '켜짐' : '꺼짐', '켜짐', r.enabled ? '' : '전략을 끄면 신규 진입만 멈춥니다']);
   checks.push(['warm', !!w?.warm, '데이터 준비', w?.warm ? `${Math.floor(w.rtSec || 0)}초 수집` : `${Math.floor(w?.rtSec || 0)}초 수집`, '60초 이상', '1분 가격 흐름과 사고파는 가격이 충분히 쌓일 때까지 기다립니다']);
   checks.push(['fresh', !!w && !w.stale, '체결 데이터 최신성', w?.stale ? '2분 이상 체결 없음' : '실시간 수신 중', '2분 이내 체결']);
@@ -896,7 +896,7 @@ function renderOrderPanel() {
   $('#buyFee').textContent = !buyMarket
     ? `${ORDER_TYPE.buy === 'limit' ? '지정가' : '예약가'}는 가격 표시·입력 전용 · 시장가 주문으로 바뀌어 체결되지 않습니다`
     : c.mode === 'live'
-    ? (live?.configured && !live?.error ? '업비트 실전 시장가 주문 · 주문 전 최종 확인 필요' : '업비트 API 키와 잔고 연결이 필요합니다')
+    ? (live?.configured && !live?.error ? 'Binance 실전 시장가 주문 · 주문 전 최종 확인 필요' : 'Binance API 키와 잔고 연결이 필요합니다')
     : `최소주문금액: 5,000 KRW · 수수료(부가세 포함): ${fee}% · 슬리피지 ${c.paper.slippagePct}% 반영 모의 체결`;
   const pos = posOf(S.market);
   $('#buyBtn').disabled = !buyMarket || (c.mode === 'live' && (!live?.configured || !!live?.error));
@@ -908,7 +908,7 @@ function renderOrderPanel() {
   const sellMarket = ORDER_TYPE.sell === 'market';
   $('#sellFee').textContent = !sellMarket
     ? `${ORDER_TYPE.sell === 'limit' ? '지정가' : '예약가'}는 가격 표시·입력 전용 · 시장가 주문으로 바뀌어 체결되지 않습니다`
-    : c.mode === 'live' ? '업비트 실전 시장가 매도 · 주문 전 최종 확인 필요' : `시장가 모의 매도 · 수수료(부가세 포함): ${fee}%`;
+    : c.mode === 'live' ? 'Binance 실전 시장가 매도 · 주문 전 최종 확인 필요' : `시장가 모의 매도 · 수수료(부가세 포함): ${fee}%`;
   $('#sellBtn').disabled = !sellMarket || !pos || (c.mode === 'live' && (!live?.configured || !!live?.error));
   $('#sellBtn').textContent = sellMarket ? '모의 매도' : `${ORDER_TYPE.sell === 'limit' ? '지정가' : '예약가'} 주문 준비 중`;
   renderAutoTab();

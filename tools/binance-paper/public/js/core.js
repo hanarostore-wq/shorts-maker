@@ -16,7 +16,7 @@ export function h(tag, attrs = {}, ...kids) {
 }
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-// ------------------------------------------------------------ number formatting (Upbit style)
+// ------------------------------------------------------------ number formatting (Binance style)
 export function priceDecimals(p) {
   const a = Math.abs(p || 0);
   if (a >= 100) return 0;
@@ -57,7 +57,7 @@ export function fmtDur(sec) {
   return `${Math.floor(sec / 3600)}시간 ${Math.floor((sec % 3600) / 60)}분`;
 }
 export function fmtTime(t, withDate = false) {
-  // always KST (UTC+9, no DST) so the dashboard matches Upbit regardless of the viewer's timezone
+  // always KST (UTC+9, no DST) so the dashboard matches Binance regardless of the viewer's timezone
   const d = new Date(Number(t) + 9 * 3600 * 1000);
   const p = (n) => String(n).padStart(2, '0');
   const time = `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
@@ -320,5 +320,5 @@ export function orderNotice(kind, data = {}) {
 export function tradeNotice(fill) { orderNotice(fill?.side === 'sell' ? 'sell' : 'buy', fill || {}); }
 
 export function coinIcon(code) {
-  return `https://static.upbit.com/logos/${sym(code)}.png`;
+  return '';
 }

@@ -86,7 +86,7 @@ export async function toggleAuto() {
     }
   }
   if (!S.config) return toast('설정 정보를 불러오는 중입니다', 'err');
-  if (S.config.mode === 'live') return toast('실전 자동매매는 안전 잠금 상태입니다. 업비트 잔고 조회와 수동 주문만 사용할 수 있습니다.', 'err');
+  if (S.config.mode === 'live') return toast('실전 자동매매는 안전 잠금 상태입니다. Binance 잔고 조회와 수동 주문만 사용할 수 있습니다.', 'err');
   if (S.config.autoTrading) return toast('자동매매는 항상 켜짐으로 유지됩니다');
   try {
     S.config = await api('/api/auto', { on: true });
@@ -138,7 +138,7 @@ function renderAutoCards() {
     }
     const assetValue = (live.positions || []).reduce((a, p) => a + Number(p.value || 0), 0);
     $('#apCards').innerHTML = [
-      kpi('업비트 총 평가자산', `${fmtInt(live.equity)}<small>KRW</small>`, `실계좌 · ${fmtTime(live.updatedAt)}`),
+      kpi('Binance 총 평가자산', `${fmtInt(live.equity)}<small>KRW</small>`, `실계좌 · ${fmtTime(live.updatedAt)}`),
       kpi('주문 가능 원화', `${fmtInt(live.krw)}<small>KRW</small>`, live.lockedKrw ? `주문 잠금 ${fmtInt(live.lockedKrw)}원` : '주문 가능 잔고'),
       kpi('실전 보유자산', `${fmtInt(assetValue)}<small>KRW</small>`, `${live.positions.length}개 코인 보유`),
       kpi('보유 평가손익', live.totalPnl == null ? '-' : `${fmtSigned(live.totalPnl, fmtInt)}<small>KRW</small>`, live.totalPnlPct == null ? '매수평균가 없는 자산 포함' : `수익률 ${fmtPct(live.totalPnlPct)}`, upDown(live.totalPnl)),
@@ -171,7 +171,7 @@ function renderAutoPositions() {
     const live = S.liveAccount;
     if (!live) {
       $('#apPosSub').textContent = '조회 중';
-      $('#apPos').innerHTML = '<tbody><tr><td class="empty">업비트 실전 보유자산을 불러오는 중입니다</td></tr></tbody>';
+      $('#apPos').innerHTML = '<tbody><tr><td class="empty">Binance 실전 보유자산을 불러오는 중입니다</td></tr></tbody>';
       return;
     }
     if (!live.configured || live.error) {
@@ -506,15 +506,15 @@ const SECTIONS = [
     fields: [
       { p: 'autoTrading', label: '자동매매', type: 'select', bool: true, options: [['true', '켜기 · 신규 진입 허용'], ['false', '끄기 · 신규 진입 정지']] },
       { p: 'strategy.decisionMode', label: 'Jev 판단 사용', type: 'select', options: [['jev', '켜기 · Jev 보조형 (선별·진입·청산에 Jev 사용)'], ['rule', '끄기 · 순수 규칙형 (Jev API 호출 0회)']], hint: '끄면 API 키는 저장되지만 전혀 호출하지 않습니다. EMA 리본·호가·실시간 점수 규칙만으로 TOP30·매수·매도를 실행합니다' },
-      { p: 'mode', label: '투자 모드', type: 'select', options: [['paper', '모의투자 (실제 주문 없음 · 가상 체결)'], ['live', '실전투자 (업비트 잔고 조회 · 수동 실전 주문)']], hint: '실전 자동매매는 체결·잔고 동기화 검증 전까지 안전 잠금입니다. 실전투자는 아래 업비트 API 키와 대시보드 비밀번호가 필요합니다' },
+      { p: 'mode', label: '투자 모드', type: 'select', options: [['paper', '모의투자 (실제 주문 없음 · 가상 체결)'], ['live', '실전투자 (Binance 잔고 조회 · 수동 실전 주문)']], hint: '실전 자동매매는 체결·잔고 동기화 검증 전까지 안전 잠금입니다. 실전투자는 아래 Binance API 키와 대시보드 비밀번호가 필요합니다' },
       { p: 'theme', label: '화면 테마', type: 'select', options: [['light', '라이트 모드 (기본)'], ['dark', '다크(블랙) 모드']], hint: '상단 라이트 모드/다크 모드 버튼으로도 즉시 전환 가능' }
     ]
   },
   {
-    id: 'upbitKey', title: 'Binance API 연결 (실전투자용)', sub: '실전투자 모드 선택 시 실제 시장가 주문을 발송하는 키입니다',
+    id: 'binanceKey', title: 'Binance API 연결 (실전투자용)', sub: '실전투자 모드 선택 시 실제 시장가 주문을 발송하는 키입니다',
     fields: [
-      { p: 'upbit.accessKey', label: 'Upbit Access Key', type: 'password', hint: '업비트 마이페이지 → Open API 관리에서 발급' },
-      { p: 'upbit.secretKey', label: 'Upbit Secret Key', type: 'password', hint: '자산조회 + 주문 권한 필수' }
+      { p: 'binance.accessKey', label: 'Binance Access Key', type: 'password', hint: 'Binance 마이페이지 → Open API 관리에서 발급' },
+      { p: 'binance.secretKey', label: 'Binance Secret Key', type: 'password', hint: '자산조회 + 주문 권한 필수' }
     ]
   },
   {
@@ -659,9 +659,9 @@ const SECTIONS = [
     ]
   },
   {
-    id: 'paper', title: '모의투자 체결', sub: '업비트 Binance USDT 마켓 기준 · 실제 주문은 절대 전송하지 않습니다',
+    id: 'paper', title: '모의투자 체결', sub: 'Binance Binance USDT 마켓 기준 · 실제 주문은 절대 전송하지 않습니다',
     fields: [
-      { p: 'paper.feePct', label: '거래 수수료', type: 'number', unit: '%', step: 0.01, hint: '업비트 Binance USDT 마켓 기본 0.05%' },
+      { p: 'paper.feePct', label: '거래 수수료', type: 'number', unit: '%', step: 0.01, hint: 'Binance Binance USDT 마켓 기본 0.05%' },
       { p: 'paper.slippagePct', label: '슬리피지', type: 'number', unit: '%', step: 0.01, hint: '호가를 따라 체결한 뒤 추가로 불리하게 반영' }
     ]
   }
@@ -688,7 +688,7 @@ function buildSettings() {
     ${s.id === 'paper' ? `
       <div class="field"><label>계좌 초기화<small>잔고, 보유, 거래내역을 비우고 새로 시작 · 금액 제한 없음</small></label><div class="ctl"><input type="text" id="resetKrw" inputmode="numeric" placeholder="예: 10,000,000" autocomplete="off"><span class="unit">KRW</span><button class="btn danger" id="resetBtn">초기화</button></div></div>` : ''}
   </div></div>`;
-  const left = SECTIONS.filter((s) => ['general', 'upbitKey', 'alerts', 'cost', 'jev', 'screener', 'screenerAdvanced', 'scoreWeights', 'paper'].includes(s.id)).map(sec).join('');
+  const left = SECTIONS.filter((s) => ['general', 'binanceKey', 'alerts', 'cost', 'jev', 'screener', 'screenerAdvanced', 'scoreWeights', 'paper'].includes(s.id)).map(sec).join('');
   const right = SECTIONS.filter((s) => ['trade', 'rule', 'ribbon', 'signal'].includes(s.id)).map(sec).join('');
   $('#view-settings').innerHTML = `
     <div class="page-title"><h2>설정</h2><span class="sub">변경 후 아래 [저장]을 누르면 즉시 반영됩니다</span></div>
