@@ -125,6 +125,8 @@ const market = {
   openInterest: 0,
 };
 let publicSocket = null;
+let catalogSocket = null;
+let catalogReconnectTimer = null;
 let privateSocket = null;
 let privateListenKey = null;
 let privateKeepAlive = null;
@@ -321,7 +323,14 @@ function publicStreams() {
   if (isFutures) common.push(`${symbol}@markPrice@1s`);
   return common;
 }
+function connectCatalogStream() {
+  if (catalogSocket && (catalogSocket.readyState === WebSocket.OPEN || catalogSocket.readyState === WebSocket.CONNECTING)) return;
+  clearTimeout(catalogReconnectTimer);
+  const base = isFutures ? FUTURES_WS : SPOT_WS;
+  try { catalogSocket = new WebSocket(`${base}/ws/!ticker@arr`); catalogSocket.addEventListener('message', (event) => { try { const rows = JSON.parse(String(event.data)); if (Array.isArray(rows)) applyAllTickers(rows); } catch {} }); catalogSocket.addEventListener('close', () => { catalogSocket = null; catalogReconnectTimer = setTimeout(connectCatalogStream, 3000); }); catalogSocket.addEventListener('error', () => { try { catalogSocket?.close(); } catch {} }); } catch { catalogReconnectTimer = setTimeout(connectCatalogStream, 3000); }
+}
 function connectMarket() {
+  if (!marketCatalog.some((row) => row.symbol === market.symbol)) { market.symbol = 'BTCUSDT'; config.symbol = 'BTCUSDT'; saveConfig(); }
   clearTimeout(reconnectTimer);
   if (publicSocket) { try { publicSocket.close(); } catch {} }
   const base = isFutures ? FUTURES_WS : SPOT_WS;
@@ -575,9 +584,14 @@ function requestBroadcast() {
   if (broadcastTimer) return;
   broadcastTimer = setTimeout(() => {
     broadcastTimer = null;
-    const line = `event: init\ndata: ${JSON.stringify(uiSnapshot())}\n\n`;
-    for (const client of clients) { try { client.write(line); } catch { clients.delete(client); } }
-  }, 90);
+    const snap = uiSnapshot();
+    const tickLine = `event: tk\ndata: ${JSON.stringify(snap.tickers.map((t) => [t.cd, t.tp, t.scr, t.atp24h, t.scp]))}\n\n`;
+    const view = snap.tickers.find((t) => t.cd === uiCode(market.symbol));
+    const viewLine = view ? `event: vt\ndata: ${JSON.stringify(view)}\n\n` : '';
+    const obLine = `event: ob\ndata: ${JSON.stringify(snap.ob)}\n\n`;
+    const sumLine = `event: sum\ndata: ${JSON.stringify({ summary: snap.summary, watch: snap.watch, status: snap.status, monitor: snap.monitor })}\n\n`;
+    for (const client of clients) { try { client.write(tickLine + viewLine + obLine + sumLine); } catch { clients.delete(client); } }
+  }, 500);
 }
 function json(res, status, body) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); }
 async function readBody(req) { let text = ''; for await (const chunk of req) { text += chunk; if (text.length > 1_000_000) throw new Error('요청이 너무 큽니다'); } try { return JSON.parse(text || '{}'); } catch { throw new Error('JSON 형식이 아닙니다'); } }
