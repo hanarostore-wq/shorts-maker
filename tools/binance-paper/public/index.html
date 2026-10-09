@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Binance 로컬 트레이딩 터미널</title>
-  <link rel="stylesheet" href="/app.css?v=2.1.0">
+  <link rel="stylesheet" href="/app.css?v=2.1.1">
 </head>
 <body>
   <div id="app" class="terminal">
@@ -77,6 +77,10 @@
             <label class="field leverage-field futures-only"><span>레버리지 <i title="같은 돈으로 더 큰 금액을 거래하는 배수이며 손실도 커집니다">?</i></span><div><input id="leverage" inputmode="numeric" value="1"><em>배</em></div></label>
             <div class="order-summary"><span>예상 수수료</span><b id="feeEstimate">-</b><span>주문 후 남는 원화</span><b id="afterOrder">-</b></div>
             <button class="order-submit buy" id="orderSubmit">PAPER 매수</button>
+            <div class="futures-split-actions futures-only" aria-label="선물 롱 숏 주문">
+              <button id="futuresLong" class="futures-long"><small>PAPER 시장가</small><b>롱 진입</b></button>
+              <button id="futuresShort" class="futures-short"><small>PAPER 시장가</small><b>숏 진입</b></button>
+            </div>
             <p class="order-guide" id="orderGuide">모의투자입니다 · 가상 원화로 주문을 연습합니다</p>
           </div>
         </section>
@@ -96,7 +100,7 @@
 
   <dialog id="slotsDialog" class="slots-dialog">
     <section class="slots-card">
-      <header><div><b>업비트 동기화 전략 슬롯</b><small>현물·선물 각각 1~5번 · 업비트 운영 규칙·주문 설정을 같은 값으로 복제</small></div><button class="icon-close" data-close-slots aria-label="닫기">✕</button></header>
+      <header><div><b>Binance 전략 슬롯</b><small>이 사이트 전용 1~5번 슬롯 · 최초 구성만 업비트 현재 설정을 복사</small></div><button class="icon-close" data-close-slots aria-label="닫기">✕</button></header>
       <div id="slotSummary" class="slot-summary">슬롯 정보를 불러오는 중</div>
       <div id="slotList" class="slot-list"></div>
       <footer><span>선택한 슬롯을 적용하면 해당 슬롯의 고정 주문금액도 함께 반영됩니다</span><button data-close-slots>닫기</button></footer>
@@ -105,6 +109,6 @@
 
   <dialog id="confirmDialog" class="confirm-dialog"><section class="confirm-card"><header><b>실계좌 주문 최종 확인</b><span>LIVE</span></header><p id="confirmText">-</p><div class="confirm-details" id="confirmDetails"></div><p class="warning">확인하면 Binance API로 실제 주문이 전송됩니다. 주문 금액과 방향을 다시 확인하세요</p><footer><button id="cancelLiveOrder">취소</button><button id="confirmLiveOrder" class="danger">실제 주문 전송</button></footer></section></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="/app.js?v=2.1.0"></script>
+  <script type="module" src="/app.js?v=2.1.1"></script>
 </body>
 </html>

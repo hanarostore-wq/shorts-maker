@@ -50,10 +50,15 @@ function defaultSlotShelf() {
   }
 }
 function normalizeSlotShelf(source) {
-  const shelf = defaultSlotShelf();
+  const seeded = defaultSlotShelf();
+  const items = Array.isArray(source?.items) ? source.items
+    .filter((item) => Number(item?.id) >= 1 && Number(item?.id) <= SLOT_COUNT && item?.definition)
+    .sort((left, right) => left.id - right.id)
+    .map((item) => clone(item)) : [];
+  if (items.length !== SLOT_COUNT || new Set(items.map((item) => item.id)).size !== SLOT_COUNT) return seeded;
   const requested = Number(source?.activeId);
-  if (shelf.items.some((item) => item.id === requested)) shelf.activeId = requested;
-  return shelf;
+  const activeId = items.some((item) => item.id === requested) ? requested : 1;
+  return { version: Math.max(1, Math.floor(num(source?.version, 1))), activeId, items: items.map((item) => ({ ...item, status: item.id === activeId ? '적용 중' : '검사 완료' })) };
 }
 
 const defaultConfig = () => ({

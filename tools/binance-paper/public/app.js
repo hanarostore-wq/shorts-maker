@@ -113,6 +113,11 @@ function renderOrderPanel() {
   $$('.order-type button').forEach((button) => button.classList.toggle('active', button.dataset.orderType === selectedOrderType));
   $('.limit-field').classList.toggle('hidden', selectedOrderType !== 'limit');
   const submit = $('#orderSubmit'); submit.textContent = `${isLive() ? 'LIVE 실계좌' : 'PAPER'} ${action}`; submit.className = `order-submit ${selectedAction}`;
+  const long = $('#futuresLong'); const short = $('#futuresShort');
+  if (long && short) {
+    long.querySelector('small').textContent = isLive() ? 'LIVE 시장가' : 'PAPER 시장가';
+    short.querySelector('small').textContent = isLive() ? 'LIVE 시장가' : 'PAPER 시장가';
+  }
   $('#orderGuide').textContent = isLive() ? '실계좌 주문은 마지막 확인창에서 종목·방향·금액을 다시 확인합니다' : '모의투자입니다 · 가상 원화로 주문을 연습합니다';
   const amount = inputNumber($('#orderAmount').value, c.paperOrderKrw || 0); const fee = amount * .0005; elText('#feeEstimate', won(fee)); elText('#afterOrder', won(Math.max(0, Number(a.availableKrw || 0) - (selectedAction === 'close' ? 0 : amount))));
   if (isFutures()) $('#leverage').value = $('#leverage').value || c.futuresLeverage || 1;
@@ -128,6 +133,8 @@ function setupInteractions() {
   $('#orderAmount').addEventListener('input', renderOrderPanel); $('#leverage').addEventListener('input', renderOrderPanel);
   $$('.quick-amount button').forEach((button) => button.addEventListener('click', () => { const ratio = Number(button.dataset.ratio); const available = Number(currentAccount().availableKrw || 0); $('#orderAmount').value = Math.floor(available * ratio); renderOrderPanel(); }));
   $('#orderSubmit').addEventListener('click', submitOrder);
+  $('#futuresLong').addEventListener('click', () => { selectedAction = 'buy'; submitOrder(); });
+  $('#futuresShort').addEventListener('click', () => { selectedAction = 'short'; submitOrder(); });
   $$('[data-open-settings]').forEach((button) => button.addEventListener('click', openSettings));
   $$('[data-open-slots]').forEach((button) => button.addEventListener('click', openSlots));
   $$('[data-close-slots]').forEach((button) => button.addEventListener('click', () => $('#slotsDialog').close()));
@@ -143,10 +150,10 @@ function slotRules(definition, group) { return (definition?.[group] || []).filte
 function renderSlots(payload) {
   const activeId = Number(payload.activeId || state?.config?.activeSlot || 1);
   const items = payload.items || [];
-  $('#slotSummary').innerHTML = `<b>${isFutures() ? 'USDⓈ-M 선물' : '현물'} · 5개 전략 슬롯</b><span>현재 ${activeId}번 적용 · 업비트 운영본의 주문 설정과 규칙을 동일하게 복제했습니다</span>`;
+  $('#slotSummary').innerHTML = `<b>${isFutures() ? 'USDⓈ-M 선물' : '현물'} · 5개 독립 전략 슬롯</b><span>현재 ${activeId}번 적용 · 이 사이트에만 저장되며 최초 설정만 업비트에서 복사했습니다</span>`;
   $('#slotList').innerHTML = items.map((slot) => {
     const d = slot.definition || {}; const order = d.주문설정 || {}; const active = Number(slot.id) === activeId;
-    return `<article class="slot-card ${active ? 'active' : ''}"><header><div><span class="slot-id">SLOT ${slot.id}</span><h3>${escape(slot.name || d.슬롯이름 || `${slot.id}번 슬롯`)}</h3><p>${escape(d.전략설명 || '전략 설명이 없습니다')}</p></div><span class="slot-status ${active ? 'on' : ''}">${active ? '적용 중' : '준비 완료'}</span></header><div class="slot-metrics"><span><small>주문 방식</small><b>${escape(order.주문방식 || '고정금액')}</b></span><span><small>한 번 주문</small><b>${won(order.주문금액원 || 0)}</b></span><span><small>동시 보유</small><b>${Number(order.동시보유수 || 0)}개</b></span><span><small>사용 모드</small><b>${escape((d.사용가능모드 || []).join(' · '))}</b></span></div><details><summary>적용 규칙 보기 <span>선별 ${(d.코인고르기규칙 || []).filter((rule) => rule.사용).length} · 진입 ${(d.매수규칙 || []).filter((rule) => rule.사용).length} · 매도 ${(d.매도규칙 || []).filter((rule) => rule.사용).length}</span></summary><div class="slot-rule-columns"><section><h4>종목 선별</h4><ul>${slotRules(d, '코인고르기규칙')}</ul></section><section><h4>진입 규칙</h4><ul>${slotRules(d, '매수규칙')}</ul></section><section><h4>매도 · 리스크</h4><ul>${slotRules(d, '매도규칙')}</ul></section></div></details><footer><span>${escape(d.판단방식 || '규칙만 사용')} · Binance PAPER에만 설정 동기화</span><button class="slot-apply" data-slot-id="${slot.id}" ${active ? 'disabled' : ''}>${active ? '현재 적용 중' : '이 슬롯 적용'}</button></footer></article>`;
+    return `<article class="slot-card ${active ? 'active' : ''}"><header><div><span class="slot-id">SLOT ${slot.id}</span><h3>${escape(slot.name || d.슬롯이름 || `${slot.id}번 슬롯`)}</h3><p>${escape(d.전략설명 || '전략 설명이 없습니다')}</p></div><span class="slot-status ${active ? 'on' : ''}">${active ? '적용 중' : '준비 완료'}</span></header><div class="slot-metrics"><span><small>주문 방식</small><b>${escape(order.주문방식 || '고정금액')}</b></span><span><small>한 번 주문</small><b>${won(order.주문금액원 || 0)}</b></span><span><small>동시 보유</small><b>${Number(order.동시보유수 || 0)}개</b></span><span><small>사용 모드</small><b>${escape((d.사용가능모드 || []).join(' · '))}</b></span></div><details><summary>적용 규칙 보기 <span>선별 ${(d.코인고르기규칙 || []).filter((rule) => rule.사용).length} · 진입 ${(d.매수규칙 || []).filter((rule) => rule.사용).length} · 매도 ${(d.매도규칙 || []).filter((rule) => rule.사용).length}</span></summary><div class="slot-rule-columns"><section><h4>종목 선별</h4><ul>${slotRules(d, '코인고르기규칙')}</ul></section><section><h4>진입 규칙</h4><ul>${slotRules(d, '매수규칙')}</ul></section><section><h4>매도 · 리스크</h4><ul>${slotRules(d, '매도규칙')}</ul></section></div></details><footer><span>${escape(d.판단방식 || '규칙만 사용')} · 이 Binance 사이트 전용 설정</span><button class="slot-apply" data-slot-id="${slot.id}" ${active ? 'disabled' : ''}>${active ? '현재 적용 중' : '이 슬롯 적용'}</button></footer></article>`;
   }).join('');
   $$('.slot-apply').forEach((button) => button.addEventListener('click', async () => {
     try { const result = await api('/api/slots/apply', { slotId: Number(button.dataset.slotId) }); state.config = result.config; payload.activeId = result.config.activeSlot; render(); renderSlots(payload); toast(result.message || `${button.dataset.slotId}번 슬롯을 적용했습니다`); }
