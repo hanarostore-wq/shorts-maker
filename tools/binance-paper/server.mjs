@@ -21,6 +21,7 @@ const SPOT_WS = 'wss://stream.binance.com:9443';
 const FUTURES_WS = 'wss://fstream.binance.com';
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT', 'LINKUSDT', 'SUIUSDT'];
 const SLOT_COUNT = 5;
+const DEFAULT_USD_KRW = 1350;
 let marketCatalog = SYMBOLS.map((symbol) => ({ symbol, price: 0, changePct: 0, quoteVolume: 0 }));
 
 fs.mkdirSync(dataDir, { recursive: true });
@@ -131,7 +132,7 @@ const market = {
   volumeQuote: 0,
   bid: 0,
   ask: 0,
-  usdKrw: 0,
+  usdKrw: DEFAULT_USD_KRW,
   candles: [],
   bids: [],
   asks: [],
@@ -243,6 +244,18 @@ async function publicJson(url) {
   const response = await fetch(url, { signal: AbortSignal.timeout(10_000), headers: { 'user-agent': 'BLACK-BinanceTerminal/2.0' } });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
+}
+
+async function refreshUsdKrw() {
+  try {
+    const exchange = await publicJson('https://open.er-api.com/v6/latest/USD');
+    const rate = num(exchange?.rates?.KRW);
+    if (rate > 0) market.usdKrw = rate;
+  } catch {
+    market.usdKrw ||= DEFAULT_USD_KRW;
+  }
+  requestBroadcast();
+  return market.usdKrw;
 }
 
 function updatePrice(next) {
@@ -443,7 +456,9 @@ function paperPositionView(position = paperPositions()[0]) {
   const livePrice = catalogPrice || (position.symbol === market.symbol ? num(market.price) : 0);
   // 신규 상장폐지·일시 제외 종목도 PAPER 원장에서는 사라지지 않는다.
   // 실시간 호가가 없을 때는 마지막 기록가(없으면 진입가)를 기준으로 보존 표시한다.
-  const markKrw = livePrice ? krw(livePrice) : num(position.lastMarkKrw, position.entryKrw);
+  const savedMarkKrw = num(position.lastMarkKrw);
+  const liveMarkKrw = livePrice && num(market.usdKrw) > 0 ? krw(livePrice) : 0;
+  const markKrw = liveMarkKrw > 0 ? liveMarkKrw : (savedMarkKrw > 0 ? savedMarkKrw : num(position.entryKrw));
   if (!(markKrw > 0)) return null;
   const sign = position.side === 'SHORT' ? -1 : 1;
   const pnlKrw = (markKrw - position.entryKrw) * position.qty * sign;
@@ -842,11 +857,13 @@ const server = http.createServer(async (req, res) => {
 await refreshMarketCatalog();
 if (paper.position?.symbol) { market.symbol = paper.position.symbol; config.symbol = market.symbol; saveConfig(); }
 await seedMarket();
+await refreshUsdKrw();
 connectMarket();
 setInterval(autoEvaluate, 1_000).unref();
 setInterval(() => { selectFullMarketCandidate().catch(() => {}); }, 2_000).unref();
 setInterval(() => { seedMarket(); }, 12 * 60_000).unref();
 setInterval(() => { refreshMarketCatalog(); }, 10 * 60_000).unref();
+setInterval(() => { refreshUsdKrw(); }, 10 * 60_000).unref();
 setInterval(() => { if (config.mode === 'live' && config.apiKey && config.secretKey) refreshLiveAccount(); }, 45_000).unref();
 server.listen(port, '127.0.0.1', () => console.log(`[${new Date().toISOString()}] Binance ${kind} terminal v2 listening at 127.0.0.1:${port}`));
 process.on('SIGTERM', async () => { await stopPrivateStream(); server.close(() => process.exit(0)); });
