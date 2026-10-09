@@ -1,7 +1,7 @@
-import { $, $$, bus, S, connect, disconnect, api, setToken, fmtInt, fmtPct, toast, tradeNotice } from './core.js?v=1.10.56';
-import { initExchange } from './exchange.js?v=1.10.56';
-import { initPages, onRoute, toggleAuto } from './pages.js?v=1.10.56';
-import { initMainBoard, onMainRoute } from './mainboard.js?v=1.10.63';
+import { $, $$, bus, S, connect, disconnect, api, setToken, fmtInt, fmtPct, toast, tradeNotice } from './core.js?v=1.10.68';
+import { initExchange } from './exchange.js?v=1.10.68';
+import { initPages, onRoute, toggleAuto } from './pages.js?v=1.10.68';
+import { initMainBoard, onMainRoute } from './mainboard.js?v=1.10.68';
 
 const ROUTES = ['main', 'exchange', 'auto', 'investments', 'settings'];
 // This is the owner's active YuJin Traders conversation. Opening the named popup at
@@ -75,7 +75,7 @@ function renderChips() {
     chip.querySelector('.t').textContent = ruleMode ? '순수 규칙' : `Jev ${j.avgLatency != null ? Math.round(j.avgLatency) + 'ms' : ''}`;
     chip.title = ruleMode ? 'Jev API 호출 0회 · EMA 리본과 실시간 규칙으로 선별·매수·매도' : `${j.label}${recentErr ? `\n최근 오류: ${j.lastError.msg}` : ''}`;
   }
-  const on = !!S.config?.autoTrading;
+  const on = true;
   const t = $('#autoToggle');
   const isLive = S.config?.mode === 'live';
   const compact = window.matchMedia('(max-width: 760px)').matches;

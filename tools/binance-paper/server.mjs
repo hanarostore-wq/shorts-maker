@@ -134,6 +134,11 @@ const market = {
 let publicSocket = null;
 let catalogSocket = null;
 let catalogReconnectTimer = null;
+let catalogBookSocket = null;
+let catalogBookReconnectTimer = null;
+const catalogBooks = new Map();
+const catalogSubscribed = new Set();
+let lastBookBroadcastAt = 0;
 let privateSocket = null;
 let privateListenKey = null;
 let privateKeepAlive = null;
@@ -320,7 +325,7 @@ async function refreshMarketCatalog() {
         quoteVolume: num(item.quoteVolume),
       }))
       .sort((left, right) => right.quoteVolume - left.quoteVolume);
-    if (next.length) marketCatalog = next;
+    if (next.length) { marketCatalog = next; if (!isFutures) subscribeCatalogSymbols(); }
   } catch { /* the previous catalog remains usable while a public API is temporarily unavailable */ }
   requestBroadcast();
 }
@@ -332,35 +337,49 @@ function publicStreams() {
   return common;
 }
 function wsText(data) { return typeof data === 'string' ? data : Buffer.from(data).toString('utf8'); }
-function connectCatalogStream() {
-  if (catalogSocket && (catalogSocket.readyState === WebSocket.OPEN || catalogSocket.readyState === WebSocket.CONNECTING)) return;
-  clearTimeout(catalogReconnectTimer);
-  const base = isFutures ? FUTURES_WS : SPOT_WS;
-  try { catalogSocket = new WebSocket(`${base}/ws/!ticker@arr`); catalogSocket.addEventListener('message', (event) => { try { const rows = JSON.parse(wsText(event.data)); if (Array.isArray(rows)) applyAllTickers(rows); } catch {} }); catalogSocket.addEventListener('close', () => { catalogSocket = null; catalogReconnectTimer = setTimeout(connectCatalogStream, 3000); }); catalogSocket.addEventListener('error', () => { try { catalogSocket?.close(); } catch {} }); } catch { catalogReconnectTimer = setTimeout(connectCatalogStream, 3000); }
+function subscribeCatalogSymbols() {
+  if (isFutures || !catalogSocket || catalogSocket.readyState !== WebSocket.OPEN) return;
+  const params = marketCatalog.map((row) => row.symbol.toLowerCase()).filter((symbol) => !catalogSubscribed.has(symbol)).map((symbol) => `${symbol}@ticker`);
+  for (let i=0;i<params.length;i+=180) {
+    const group=params.slice(i,i+180); if (!group.length) continue;
+    group.forEach((symbol)=>catalogSubscribed.add(symbol));
+    try { catalogSocket.send(JSON.stringify({ method:'SUBSCRIBE', params:group, id:Date.now()+i })); } catch { group.forEach((symbol)=>catalogSubscribed.delete(symbol)); }
+  }
 }
+function connectCatalogStream() {
+  if (isFutures) {
+    // Futures uses the all-market book stream below because its all-ticker stream can be rate-limited by the exchange.
+    connectCatalogBookStream();
+    return;
+  }
+  if (catalogSocket && (catalogSocket.readyState === WebSocket.OPEN || catalogSocket.readyState === WebSocket.CONNECTING)) { subscribeCatalogSymbols(); return; }
+  clearTimeout(catalogReconnectTimer); catalogSubscribed.clear();
+  try {
+    catalogSocket = new WebSocket(`${SPOT_WS}/ws`);
+    catalogSocket.addEventListener('open', () => subscribeCatalogSymbols());
+    catalogSocket.addEventListener('message', (event) => { try { const data=JSON.parse(wsText(event.data)); if (Array.isArray(data)) applyAllTickers(data); else if (data?.e==='24hrTicker') applyAllTickers([data]); } catch {} });
+    catalogSocket.addEventListener('close', () => { catalogSocket=null; catalogSubscribed.clear(); catalogReconnectTimer=setTimeout(connectCatalogStream,3000); });
+    catalogSocket.addEventListener('error', () => { try { catalogSocket?.close(); } catch {} });
+  } catch { catalogReconnectTimer=setTimeout(connectCatalogStream,3000); }
+}
+function bookStats(symbol) { const b=catalogBooks.get(symbol); if(!b||!b.bid||!b.ask||!b.bidQty||!b.askQty)return null; return {lead:(b.bidQty/b.askQty-1)*100, spread:(b.ask-b.bid)/((b.ask+b.bid)/2)*100}; }
+function applyCatalogBook(data) { const symbol=String(data?.s||''); const bid=num(data?.b); const ask=num(data?.a); const bidQty=num(data?.B); const askQty=num(data?.A); if(!symbol.endsWith('USDT')||!bid||!ask)return; catalogBooks.set(symbol,{bid,ask,bidQty,askQty,t:Date.now()}); const base=marketCatalog.find(x=>x.symbol===symbol); recordCatalogTick(symbol,(bid+ask)/2,base?.quoteVolume||0); const now=Date.now(); if(now-lastBookBroadcastAt>500){lastBookBroadcastAt=now;requestBroadcast();} }
+function connectCatalogBookStream() { if(catalogBookSocket && (catalogBookSocket.readyState===WebSocket.OPEN||catalogBookSocket.readyState===WebSocket.CONNECTING))return; clearTimeout(catalogBookReconnectTimer); const base=isFutures?FUTURES_WS:SPOT_WS; try { catalogBookSocket=new WebSocket(`${base}/ws/!bookTicker`); catalogBookSocket.addEventListener('message',(event)=>{try{applyCatalogBook(JSON.parse(wsText(event.data)));}catch{}}); catalogBookSocket.addEventListener('close',()=>{catalogBookSocket=null;catalogBookReconnectTimer=setTimeout(connectCatalogBookStream,3000);}); catalogBookSocket.addEventListener('error',()=>{try{catalogBookSocket?.close();}catch{}});}catch{catalogBookReconnectTimer=setTimeout(connectCatalogBookStream,3000);} }
+
 function connectMarket() {
   connectCatalogStream();
   if (!marketCatalog.some((row) => row.symbol === market.symbol)) { market.symbol = 'BTCUSDT'; config.symbol = 'BTCUSDT'; saveConfig(); }
   clearTimeout(reconnectTimer);
   if (publicSocket) { try { publicSocket.close(); } catch {} }
   const base = isFutures ? FUTURES_WS : SPOT_WS;
-  const url = `${base}/stream?streams=${publicStreams().join('/')}`;
+  let socket;
   try {
-    publicSocket = new WebSocket(url);
-    publicSocket.addEventListener('open', () => { market.connected = true; market.error = ''; requestBroadcast(); });
-    publicSocket.addEventListener('message', (event) => {
-      try { const payload = JSON.parse(wsText(event.data)).data || {}; if (Array.isArray(payload)) applyAllTickers(payload); else handleMarketEvent(payload); } catch { /* malformed message ignored */ }
-    });
-    publicSocket.addEventListener('error', () => { market.error = 'Binance 실시간 시세 연결을 다시 시도합니다'; requestBroadcast(); });
-    publicSocket.addEventListener('close', () => {
-      market.connected = false;
-      requestBroadcast();
-      reconnectTimer = setTimeout(connectMarket, 2500);
-    });
-  } catch {
-    market.connected = false;
-    reconnectTimer = setTimeout(connectMarket, 2500);
-  }
+    socket = new WebSocket(`${base}/ws`); publicSocket = socket;
+    socket.addEventListener('open', () => { if(socket!==publicSocket)return; socket.send(JSON.stringify({method:'SUBSCRIBE',params:publicStreams(),id:Date.now()})); market.connected=true; market.error=''; requestBroadcast(); });
+    socket.addEventListener('message', (event) => { try { const payload=JSON.parse(wsText(event.data)); if (payload?.e) handleMarketEvent(payload); else if(Array.isArray(payload)) applyAllTickers(payload); } catch {} });
+    socket.addEventListener('error', () => { if(socket!==publicSocket)return; market.error='Binance 실시간 시세 연결을 다시 시도합니다'; requestBroadcast(); });
+    socket.addEventListener('close', () => { if(socket!==publicSocket)return; market.connected=false; requestBroadcast(); reconnectTimer=setTimeout(connectMarket,2500); });
+  } catch { market.connected=false; reconnectTimer=setTimeout(connectMarket,2500); }
 }
 function applyAllTickers(rows) {
   const latest = new Map(rows.filter((row) => String(row.s || '').endsWith('USDT')).map((row) => [row.s, { price: num(row.c), changePct: num(row.P), quoteVolume: num(row.q) }]));
@@ -388,24 +407,28 @@ function handleMarketEvent(data) {
   updatePrice({ price: data.c || data.p, bid: data.b, ask: data.a });
 }
 
-const autoState = { cooldownUntil: 0, selecting: false };
+const autoState = { cooldownUntil: 0, selecting: false, initialCandidateSelected: false };
 const catalogHistory = new Map();
 function paperEvent(message) { paper.events ||= []; paper.events.unshift({ time: Date.now(), message }); paper.events = paper.events.slice(0, 80); }
-function recordCatalogTick(symbol, price, quoteVolume) { if (!symbol || !price || !Number.isFinite(price)) return; const now=Date.now(); const h=catalogHistory.get(symbol)||[]; h.push({t:now,p:price,q:quoteVolume||0}); while(h.length&&h[0].t<now-35_000)h.shift(); catalogHistory.set(symbol,h); }
-function flowMetrics(symbol) { const h=catalogHistory.get(symbol)||[]; if(h.length<3)return null; const now=Date.now(); const last=h[h.length-1]; const before30=[...h].reverse().find(x=>x.t<=now-28_000)||null; const before10=[...h].reverse().find(x=>x.t<=now-9_000)||null; if(!before30||!before10)return null; const rise30=(last.p/before30.p-1)*100; const vol10=Math.max(0,last.q-before10.q); const vol30=Math.max(0,last.q-before30.q); const activity=vol30>0?(vol10*3/vol30):0; return {rise30,activity,vol10}; }
+function recordCatalogTick(symbol, price, quoteVolume) { if (!symbol || !price || !Number.isFinite(price)) return; const now=Date.now(); const h=catalogHistory.get(symbol)||[]; if(!h.length||now-h[h.length-1].t>=180){h.push({t:now,p:price,q:quoteVolume||0});}else{h[h.length-1]={t:now,p:price,q:quoteVolume||0};} while(h.length&&h[0].t<now-35_000)h.shift(); catalogHistory.set(symbol,h); }
+function flowMetrics(symbol) { const h=catalogHistory.get(symbol)||[]; if(h.length<3)return null; const now=Date.now(); const last=h[h.length-1]; const before30=[...h].reverse().find(x=>x.t<=now-28_000)||null; const before10=[...h].reverse().find(x=>x.t<=now-9_000)||null; if(!before30||!before10)return null; const rise30=(last.p/before30.p-1)*100; const vol10=Math.max(0,last.q-before10.q); const vol30=Math.max(0,last.q-before30.q); const n10=h.filter(x=>x.t>=now-10_000).length; const n30=h.filter(x=>x.t>=now-30_000).length; const activity=vol30>0?(vol10*3/vol30):(n30? n10*3/n30 : 0); const peak=Math.max(...h.map(x=>x.p)); const pullback=(peak-last.p)/peak*100; return {rise30,activity,vol10,pullback}; }
 function activePaperSubstitute() { const slot=activeSlot(); const ids=new Set(slot?.enabledRuleIds||[]); return ['듀퐁-가격속도','듀퐁-거래집중','듀퐁-호가압력','듀퐁-비용제한','듀퐁-고점차단','듀퐁-수익보호','듀퐁-반대장악청산','듀퐁-손절주의','듀퐁-손절확인','듀퐁-손절회복','듀퐁-비상손절'].every(id=>ids.has(id)); }
 function orderbookBuyLead() { const bid=market.bids.reduce((sum,x)=>sum+num(x.qty),0); const ask=market.asks.reduce((sum,x)=>sum+num(x.qty),0); return ask>0?(bid/ask-1)*100:0; }
 function spreadPct() { if(!market.bid||!market.ask||!market.price)return Infinity; return (market.ask-market.bid)/market.price*100; }
 function recentPeakPullback() { const highs=market.candles.slice(-5).map(x=>num(x.h)).filter(Boolean); if(!highs.length||!market.price)return Infinity; const peak=Math.max(...highs); return (peak-market.price)/peak*100; }
 function closePaperFraction(fraction, reason) { const view=paperPositionView(); if(!view)return false; const f=Math.max(.01,Math.min(1,fraction)); const amount=view.marginKrw*f; const pnl=view.pnlKrw*f; paper.availableKrw+=amount+pnl; paper.realizedKrw+=pnl; const position=paper.position; position.marginKrw-=amount; position.qty-=view.qty*f; recordPaperTrade(f>=.999?(isFutures?'PAPER 포지션 정리':'PAPER 매도'):'PAPER 분할 익절',reason,amount+pnl,pnl); if(f>=.999||position.qty<=1e-12)paper.position=null; savePaper(); paperEvent(`${market.symbol} ${reason} · ${Math.round(pnl).toLocaleString('ko-KR')}원`); return true; }
-async function selectFullMarketCandidate() { if(autoState.selecting||paper.position||!activePaperSubstitute()||Date.now()<autoState.cooldownUntil)return; const candidate=marketCatalog.map(row=>({row,flow:flowMetrics(row.symbol)})).filter(x=>x.flow&&x.flow.rise30>=.01&&x.flow.activity>=1.1).sort((a,b)=>(b.flow.rise30*b.row.quoteVolume)-(a.flow.rise30*a.row.quoteVolume))[0]; if(!candidate||candidate.row.symbol===market.symbol)return; autoState.selecting=true; autoState.cooldownUntil=Date.now()+15_000; try { market.symbol=candidate.row.symbol; config.symbol=market.symbol; saveConfig(); await seedMarket(); connectMarket(); paperEvent(`${market.symbol} 전수 감시 후보 선택 · 30초 상승 ${candidate.flow.rise30.toFixed(3)}%`); } finally { autoState.selecting=false; } }
-function autoEvaluate() { try { if(!config.autoTrading||config.mode!=='paper'||!market.price||!market.usdKrw||!activePaperSubstitute())return; const position=paper.position; const view=paperPositionView(); if(position&&view){ position.auto ||= {}; const st=position.auto; if(view.pnlPct>=.3){st.protected=true;st.peak=Math.max(num(st.peak),market.price);} if(st.protected){st.peak=Math.max(num(st.peak),market.price);if((st.peak-market.price)/st.peak*100>=.15){closePaperFraction(1,'반대 강세 대리 청산');autoState.cooldownUntil=Date.now()+60_000;return;}} if(view.pnlPct<=-.25){st.dangerAt ||= Date.now();if(view.pnlPct>=-.19)delete st.dangerAt;else if(view.pnlPct<=-.4||Date.now()-st.dangerAt>=3_000){closePaperFraction(1,'손절 주의 확인 후 비상 손절');autoState.cooldownUntil=Date.now()+60_000;}} return; } if(Date.now()<autoState.cooldownUntil||market.candles.length<20)return; const flow=flowMetrics(market.symbol); if(!flow)return; const passes=flow.rise30>=.01&&flow.activity>=1.1&&orderbookBuyLead()>=5&&spreadPct()<=.07&&recentPeakPullback()<=.12; if(!passes)return; const result=paperOrder({action:'buy',amountKrw:config.paperOrderKrw}); if(result.ok){paper.position.auto={protected:false,peak:market.price};autoState.cooldownUntil=Date.now()+60_000;paperEvent(`${market.symbol} PAPER 대체형 11규칙 자동 매수 · 30초 상승 ${flow.rise30.toFixed(3)}%`);} } catch(error){paperEvent(`자동매매 판단 대기 · ${error instanceof Error?error.message:'확인 필요'}`);} }
+async function selectFullMarketCandidate() { if(autoState.selecting||paper.position||!activePaperSubstitute()||Date.now()<autoState.cooldownUntil)return; const candidate=marketCatalog.map(row=>({row,flow:flowMetrics(row.symbol),book:bookStats(row.symbol)})).filter(x=>x.row.symbol!==market.symbol&&x.flow&&x.flow.rise30>=.01&&x.flow.activity>=1.1&&x.flow.pullback<=.12&&(!isFutures||!!x.book&&x.book.lead>=5&&x.book.spread<=.07)).sort((a,b)=>(b.flow.rise30*b.row.quoteVolume)-(a.flow.rise30*a.row.quoteVolume))[0]; if(!candidate)return; autoState.selecting=true; autoState.cooldownUntil=Date.now()+1_500; try { market.symbol=candidate.row.symbol; config.symbol=market.symbol; saveConfig(); await seedMarket(); connectMarket(); autoState.initialCandidateSelected=true; paperEvent(`${market.symbol} 전수 감시 후보 선택 · 30초 상승 ${candidate.flow.rise30.toFixed(3)}%`); if(config.autoTrading&&config.mode==='paper'&&!paper.position&&market.price&&market.usdKrw){ const order=paperOrder({action:'buy',amountKrw:config.paperOrderKrw}); if(order.ok){ paper.position.auto={protected:false,peak:market.price}; autoState.cooldownUntil=Date.now()+60_000; paperEvent(`${market.symbol} PAPER 대체형 3조건 자동 매수 · 전수 후보 확정`); } } } finally { autoState.selecting=false; } }
+function autoEvaluate() { autoState.lastTick=Date.now(); try { if(!config.autoTrading||config.mode!=='paper'||!market.price||!market.usdKrw||!activePaperSubstitute())return; const position=paper.position; const view=paperPositionView(); if(position&&view){ position.auto ||= {}; const st=position.auto; if(view.pnlPct>=.3){st.protected=true;st.peak=Math.max(num(st.peak),market.price);} if(st.protected){st.peak=Math.max(num(st.peak),market.price);if((st.peak-market.price)/st.peak*100>=.15){closePaperFraction(1,'반대 강세 대리 청산');autoState.cooldownUntil=Date.now()+60_000;return;}} if(view.pnlPct<=-.25){st.dangerAt ||= Date.now();if(view.pnlPct>=-.19)delete st.dangerAt;else if(view.pnlPct<=-.4||Date.now()-st.dangerAt>=3_000){closePaperFraction(1,'손절 주의 확인 후 비상 손절');autoState.cooldownUntil=Date.now()+60_000;}} return; } if(!autoState.initialCandidateSelected||Date.now()<autoState.cooldownUntil||(isFutures&&market.candles.length<20))return; const flow=flowMetrics(market.symbol); if(!flow)return; const threeConditions=flow.rise30>=.01&&flow.activity>=1.1&&(isFutures?recentPeakPullback():flow.pullback)<=.12; const futuresExecutionOk=!isFutures||(orderbookBuyLead()>=5&&spreadPct()<=.07); if(!threeConditions||!futuresExecutionOk)return; const result=paperOrder({action:'buy',amountKrw:config.paperOrderKrw}); if(result.ok){paper.position.auto={protected:false,peak:market.price};autoState.cooldownUntil=Date.now()+60_000;paperEvent(`${market.symbol} PAPER 대체형 3조건 자동 매수 · 30초 상승 ${flow.rise30.toFixed(3)}%`);} } catch(error){paperEvent(`자동매매 판단 대기 · ${error instanceof Error?error.message:'확인 필요'}`);} }
 function paperPositionView() {
   const position = paper.position;
-  if (!position || !market.price) return null;
+  if (!position) return null;
+  const catalogPrice = num(marketCatalog.find((row) => row.symbol === position.symbol)?.price);
+  const markPrice = catalogPrice || (position.symbol === market.symbol ? num(market.price) : 0);
+  if (!markPrice) return null;
+  const markKrw = krw(markPrice);
   const sign = position.side === 'SHORT' ? -1 : 1;
-  const pnlKrw = (krw(market.price) - position.entryKrw) * position.qty * sign;
-  return { ...position, markKrw: krw(market.price), pnlKrw, pnlPct: position.marginKrw ? pnlKrw / position.marginKrw * 100 : 0 };
+  const pnlKrw = (markKrw - position.entryKrw) * position.qty * sign;
+  return { ...position, markKrw, pnlKrw, pnlPct: position.marginKrw ? pnlKrw / position.marginKrw * 100 : 0 };
 }
 function paperAccountView() {
   const position = paperPositionView();
@@ -642,9 +665,10 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive' });
       res.write(`event: init\ndata: ${JSON.stringify(uiSnapshot())}\n\n`); clients.add(res); req.on('close', () => clients.delete(res)); return;
     }
-    if (req.method === 'POST' && url.pathname === '/api/view') { const body = await readBody(req); const symbol = uiSymbol(body.market); if (safeSymbol(symbol)) { market.symbol = symbol; config.symbol = symbol; await seedMarket(); connectMarket(); } const ui = uiSnapshot(); return json(res, 200, { ticker: ui.tickers.find((x) => x.cd === body.market), ob: ui.ob }); }
+    if (req.method === 'POST' && url.pathname === '/api/view') { const body = await readBody(req); const symbol = paper.position?.symbol || uiSymbol(body.market); if (safeSymbol(symbol)) { market.symbol = symbol; config.symbol = symbol; saveConfig(); await seedMarket(); connectMarket(); } const ui = uiSnapshot(); return json(res, 200, { ticker: ui.tickers.find((x) => x.cd === uiCode(symbol)), ob: ui.ob }); }
     if (req.method === 'POST' && url.pathname === '/api/select') {
-      const body = await readBody(req); const symbol = safeSymbol(body.symbol); if (!symbol) throw new Error('지원하지 않는 USDT 마켓입니다');
+      const body = await readBody(req); const requested = safeSymbol(body.symbol); if (!requested) throw new Error('지원하지 않는 USDT 마켓입니다');
+      const symbol = paper.position?.symbol || requested;
       market.symbol = symbol; config.symbol = symbol; saveConfig(); await seedMarket(); connectMarket(); return json(res, 200, snapshot());
     }
     if (req.method === 'POST' && url.pathname === '/api/interval') {
@@ -686,6 +710,10 @@ const server = http.createServer(async (req, res) => {
       if (updatingKeys) { await refreshLiveAccount(); await startPrivateStream(); }
       requestBroadcast(); return json(res, 200, { ok: true, config: publicConfig() });
     }
+    if (req.method === 'GET' && url.pathname === '/api/debug/auto') {
+      const flow=flowMetrics(market.symbol);
+      return json(res, 200, { now: Date.now(), kind, autoState: { ...autoState, cooldownRemainingMs: Math.max(0, autoState.cooldownUntil-Date.now()) }, config: { autoTrading: config.autoTrading, mode: config.mode, activeSlot: config.activeSlot }, market: { symbol: market.symbol, price: market.price, usdKrw: market.usdKrw, connected: market.connected, candles: market.candles?.length||0 }, activePaperSubstitute: activePaperSubstitute(), flow, threeConditions: !!flow && flow.rise30>=.01 && flow.activity>=1.1 && (isFutures ? recentPeakPullback() : flow.pullback)<=.12, futuresExecutionOk: !isFutures || (orderbookBuyLead()>=5&&spreadPct()<=.07), position: !!paper.position });
+    }
     if (req.method === 'POST' && url.pathname === '/api/order') {
       const body = await readBody(req);
       const result = config.mode === 'live' ? await liveOrder(body) : paperOrder(body);
@@ -703,6 +731,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 await refreshMarketCatalog();
+if (paper.position?.symbol) { market.symbol = paper.position.symbol; config.symbol = market.symbol; saveConfig(); }
 await seedMarket();
 connectMarket();
 setInterval(autoEvaluate, 1_000).unref();

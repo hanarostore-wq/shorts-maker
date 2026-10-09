@@ -185,6 +185,11 @@ export function connect() {
   on('init', (d) => {
     S.markets = d.markets;
     S.marketMap = new Map(d.markets.map((m) => [m.code, m]));
+    const heldMarket = d.summary?.positions?.[0]?.market;
+    if (heldMarket && S.marketMap.has(heldMarket)) {
+      S.market = heldMarket;
+      localStorage.setItem('binance-market', heldMarket);
+    }
     S.tickers = new Map(d.tickers.map((t) => [t.cd, t]));
     S.viewTicker = S.tickers.get(S.market) || null;
     S.config = d.config; S.summary = d.summary; S.watch = d.watch;

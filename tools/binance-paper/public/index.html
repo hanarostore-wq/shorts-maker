@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>YuJin Traders · Binance 자동매매</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23093687'/%3E%3Ctext x='16' y='22' font-size='15' font-weight='900' font-style='italic' text-anchor='middle' fill='white' font-family='Arial'%3EJ%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/css/app.css?v=1.10.56">
+  <link rel="stylesheet" href="/css/app.css?v=1.10.68">
   <script src="/vendor/lightweight-charts.standalone.production.js"></script>
 </head>
 <body class="dark">
@@ -21,7 +21,7 @@
         <span class="chip" id="chipUpbit"><i class="dot"></i><span class="lbl">Binance 실시간</span></span>
         <button class="chip" id="chipJev" title="Jev 도움 판단 또는 순수 규칙 판단 전환" type="button"><i class="dot"></i><span class="t">순수 규칙</span></button>
         <button class="header-action manuscript" id="manusLauncher" type="button" title="Whale 소형 창에서 Manus 대화 열기" aria-label="Manus 대화 소형 창 열기"><i class="dot manus-notify-badge" id="manusNotifyBadge" aria-label="Manus 대화 사용 가능"></i><span class="lbl">Manus 대화</span></button>
-        <button class="header-action auto-toggle" id="autoToggle" title="자동매매 켜기/끄기"><i class="dot"></i><span class="lbl">자동매매</span></button>
+        <button class="header-action auto-toggle on" id="autoToggle" title="PAPER 자동매매 실행 중"><i class="dot"></i><span class="lbl">자동매매</span></button>
         <div class="gnb-meta" id="gnbMeta" title="클라이언트·서버 버전 및 네트워크 지연 시간">
           <span class="meta-item" id="metaLatency">수신 대기</span>
           <span class="meta-item" id="metaVersion">v1.10.56</span>
@@ -210,7 +210,7 @@
     </form>
   </div>
   <div id="mainModals"></div>
-  <script type="module" src="/js/app.js?v=1.10.63"></script>
+  <script type="module" src="/js/app.js?v=1.10.68"></script>
   <div id="reasonPopover" class="reason-floating-popover"></div>
 </body>
 </html>

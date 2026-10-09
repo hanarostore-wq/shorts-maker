@@ -1,6 +1,6 @@
-import { toggleAuto } from './pages.js?v=1.10.56';
-import { $, $$, bus, S, api, esc, fmtDur, fmtInt, fmtKrw, fmtPct, fmtPrice, fmtQty, fmtTime, nameOf, sym, setMarket, toast, upDown, coinIcon } from './core.js?v=1.10.56';
-import { parseKrwAmount } from './amount.js?v=1.10.56';
+import { toggleAuto } from './pages.js?v=1.10.68';
+import { $, $$, bus, S, api, esc, fmtDur, fmtInt, fmtKrw, fmtPct, fmtPrice, fmtQty, fmtTime, nameOf, sym, setMarket, toast, upDown, coinIcon } from './core.js?v=1.10.68';
+import { parseKrwAmount } from './amount.js?v=1.10.68';
 
 // =====================================================================================
 // Left Binance Chart in Mainboard
@@ -889,7 +889,7 @@ function scheduleRender() {
     if (Date.now() - lastInteraction < SCROLL_IDLE_MS) return;
     if (!renderPending) return;
     renderPending = false;
-    render();
+    try { render(); } catch (error) { console.error('MAINBOARD_RENDER_ERROR', error); }
   }, 120);
 }
 
@@ -987,7 +987,7 @@ function bindReasonHover() {
 export function initMainBoard() {
   render();
   bindReasonHover(); bindBoard();
-  bus.on('init', scheduleRender); bus.on('sum', scheduleRender); bus.on('monitor', scheduleRender); bus.on('cfg', scheduleRender); bus.on('dec', scheduleRender); bus.on('fill', scheduleRender);
+  bus.on('init', () => { try { render(); } catch (error) { console.error('MAINBOARD_INIT_RENDER', error); } }); bus.on('sum', scheduleRender); bus.on('monitor', scheduleRender); bus.on('cfg', scheduleRender); bus.on('dec', scheduleRender); bus.on('fill', scheduleRender);
   bus.on('tk', scheduleTickerPatch); bus.on('vt', (ticker) => scheduleTickerPatch([ticker]));
 }
 export function onMainRoute() { render(); }
