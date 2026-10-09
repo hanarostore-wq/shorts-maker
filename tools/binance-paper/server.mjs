@@ -421,24 +421,33 @@ function handleMarketEvent(data) {
   updatePrice({ price: data.c || data.p, bid: data.b, ask: data.a });
 }
 
-const autoState = { cooldownUntil: 0, selecting: false, initialCandidateSelected: false };
+const autoState = { cooldownUntil: 0, selecting: false, initialCandidateSelected: false, candidateSide: null, candidateSelectedAt: 0, waitReason: '' };
 const catalogHistory = new Map();
 function paperEvent(message) { paper.events ||= []; paper.events.unshift({ time: Date.now(), message }); paper.events = paper.events.slice(0, 80); }
+function paperWait(reason) { if (autoState.waitReason === reason) return; autoState.waitReason = reason; paperEvent(`듀퐁 자동진입 대기 · ${reason}`); }
 function recordCatalogTick(symbol, price, quoteVolume) { if (!symbol || !price || !Number.isFinite(price)) return; const now=Date.now(); const h=catalogHistory.get(symbol)||[]; if(!h.length||now-h[h.length-1].t>=180){h.push({t:now,p:price,q:quoteVolume||0});}else{h[h.length-1]={t:now,p:price,q:quoteVolume||0};} while(h.length&&h[0].t<now-35_000)h.shift(); catalogHistory.set(symbol,h); }
-function flowMetrics(symbol) { const h=catalogHistory.get(symbol)||[]; if(h.length<3)return null; const now=Date.now(); const last=h[h.length-1]; const before30=[...h].reverse().find(x=>x.t<=now-28_000)||null; const before10=[...h].reverse().find(x=>x.t<=now-9_000)||null; if(!before30||!before10)return null; const rise30=(last.p/before30.p-1)*100; const vol10=Math.max(0,last.q-before10.q); const vol30=Math.max(0,last.q-before30.q); const n10=h.filter(x=>x.t>=now-10_000).length; const n30=h.filter(x=>x.t>=now-30_000).length; const activity=vol30>0?(vol10*3/vol30):(n30? n10*3/n30 : 0); const peak=Math.max(...h.map(x=>x.p)); const pullback=(peak-last.p)/peak*100; return {rise30,activity,vol10,pullback}; }
+function flowMetrics(symbol) { const h=catalogHistory.get(symbol)||[]; if(h.length<3)return null; const now=Date.now(); const last=h[h.length-1]; const before30=[...h].reverse().find(x=>x.t<=now-28_000)||null; const before10=[...h].reverse().find(x=>x.t<=now-9_000)||null; if(!before30||!before10)return null; const rise30=(last.p/before30.p-1)*100; const vol10=Math.max(0,last.q-before10.q); const vol30=Math.max(0,last.q-before30.q); const n10=h.filter(x=>x.t>=now-10_000).length; const n30=h.filter(x=>x.t>=now-30_000).length; const activity=vol30>0?(vol10*3/vol30):(n30? n10*3/n30 : 0); const peak=Math.max(...h.map(x=>x.p)); const low=Math.min(...h.map(x=>x.p)); const pullback=(peak-last.p)/peak*100; const rebound=(last.p-low)/low*100; return {rise30,activity,vol10,pullback,rebound}; }
 function activePaperSubstitute() { const slot=activeSlot(); const ids=new Set(slot?.enabledRuleIds||[]); return ['듀퐁-가격속도','듀퐁-거래집중','듀퐁-호가압력','듀퐁-비용제한','듀퐁-고점차단','듀퐁-수익보호','듀퐁-반대장악청산','듀퐁-손절주의','듀퐁-손절확인','듀퐁-손절회복','듀퐁-비상손절'].every(id=>ids.has(id)); }
-function orderbookBuyLead() { const bid=market.bids.reduce((sum,x)=>sum+num(x.qty),0); const ask=market.asks.reduce((sum,x)=>sum+num(x.qty),0); return ask>0?(bid/ask-1)*100:0; }
+function dupontPolicy() { return activePaperSubstitute() ? { lookbackBars: [5,10,20,30,60], minWidthPct: .35, maxWidthPct: 4.5, touchZonePct: 18, minTouches: 2, entryZonePct: 22, pressureMin: .12, boundaryBufferPct: .06, hardStopPct: .4, partialRatio: .5, rewardRisk: 3 } : null; }
+function weightedBookPressure(bids = market.bids, asks = market.asks) { if (!bids?.length || !asks?.length) return null; const weighted=(rows)=>rows.slice(0,20).reduce((sum,row,index)=>sum+num(row.price)*num(row.qty)/(Math.pow(index+1,.65)),0); const bid=weighted(bids); const ask=weighted(asks); if(!(bid+ask>0))return null; return { score:(bid-ask)/(bid+ask), bid, ask }; }
+function orderbookBuyLead() { const pressure=weightedBookPressure(); return pressure ? pressure.score * 100 : 0; }
 function spreadPct() { if(!market.bid||!market.ask||!market.price)return Infinity; return (market.ask-market.bid)/market.price*100; }
 function recentPeakPullback() { const highs=market.candles.slice(-5).map(x=>num(x.h)).filter(Boolean); if(!highs.length||!market.price)return Infinity; const peak=Math.max(...highs); return (peak-market.price)/peak*100; }
+function dupontBox() { const policy=dupontPolicy(); if(!policy)return null; let best=null; for(const lookback of policy.lookbackBars){const rows=market.candles.slice(-lookback).filter((row)=>num(row.h)>0&&num(row.l)>0);if(rows.length<lookback)continue;const upper=Math.max(...rows.map((row)=>num(row.h)));const lower=Math.min(...rows.map((row)=>num(row.l)));const range=upper-lower;const widthPct=range/lower*100;if(!(range>0)||widthPct<policy.minWidthPct||widthPct>policy.maxWidthPct)continue;const band=range*policy.touchZonePct/100;const lowTouches=rows.filter((row)=>num(row.l)<=lower+band).length;const highTouches=rows.filter((row)=>num(row.h)>=upper-band).length;if(lowTouches<policy.minTouches||highTouches<policy.minTouches)continue;const candidate={lower,upper,mid:(lower+upper)/2,range,widthPct,lowTouches,highTouches,lookback};if(!best||candidate.widthPct<best.widthPct||(candidate.widthPct===best.widthPct&&candidate.lowTouches+candidate.highTouches>best.lowTouches+best.highTouches))best=candidate;}return best; }
+function dupontSetup() { const policy=dupontPolicy(); const box=dupontBox(); const pressure=weightedBookPressure(); const price=num(market.price); if(!policy||!box||!pressure||!price)return null; const zone=box.range*policy.entryZonePct/100; if(price<=box.lower+zone&&pressure.score>=policy.pressureMin)return { side:'LONG', box, pressure, policy }; if(isFutures&&price>=box.upper-zone&&pressure.score<=-policy.pressureMin)return { side:'SHORT', box, pressure, policy }; return null; }
+function attachDupontPlan(position, setup) { if(!position||!setup)return null; const {side,box,policy}=setup; const entry=position.entryKrw; const boundary=side==='SHORT'?box.upper*(1+policy.boundaryBufferPct/100):box.lower*(1-policy.boundaryBufferPct/100); const hard=side==='SHORT'?entry*(1+policy.hardStopPct/100):entry*(1-policy.hardStopPct/100); const stop=side==='SHORT'?Math.min(boundary,hard):Math.max(boundary,hard); const risk=side==='SHORT'?stop-entry:entry-stop; if(!(risk>entry*.0005))return null; const partialTarget=side==='SHORT'?(box.mid<entry?box.mid:entry-risk):(box.mid>entry?box.mid:entry+risk); const target=side==='SHORT'?entry-risk*policy.rewardRisk:entry+risk*policy.rewardRisk; position.auto={...(position.auto||{}),dupont:{side,lower:box.lower,upper:box.upper,mid:box.mid,priorHigh:box.upper,stop,partialTarget,target,partialRatio:policy.partialRatio,halfTaken:false,entry,pressure:setup.pressure.score,createdAt:Date.now()}}; savePaper(); return position.auto.dupont; }
+function evaluateDupontExit(position, view) { const plan=position.auto?.dupont; if(!plan)return false; const price=view.markKrw; const short=plan.side==='SHORT'; const stopHit=short?price>=plan.stop:price<=plan.stop; const partialHit=short?price<=plan.partialTarget:price>=plan.partialTarget; const targetHit=short?price<=plan.target:price>=plan.target; if(stopHit){closePaperFraction(1,'박스 경계·직전 고점 손절',position.symbol);return true;} if(!plan.halfTaken&&partialHit){if(closePaperFraction(plan.partialRatio,'박스 중간선 50% 분할익절',position.symbol)){plan.halfTaken=true;savePaper();}return true;} if(plan.halfTaken&&targetHit){closePaperFraction(1,'박스 1:3 목표 익절',position.symbol);return true;} return false; }
 function paperPositionView(position = paperPositions()[0]) {
   if (!position) return null;
   const catalogPrice = num(marketCatalog.find((row) => row.symbol === position.symbol)?.price);
-  const markPrice = catalogPrice || (position.symbol === market.symbol ? num(market.price) : 0);
-  if (!markPrice) return null;
-  const markKrw = krw(markPrice);
+  const livePrice = catalogPrice || (position.symbol === market.symbol ? num(market.price) : 0);
+  // 신규 상장폐지·일시 제외 종목도 PAPER 원장에서는 사라지지 않는다.
+  // 실시간 호가가 없을 때는 마지막 기록가(없으면 진입가)를 기준으로 보존 표시한다.
+  const markKrw = livePrice ? krw(livePrice) : num(position.lastMarkKrw, position.entryKrw);
+  if (!(markKrw > 0)) return null;
   const sign = position.side === 'SHORT' ? -1 : 1;
   const pnlKrw = (markKrw - position.entryKrw) * position.qty * sign;
-  return { ...position, markKrw, pnlKrw, pnlPct: position.marginKrw ? pnlKrw / position.marginKrw * 100 : 0 };
+  return { ...position, markKrw, pnlKrw, pnlPct: position.marginKrw ? pnlKrw / position.marginKrw * 100 : 0, staleMark: !livePrice };
 }
 function paperPositionViews() { return paperPositions().map((position) => paperPositionView(position)).filter(Boolean); }
 function closePaperFraction(fraction, reason, symbol = market.symbol) {
@@ -453,19 +462,15 @@ function closePaperFraction(fraction, reason, symbol = market.symbol) {
 }
 async function selectFullMarketCandidate() {
   const held = new Set(paperPositions().map((position) => position.symbol));
-  if (autoState.selecting || held.size >= config.maxPositions || !activePaperSubstitute() || Date.now() < autoState.cooldownUntil) return;
-  const candidate = marketCatalog.map((row) => ({ row, flow: flowMetrics(row.symbol), book: bookStats(row.symbol) }))
-    .filter((item) => !held.has(item.row.symbol) && item.flow && item.flow.rise30 >= .01 && item.flow.activity >= 1.1 && item.flow.pullback <= .12 && (!isFutures || !!item.book && item.book.lead >= 5 && item.book.spread <= .07))
-    .sort((left, right) => (right.flow.rise30 * right.row.quoteVolume) - (left.flow.rise30 * left.row.quoteVolume))[0];
+  if (autoState.selecting || held.size >= config.maxPositions || !activePaperSubstitute() || Date.now() < autoState.cooldownUntil || (autoState.initialCandidateSelected && Date.now()-autoState.candidateSelectedAt<15_000)) return;
+  const candidate = marketCatalog.map((row) => { const flow=flowMetrics(row.symbol); const book=bookStats(row.symbol); const longOk=flow&&flow.rise30>=.01&&flow.activity>=1.1&&flow.pullback<=.12&&(!isFutures||book&&book.lead>=5&&book.spread<=.07); const shortOk=isFutures&&flow&&flow.rise30<=-.01&&flow.activity>=1.1&&flow.rebound<=.12&&book&&book.lead<=-5&&book.spread<=.07; return {row,flow,book,side:longOk?'LONG':shortOk?'SHORT':null}; })
+    .filter((item) => !held.has(item.row.symbol) && item.side)
+    .sort((left, right) => (Math.abs(right.flow.rise30) * right.row.quoteVolume) - (Math.abs(left.flow.rise30) * left.row.quoteVolume))[0];
   if (!candidate) return;
   autoState.selecting = true; autoState.cooldownUntil = Date.now() + 1_500;
   try {
-    market.symbol = candidate.row.symbol; config.symbol = market.symbol; saveConfig(); await seedMarket(); connectMarket(); autoState.initialCandidateSelected = true;
-    paperEvent(`${market.symbol} 전수 감시 후보 선택 · 30초 상승 ${candidate.flow.rise30.toFixed(3)}%`);
-    if (config.autoTrading && config.mode === 'paper' && paperPositions().length < config.maxPositions && market.price && market.usdKrw) {
-      const order = paperOrder({ action: 'buy', amountKrw: config.paperOrderKrw });
-      if (order.ok) { const opened = paperPositions().at(-1); if (opened) opened.auto = { protected: false, peak: market.price }; autoState.cooldownUntil = Date.now() + 3_000; paperEvent(`${market.symbol} PAPER 대체형 3조건 자동 매수 · 전수 후보 확정`); }
-    }
+    market.symbol = candidate.row.symbol; config.symbol = market.symbol; saveConfig(); await seedMarket(); connectMarket(); autoState.initialCandidateSelected = true; autoState.candidateSide=candidate.side; autoState.candidateSelectedAt=Date.now(); autoState.waitReason='';
+    paperEvent(`${market.symbol} 전수 감시 후보 선택 · ${candidate.side==='SHORT'?'30초 하락':'30초 상승'} ${Math.abs(candidate.flow.rise30).toFixed(3)}% · ${candidate.side==='SHORT'?'숏':'롱'} 대기`);
   } finally { autoState.selecting = false; }
 }
 function autoEvaluate() {
@@ -474,17 +479,28 @@ function autoEvaluate() {
     if (!config.autoTrading || config.mode !== 'paper' || !market.price || !market.usdKrw || !activePaperSubstitute()) return;
     for (const position of [...paperPositions()]) {
       const view = paperPositionView(position); if (!view) continue;
+      // 확장 배포 이전 보유분에는 박스 경계·진입 근거가 저장돼 있지 않다.
+      // 새 규칙으로 임의 재해석하거나 구형 손절로 닫지 않고, 사용자가 정리할 때까지 보존한다.
+      if (!position.auto?.dupont) {
+        position.auto ||= {};
+        if (!position.auto.legacyDupont) { position.auto.legacyDupont = true; paperEvent(`${position.symbol} 기존 PAPER 보유분 보존 · 새 듀퐁 박스 규칙은 신규 진입부터 적용`); savePaper(); }
+        continue;
+      }
+      if (evaluateDupontExit(position, view)) { autoState.cooldownUntil = Date.now() + 3_000; continue; }
       const price = view.markKrw / Math.max(market.usdKrw, 1); position.auto ||= {}; const st = position.auto;
       if (view.pnlPct >= .3) { st.protected = true; st.peak = Math.max(num(st.peak), price); }
       if (st.protected) { st.peak = Math.max(num(st.peak), price); if ((st.peak - price) / st.peak * 100 >= .15) { closePaperFraction(1, '반대 강세 대리 청산', position.symbol); autoState.cooldownUntil = Date.now() + 3_000; continue; } }
       if (view.pnlPct <= -.25) { st.dangerAt ||= Date.now(); if (view.pnlPct >= -.19) delete st.dangerAt; else if (view.pnlPct <= -.4 || Date.now() - st.dangerAt >= 3_000) { closePaperFraction(1, '손절 주의 확인 후 비상 손절', position.symbol); autoState.cooldownUntil = Date.now() + 3_000; } }
     }
-    if (paperPositions().length >= config.maxPositions || !autoState.initialCandidateSelected || Date.now() < autoState.cooldownUntil || (isFutures && market.candles.length < 20)) return;
+    if (paperPositions().length >= config.maxPositions || !autoState.initialCandidateSelected || Date.now() < autoState.cooldownUntil || market.candles.length < 20) return;
     const flow = flowMetrics(market.symbol); if (!flow) return;
-    const threeConditions = flow.rise30 >= .01 && flow.activity >= 1.1 && (isFutures ? recentPeakPullback() : flow.pullback) <= .12;
-    const futuresExecutionOk = !isFutures || (orderbookBuyLead() >= 5 && spreadPct() <= .07); if (!threeConditions || !futuresExecutionOk) return;
-    const result = paperOrder({ action: 'buy', amountKrw: config.paperOrderKrw });
-    if (result.ok) { const opened = paperPositions().at(-1); if (opened) opened.auto = { protected: false, peak: market.price }; autoState.cooldownUntil = Date.now() + 3_000; paperEvent(`${market.symbol} PAPER 대체형 3조건 자동 매수 · 30초 상승 ${flow.rise30.toFixed(3)}%`); }
+    const side=autoState.candidateSide; if(!side)return paperWait('전수 후보 방향을 고르는 중');
+    const flowOk=side==='SHORT'?flow.rise30<=-.01&&flow.activity>=1.1&&flow.rebound<=.12:flow.rise30>=.01&&flow.activity>=1.1&&flow.pullback<=.12;
+    if(!flowOk)return paperWait('30초 가격·10초 거래 집중 조건 재확인');
+    const setup=dupontSetup(); if(!setup||setup.side!==side)return paperWait('자동 박스 경계와 맞춤 호가압력 조건 대기');
+    const result = paperOrder({ action: side==='SHORT'?'short':'buy', amountKrw: config.paperOrderKrw });
+    const opened=paperPositions().find((position)=>position.symbol===market.symbol); const plan=result.ok?attachDupontPlan(opened,setup):null;
+    if(result.ok&&plan){autoState.cooldownUntil=Date.now()+3_000;autoState.initialCandidateSelected=false;autoState.candidateSide=null;autoState.waitReason='';paperEvent(`${market.symbol} 듀퐁 박스 ${side==='SHORT'?'숏':'롱'} 진입 · 호가압력 ${(setup.pressure.score*100).toFixed(1)}% · 중간선 50% · 1:3`);} else if(result.ok) paperWait('진입 후 박스 손절선 계산 실패');
   } catch (error) { paperEvent(`자동매매 판단 대기 · ${error instanceof Error ? error.message : '확인 필요'}`); }
 }
 function paperAccountView() {
@@ -776,7 +792,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/debug/auto') {
       const flow=flowMetrics(market.symbol);
-      return json(res, 200, { now: Date.now(), kind, autoState: { ...autoState, cooldownRemainingMs: Math.max(0, autoState.cooldownUntil-Date.now()) }, config: { autoTrading: config.autoTrading, mode: config.mode, activeSlot: config.activeSlot }, market: { symbol: market.symbol, price: market.price, usdKrw: market.usdKrw, connected: market.connected, candles: market.candles?.length||0 }, activePaperSubstitute: activePaperSubstitute(), flow, threeConditions: !!flow && flow.rise30>=.01 && flow.activity>=1.1 && (isFutures ? recentPeakPullback() : flow.pullback)<=.12, futuresExecutionOk: !isFutures || (orderbookBuyLead()>=5&&spreadPct()<=.07), position: !!paper.position });
+      const policy=dupontPolicy(); const box=dupontBox(); const pressure=weightedBookPressure(); const setup=dupontSetup();
+      const longFlow=!!flow&&flow.rise30>=.01&&flow.activity>=1.1&&flow.pullback<=.12;
+      const shortFlow=!!flow&&flow.rise30<=-.01&&flow.activity>=1.1&&flow.rebound<=.12;
+      return json(res, 200, { now: Date.now(), kind, autoState: { ...autoState, cooldownRemainingMs: Math.max(0, autoState.cooldownUntil-Date.now()) }, config: { autoTrading: config.autoTrading, mode: config.mode, activeSlot: config.activeSlot, maxPositions: config.maxPositions }, market: { symbol: market.symbol, price: market.price, usdKrw: market.usdKrw, connected: market.connected, candles: market.candles?.length||0 }, activePaperSubstitute: activePaperSubstitute(), policy, flow, box, pressure: pressure ? { score: pressure.score, pct: pressure.score*100 } : null, setup: setup ? { side: setup.side, box: setup.box, pressurePct: setup.pressure.score*100 } : null, longFlow, shortFlow, positions: paperPositions().map((position)=>({symbol:position.symbol,side:position.side,dupont:position.auto?.dupont||null})) });
     }
     if (req.method === 'POST' && url.pathname === '/api/order') {
       const body = await readBody(req);
