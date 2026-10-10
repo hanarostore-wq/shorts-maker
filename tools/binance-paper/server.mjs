@@ -420,7 +420,9 @@ function publicStreams() {
 function wsText(data) { return typeof data === 'string' ? data : Buffer.from(data).toString('utf8'); }
 function subscribeCatalogSymbols() {
   if (isFutures || !catalogSocket || catalogSocket.readyState !== WebSocket.OPEN) return;
-  const params = marketCatalog.map((row) => row.symbol.toLowerCase()).filter((symbol) => !catalogSubscribed.has(symbol)).map((symbol) => `${symbol}@ticker`);
+  // 상장 카탈로그에서 빠진 기존 보유분도 현재 호가가 남아 있으면 반드시 직접 구독한다.
+  const symbols = new Set([...marketCatalog.map((row) => row.symbol), ...paperPositions().map((position) => position.symbol)]);
+  const params = [...symbols].map((symbol) => symbol.toLowerCase()).filter((symbol) => !catalogSubscribed.has(symbol)).map((symbol) => `${symbol}@ticker`);
   for (let i=0;i<params.length;i+=180) {
     const group=params.slice(i,i+180); if (!group.length) continue;
     group.forEach((symbol)=>catalogSubscribed.add(symbol));
@@ -466,7 +468,9 @@ function applyAllTickers(rows) {
   const latest = new Map(rows.filter((row) => String(row.s || '').endsWith('USDT')).map((row) => [row.s, { price: num(row.c), changePct: num(row.P), quoteVolume: num(row.q) }]));
   if (!latest.size) return;
   for (const [symbol, values] of latest) recordCatalogTick(symbol, values.price, values.quoteVolume);
-  marketCatalog = marketCatalog.length < 50 ? [...latest].map(([symbol, values]) => ({ symbol, ...values })).sort((a, b) => b.quoteVolume - a.quoteVolume) : marketCatalog.map((row) => latest.has(row.symbol) ? { ...row, ...latest.get(row.symbol) } : row).sort((a, b) => b.quoteVolume - a.quoteVolume);
+  const held = new Set(paperPositions().map((position) => position.symbol));
+  const missingHeld = [...held].filter((symbol) => !marketCatalog.some((row) => row.symbol === symbol) && latest.has(symbol)).map((symbol) => ({ symbol, ...latest.get(symbol) }));
+  marketCatalog = marketCatalog.length < 50 ? [...latest].map(([symbol, values]) => ({ symbol, ...values })).sort((a, b) => b.quoteVolume - a.quoteVolume) : [...marketCatalog.map((row) => latest.has(row.symbol) ? { ...row, ...latest.get(row.symbol) } : row), ...missingHeld].sort((a, b) => b.quoteVolume - a.quoteVolume);
   requestBroadcast();
 }
 function handleMarketEvent(data) {
