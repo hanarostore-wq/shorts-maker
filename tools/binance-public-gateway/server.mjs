@@ -71,11 +71,11 @@ function landing(res) {
   res.end(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>YuJin Traders Binance</title><style>body{margin:0;background:#0b1018;color:#edf4ff;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}.box{width:min(440px,calc(100vw - 40px));padding:32px;border:1px solid #26384f;border-radius:18px;background:#101925}a{display:block;margin-top:14px;padding:16px;border-radius:12px;background:#17365f;color:#fff;text-decoration:none;font-weight:700}small{color:#92a3b8}</style><main class="box"><h1>YuJin Traders Binance</h1><p>현물 또는 USDⓈ-M 선물 터미널을 선택하세요.</p><a href="/spot/">바이낸스 현물</a><a href="/futures/">바이낸스 USDⓈ-M 선물</a><p><small>외부 접속 인증이 완료된 세션입니다.</small></p></main></html>`);
 }
 function resolveRoute(req, url) {
-  const direct = url.pathname.match(/^\/(spot|futures)(?:\/(.*))?$/);
+  const direct = url.pathname.match(/^\/(spot|futures|control)(?:\/(.*))?$/);
   if (direct) return { terminal: direct[1], path: `/${direct[2] || ''}` };
   try {
     const ref = new URL(String(req.headers.referer || ''));
-    const inferred = ref.pathname.match(/^\/(spot|futures)(?:\/|$)/);
+    const inferred = ref.pathname.match(/^\/(spot|futures|control)(?:\/|$)/);
     if (inferred) return { terminal: inferred[1], path: `${url.pathname}${url.search}` };
   } catch { /* direct non-browser asset request */ }
   return null;
@@ -95,7 +95,7 @@ function proxy(req, res, route) {
   delete headers.authorization;
   const upstream = http.request({ host: target.host, port: target.port, method: req.method, path: route.path, headers }, (upstreamRes) => {
     const contentType = String(upstreamRes.headers['content-type'] || '');
-    if (!contentType.includes('text/html') || !['spot', 'futures'].includes(route.terminal)) {
+    if (!contentType.includes('text/html') || !['spot', 'futures', 'control'].includes(route.terminal)) {
       res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
       upstreamRes.pipe(res);
       return;
@@ -145,12 +145,12 @@ const publicServer = http.createServer(async (req, res) => {
     } catch { return loginPage(res, '/', '로그인 요청을 처리하지 못했습니다.'); }
   }
   if (!sessionValid(req)) return loginPage(res, safeNext(`${url.pathname}${url.search}`));
+  const explicitRoute = resolveRoute(req, url);
+  if (explicitRoute) return proxy(req, res, explicitRoute);
   const forcedService = externalService(req);
   if (forcedService) return proxy(req, res, { terminal: forcedService, path: `${url.pathname}${url.search}` });
   if (url.pathname === '/') return landing(res);
-  const route = resolveRoute(req, url);
-  if (!route) return sendJson(res, 404, { error: '경로 없음', detail: 'spot 또는 futures 경로를 사용하세요.' });
-  proxy(req, res, route);
+  return sendJson(res, 404, { error: '경로 없음', detail: 'spot 또는 futures 경로를 사용하세요.' });
 });
 const adminServer = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', 'http://admin.local');
