@@ -87,7 +87,10 @@ function externalService(req) {
   return null;
 }
 function rewriteHtml(html, terminal) {
-  return html.replace(/\b(href|src)=(['"])\/(?!\/)/g, `$1=$2/${terminal}/`);
+  const rewritten = html.replace(/\b(href|src)=(['"])\/(?!\/)/g, `$1=$2/${terminal}/`);
+  if (terminal !== 'control') return rewritten;
+  const bridge = `<script>(function(){const p='/control';const root=window.fetch;window.fetch=function(i,o){if(typeof i==='string'&&i.startsWith('/api/'))i=p+i;else if(i instanceof Request&&new URL(i.url,location.href).origin===location.origin&&new URL(i.url,location.href).pathname.startsWith('/api/'))i=new Request(p+new URL(i.url,location.href).pathname+new URL(i.url,location.href).search,i);return root.call(this,i,o)};const ES=window.EventSource;window.EventSource=function(u,o){const v=typeof u==='string'&&u.startsWith('/api/')?p+u:u;return new ES(v,o)};window.EventSource.prototype=ES.prototype})();</script>`;
+  return rewritten.replace('</head>', `${bridge}</head>`);
 }
 function proxy(req, res, route) {
   const target = targets[route.terminal];
