@@ -163,6 +163,7 @@ const publicServer = http.createServer(async (req, res) => {
   const explicitRoute = resolveRoute(req, url);
   if (explicitRoute) return proxy(req, res, explicitRoute);
   const forcedService = externalService(req);
+  if (forcedService === 'control') return proxy(req, res, { terminal: 'control', path: `${url.pathname}${url.search}`, noRewrite: true, injectInitialState: url.pathname === '/' });
   if (forcedService) return proxy(req, res, { terminal: forcedService, path: `${url.pathname}${url.search}` });
   if (url.pathname === '/') return landing(res);
   return sendJson(res, 404, { error: '경로 없음', detail: 'spot 또는 futures 경로를 사용하세요.' });
