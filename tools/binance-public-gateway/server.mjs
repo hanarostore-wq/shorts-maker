@@ -93,25 +93,36 @@ function rewriteHtml(html, terminal) {
   const bridge = `<script>(function(){const p='/control';const root=window.fetch;window.fetch=function(i,o){if(typeof i==='string'&&i.startsWith('/api/'))i=p+i;else if(i instanceof Request&&new URL(i.url,location.href).origin===location.origin&&new URL(i.url,location.href).pathname.startsWith('/api/'))i=new Request(p+new URL(i.url,location.href).pathname+new URL(i.url,location.href).search,i);return root.call(this,i,o)};const ES=window.EventSource;window.EventSource=function(u,o){const v=typeof u==='string'&&u.startsWith('/api/')?p+u:u;return new ES(v,o)};window.EventSource.prototype=ES.prototype})();</script>`;
   return rewritten.replace('</head>', `${bridge}</head>`);
 }
+async function controlInitialStateScript() {
+  try {
+    const response = await fetch('http://127.0.0.1:3000/api/state', { signal: AbortSignal.timeout(8_000) });
+    if (!response.ok) return '';
+    const body = JSON.stringify(await response.json()).replace(/</g, '\\u003c');
+    return `<script>window.__BLACK_CONTROL_INITIAL_STATE__=${body};</script>`;
+  } catch { return ''; }
+}
 function proxy(req, res, route) {
   const target = targets[route.terminal];
   const headers = { ...req.headers, host: `${target.host}:${target.port}`, 'accept-encoding': 'identity', 'x-forwarded-proto': 'https', 'x-forwarded-host': req.headers.host || '' };
   delete headers.authorization;
   const upstream = http.request({ host: target.host, port: target.port, method: req.method, path: route.path, headers }, (upstreamRes) => {
     const contentType = String(upstreamRes.headers['content-type'] || '');
-    if (!contentType.includes('text/html') || !['spot', 'futures', 'control'].includes(route.terminal) || route.noRewrite) {
+    const transformHtml = contentType.includes('text/html') && ['spot', 'futures', 'control'].includes(route.terminal) && (!route.noRewrite || route.injectInitialState);
+    if (!transformHtml) {
       res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
       upstreamRes.pipe(res);
       return;
     }
     const chunks = [];
     upstreamRes.on('data', (chunk) => chunks.push(chunk));
-    upstreamRes.on('end', () => {
+    upstreamRes.on('end', async () => {
       const responseHeaders = { ...upstreamRes.headers };
       delete responseHeaders['content-length'];
       delete responseHeaders['content-encoding'];
+      let html = Buffer.concat(chunks).toString('utf8');
+      if (route.injectInitialState) html = html.replace('</head>', `${await controlInitialStateScript()}</head>`);
       res.writeHead(upstreamRes.statusCode || 502, responseHeaders);
-      res.end(rewriteHtml(Buffer.concat(chunks).toString('utf8'), route.terminal));
+      res.end(route.noRewrite ? html : rewriteHtml(html, route.terminal));
     });
   });
   upstream.once('error', () => {
@@ -172,7 +183,7 @@ const controlPublicServer = http.createServer(async (req, res) => {
     } catch { return loginPage(res, '/', '로그인 요청을 처리하지 못했습니다.'); }
   }
   if (!sessionValid(req)) return loginPage(res, safeNext(`${url.pathname}${url.search}`));
-  proxy(req, res, { terminal: 'control', path: `${url.pathname}${url.search}`, noRewrite: true });
+  proxy(req, res, { terminal: 'control', path: `${url.pathname}${url.search}`, noRewrite: true, injectInitialState: url.pathname === '/' });
 });
 const adminServer = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', 'http://admin.local');

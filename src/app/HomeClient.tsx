@@ -22,6 +22,12 @@ interface State {
   sharedStorageConfigured?: boolean;
 }
 
+declare global {
+  interface Window {
+    __BLACK_CONTROL_INITIAL_STATE__?: State;
+  }
+}
+
 const UPBIT_MODAL_AGENT_IDS = new Set(["c_yujin", "c7", "c13"]);
 const BINANCE_MODAL_AGENT_IDS = new Set(["c_binance_spot", "c_binance_futures"]);
 const UPBIT_MODAL_STORAGE_KEY = "control-room-upbit-modal-agent";
@@ -37,19 +43,27 @@ function restoredUpbitModalAgent(): Agent | null {
 
 export default function Home() {
   const [state, setState] = useState<State | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(restoredUpbitModalAgent);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    const initialState = window.__BLACK_CONTROL_INITIAL_STATE__;
+    if (initialState && Array.isArray(initialState.departments)) setState(initialState);
 
     const load = async () => {
       try {
-        const res = await fetch("/api/state", { cache: "no-store" });
+        const res = await fetch("/api/state", { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(10_000) });
+        if (!res.ok) throw new Error(`상태 조회 HTTP ${res.status}`);
         const data = await res.json();
-        if (!cancelled) setState(data);
+        if (!data || !Array.isArray(data.departments)) throw new Error("관제실 상태 형식 오류");
+        if (!cancelled) {
+          setState(data);
+          setLoadError(false);
+        }
       } catch {
-        // 다음 주기에 재시도
+        if (!cancelled) setLoadError(true);
       }
     };
 
@@ -92,8 +106,9 @@ export default function Home() {
 
   if (!state) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-black font-mono text-zinc-500">
-        불러오는 중...
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-black font-mono text-zinc-500">
+        <span>{loadError ? "관제실 상태를 다시 연결하는 중..." : "불러오는 중..."}</span>
+        {loadError && <span className="text-xs text-zinc-600">잠시 뒤 자동으로 다시 시도합니다</span>}
       </div>
     );
   }
