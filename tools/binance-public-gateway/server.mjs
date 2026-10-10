@@ -7,6 +7,8 @@ const PORT = Number(process.env.PORT || 10000);
 const ADMIN_PORT = Number(process.env.ADMIN_PORT || 10001);
 const ACCESS_PATH = process.env.ACCESS_PATH || 'C:/ProgramData/BinancePublicGateway/access.json';
 const targets = {
+  upbit: { host: '127.0.0.1', port: 7070 },
+  control: { host: '127.0.0.1', port: 3000 },
   spot: { host: '127.0.0.1', port: 7081 },
   futures: { host: '127.0.0.1', port: 7082 },
 };
@@ -69,6 +71,12 @@ function resolveRoute(req, url) {
   } catch { /* direct non-browser asset request */ }
   return null;
 }
+function externalService(req) {
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').toLowerCase();
+  if (host.endsWith(':8443')) return 'control';
+  if (host && !host.endsWith(':10000')) return 'upbit';
+  return null;
+}
 function rewriteHtml(html, terminal) {
   return html.replace(/\b(href|src)=(['"])\/(?!\/)/g, `$1=$2/${terminal}/`);
 }
@@ -78,7 +86,7 @@ function proxy(req, res, route) {
   delete headers.authorization;
   const upstream = http.request({ host: target.host, port: target.port, method: req.method, path: route.path, headers }, (upstreamRes) => {
     const contentType = String(upstreamRes.headers['content-type'] || '');
-    if (!contentType.includes('text/html')) {
+    if (!contentType.includes('text/html') || !['spot', 'futures'].includes(route.terminal)) {
       res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
       upstreamRes.pipe(res);
       return;
@@ -117,6 +125,8 @@ const publicServer = http.createServer((req, res) => {
   if (url.pathname === '/healthz') return sendJson(res, 200, { ok: true, port: PORT, configured: configured() });
   if (!configured()) return sendJson(res, 503, { error: '공개 접근 비밀번호 미설정', detail: `BLACK PC에서 http://127.0.0.1:${ADMIN_PORT} 를 열어 설정하세요.` });
   if (!verifyPassword(basicPassword(req))) return unauthorized(res);
+  const forcedService = externalService(req);
+  if (forcedService) return proxy(req, res, { terminal: forcedService, path: `${url.pathname}${url.search}` });
   if (url.pathname === '/') return landing(res);
   const route = resolveRoute(req, url);
   if (!route) return sendJson(res, 404, { error: '경로 없음', detail: 'spot 또는 futures 경로를 사용하세요.' });
