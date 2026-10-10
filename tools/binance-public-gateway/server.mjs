@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 
 const PORT = Number(process.env.PORT || 10000);
 const ADMIN_PORT = Number(process.env.ADMIN_PORT || 10001);
+const CONTROL_PORT = Number(process.env.CONTROL_PORT || 10002);
 const ACCESS_PATH = process.env.ACCESS_PATH || 'C:/ProgramData/BinancePublicGateway/access.json';
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const sessions = new Map();
@@ -98,7 +99,7 @@ function proxy(req, res, route) {
   delete headers.authorization;
   const upstream = http.request({ host: target.host, port: target.port, method: req.method, path: route.path, headers }, (upstreamRes) => {
     const contentType = String(upstreamRes.headers['content-type'] || '');
-    if (!contentType.includes('text/html') || !['spot', 'futures', 'control'].includes(route.terminal)) {
+    if (!contentType.includes('text/html') || !['spot', 'futures', 'control'].includes(route.terminal) || route.noRewrite) {
       res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
       upstreamRes.pipe(res);
       return;
@@ -155,6 +156,24 @@ const publicServer = http.createServer(async (req, res) => {
   if (url.pathname === '/') return landing(res);
   return sendJson(res, 404, { error: '경로 없음', detail: 'spot 또는 futures 경로를 사용하세요.' });
 });
+const controlPublicServer = http.createServer(async (req, res) => {
+  const url = new URL(req.url || '/', 'http://control.local');
+  if (url.pathname === '/healthz') return sendJson(res, 200, { ok: true, port: CONTROL_PORT, configured: configured() });
+  if (!configured()) return sendJson(res, 503, { error: '공개 접근 비밀번호 미설정' });
+  if (url.pathname === '/login' && req.method === 'GET') return loginPage(res, safeNext(url.searchParams.get('next')));
+  if (url.pathname === '/login' && req.method === 'POST') {
+    try {
+      const body = new URLSearchParams(await readRequestBody(req));
+      const next = safeNext(body.get('next'));
+      if (!verifyPassword(String(body.get('password') || ''))) return loginPage(res, next, '비밀번호가 일치하지 않습니다.');
+      const session = createSession();
+      res.writeHead(303, { Location: next, 'Set-Cookie': `yt_public_session=${session}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`, 'Cache-Control': 'no-store' });
+      return res.end();
+    } catch { return loginPage(res, '/', '로그인 요청을 처리하지 못했습니다.'); }
+  }
+  if (!sessionValid(req)) return loginPage(res, safeNext(`${url.pathname}${url.search}`));
+  proxy(req, res, { terminal: 'control', path: `${url.pathname}${url.search}`, noRewrite: true });
+});
 const adminServer = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', 'http://admin.local');
   if (url.pathname !== '/') return sendJson(res, 404, { error: '경로 없음' });
@@ -172,4 +191,5 @@ const adminServer = http.createServer(async (req, res) => {
 
 publicServer.keepAliveTimeout = 65_000;
 publicServer.listen(PORT, '127.0.0.1', () => console.log(`Public trading gateway listening on 127.0.0.1:${PORT}`));
+controlPublicServer.listen(CONTROL_PORT, '127.0.0.1', () => console.log(`Public control gateway listening on 127.0.0.1:${CONTROL_PORT}`));
 adminServer.listen(ADMIN_PORT, '127.0.0.1', () => console.log(`Public access setup listening on 127.0.0.1:${ADMIN_PORT}`));
