@@ -211,7 +211,7 @@ function topRows() {
     const p = w.position;
     const latest = w.last?.reason || '상승 중 보유 · 고점 하락 익절 감시';
     const isSel = w.market === (S.market || holdingRows()[0]?.market);
-    const held = `<div class="holding-cell"><div class="holding-info"><b class="${upDown(p.netPnl)}">${signedMoney(p.netPnl)}</b><small>${money(p.cost)} · ${Math.floor((p.heldSec || 0) / 60)}분</small></div><button class="row-sell-btn" data-row-sell="${w.market}" type="button">즉시매도</button></div>`;
+    const held = `<div class="holding-cell"><div class="holding-info"><b class="${upDown(p.netPnl)}">${signedMoney(p.netPnl)}</b><small>${money(p.cost)} · ${Math.floor((p.heldSec || 0) / 60)}분</small></div><button class="row-sell-btn" data-row-sell="${w.market}" type="button">청산</button></div>`;
     return `<div class="top-row ${isSel ? 'selected' : ''}" data-market="${w.market}" role="button" tabindex="0" aria-label="${esc(nameOf(w.market))} 상세 보기">
       <span class="top-coin"><img class="coin-img" src="${coinIcon(w.market)}" alt="" onerror="this.style.visibility='hidden'"><div><b>${esc(nameOf(w.market))}</b><small>${sym(w.market)}</small></div></span>
       <span class="top-price top-price-with-entry" data-live-price="${w.market}">${liveHoldingPriceMarkup(w.market, w.price, p)}</span>
@@ -335,14 +335,13 @@ function selectedCoinHistory(market) {
 }
 
 function selectedCoinOrderBody(w, p, price) {
-  const isLive = S.config?.mode === 'live';
   const orderKrw = S.config?.trade?.orderMode === 'percent'
     ? Math.floor(Number(S.summary?.krw || 0) * Number(S.config?.trade?.orderPct || 0) / 100)
     : Number(S.config?.trade?.orderKrw || 0);
   if (selectedOrderTab === 'history') return `<div class="selected-tab-body selected-history">${selectedCoinHistory(w.market)}</div>`;
-  if (selectedOrderTab === 'sell') return `<div class="selected-tab-body"><div class="selected-market-line"><span>실시간 시장가</span>${liveOrderPriceMarkup(w.market, price)}</div><div class="selected-order-line"><span>주문 가능</span><b>${p ? `${fmtQty(p.qty)} ${sym(w.market)}` : '보유 수량 없음'}</b></div><button type="button" class="selected-order-main sell" data-quick="sell" ${p ? '' : 'disabled'}>${isLive ? '시장가 전량 매도' : '모의 전량 매도'}</button></div>`;
-  if (selectedOrderTab === 'quick') return `<div class="selected-tab-body"><div class="selected-market-line"><span>실시간 시장가</span>${liveOrderPriceMarkup(w.market, price)}</div><div class="selected-quick-actions"><button type="button" class="buy" data-quick="buy">${isLive ? '시장가 매수' : '모의 매수'}</button><button type="button" class="sell" data-quick="sell" ${p ? '' : 'disabled'}>${isLive ? '전량 매도' : '모의 매도'}</button></div></div>`;
-  return `<div class="selected-tab-body"><div class="selected-market-line"><span>실시간 시장가</span>${liveOrderPriceMarkup(w.market, price)}</div><div class="selected-order-line"><span>한 번 주문금액</span><b>${money(orderKrw)}</b></div><button type="button" class="selected-order-main buy" data-quick="buy">${isLive ? '시장가 매수' : '모의 시장가 매수'}</button></div>`;
+  if (selectedOrderTab === 'sell') return `<div class="selected-tab-body"><div class="selected-market-line"><span>실시간 시장가</span>${liveOrderPriceMarkup(w.market, price)}</div><div class="selected-order-line"><span>주문 가능</span><b>${p ? `${fmtQty(p.qty)} ${sym(w.market)}` : '보유 수량 없음'}</b></div><button type="button" class="selected-order-main sell" data-quick="sell" ${p ? '' : 'disabled'}>전량 청산</button></div>`;
+  if (selectedOrderTab === 'quick') return `<div class="selected-tab-body"><div class="selected-market-line"><span>실시간 시장가</span>${liveOrderPriceMarkup(w.market, price)}</div><div class="selected-quick-actions"><button type="button" class="buy" data-quick="buy">매수</button><button type="button" class="sell" data-quick="sell" ${p ? '' : 'disabled'}>청산</button></div></div>`;
+  return `<div class="selected-tab-body"><div class="selected-market-line"><span>실시간 시장가</span>${liveOrderPriceMarkup(w.market, price)}</div><div class="selected-order-line"><span>한 번 주문금액</span><b>${money(orderKrw)}</b></div><button type="button" class="selected-order-main buy" data-quick="buy">시장가 매수</button></div>`;
 }
 
 function dataCollectionNotice(w) {
@@ -656,8 +655,8 @@ function bindBoard() {
       e.stopPropagation();
       const mkt = rowSell.dataset.rowSell;
       try {
-        await api('/api/order', { market: mkt, side: 'sell', ratio: 1 });
-        toast('보유 코인 전량 매도 요청을 보냈습니다');
+        const result = await api('/api/order', { intent: 'close', action: 'close', market: mkt, symbol: mkt, ratio: 1 });
+        toast(result.message || `${sym(mkt)} 청산 완료`);
       } catch (err) { toast(err.message, 'err'); }
       return;
     }
@@ -780,7 +779,7 @@ async function applyDraft() {
   } catch (e) { toast(e.message, 'err'); }
 }
 async function quickOrder(side) {
-  const w = selected(); if (!w) return; try { const body = side === 'buy' ? { market: w.market, side, krw: S.config?.trade?.orderMode === 'percent' ? Math.floor((S.summary?.krw || 0) * (S.config.trade.orderPct || 0) / 100) : S.config?.trade?.orderKrw } : { market: w.market, side, ratio: 1 }; await api('/api/order', body); toast(side === 'buy' ? '매수 요청을 보냈습니다' : '매도 요청을 보냈습니다'); } catch (e) { toast(e.message, 'err'); } }
+  const w = selected(); if (!w) return; try { const amountKrw = S.config?.trade?.orderMode === 'percent' ? Math.floor((S.summary?.krw || 0) * (S.config.trade.orderPct || 0) / 100) : S.config?.trade?.orderKrw; const body = side === 'buy' ? { intent: 'buy', action: 'buy', market: w.market, symbol: w.market, amountKrw } : { intent: 'close', action: 'close', market: w.market, symbol: w.market, ratio: 1 }; const result = await api('/api/order', body); toast(result.message || (side === 'buy' ? `${sym(w.market)} 매수 완료` : `${sym(w.market)} 청산 완료`)); } catch (e) { toast(e.message, 'err'); } }
 
 function render() {
   if (Date.now() - lastInteraction < SCROLL_IDLE_MS) {

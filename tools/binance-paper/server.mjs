@@ -109,13 +109,21 @@ ensureSlotVersions();
 saveConfig();
 let paper = readJson(paperPath, () => defaultPaper(config.paperInitialKrw));
 function paperPositions() {
-  const rows = Array.isArray(paper.positions) ? paper.positions.filter(Boolean) : [];
-  if (paper.position && !rows.some((item) => item === paper.position || (item.symbol === paper.position.symbol && item.openedAt === paper.position.openedAt))) rows.unshift(paper.position);
+  const valid = (item) => !!item && !!item.symbol && num(item.qty) > 1e-12 && num(item.marginKrw) > 0;
+  const rows = Array.isArray(paper.positions) ? paper.positions.filter(valid) : [];
+  if (valid(paper.position) && !rows.some((item) => item === paper.position || (item.symbol === paper.position.symbol && item.openedAt === paper.position.openedAt))) rows.unshift(paper.position);
   paper.positions = rows;
   paper.position = rows[0] || null;
   return rows;
 }
+const paperRowsBeforeNormalization = Array.isArray(paper.positions) ? paper.positions.length : (paper.position ? 1 : 0);
 paperPositions();
+if (paperRowsBeforeNormalization !== paper.positions.length) {
+  paper.events ||= [];
+  paper.events.unshift({ time: Date.now(), message: `PAPER 원장 정규화 · 0수량 또는 0원 보유 ${paperRowsBeforeNormalization - paper.positions.length}개를 보유 한도에서 제외` });
+  paper.events = paper.events.slice(0, 80);
+  savePaper();
+}
 const market = {
   symbol: config.symbol,
   interval: config.interval,
@@ -512,7 +520,7 @@ function paperPositionView(position = paperPositions()[0]) {
 }
 function paperPositionViews() { return paperPositions().map((position) => paperPositionView(position)).filter(Boolean); }
 function closePaperFraction(fraction, reason, symbol = market.symbol) {
-  const position = paperPositions().find((item) => item.symbol === symbol) || paperPositions()[0];
+  const position = paperPositions().find((item) => item.symbol === symbol);
   const view = paperPositionView(position);
   if (!position || !view) return false;
   const f = Math.max(.01, Math.min(1, fraction)); const amount = view.marginKrw * f; const pnl = view.pnlKrw * f;
@@ -523,11 +531,12 @@ function closePaperFraction(fraction, reason, symbol = market.symbol) {
 }
 async function selectFullMarketCandidate() {
   const held = new Set(paperPositions().map((position) => position.symbol));
-  if (autoState.selecting || held.size >= config.maxPositions || !activePaperSubstitute() || Date.now() < autoState.cooldownUntil || (autoState.initialCandidateSelected && Date.now()-autoState.candidateSelectedAt<15_000)) return;
+  if (autoState.selecting || !activePaperSubstitute() || Date.now() < autoState.cooldownUntil || (autoState.initialCandidateSelected && Date.now()-autoState.candidateSelectedAt<15_000)) return;
+  if (held.size >= config.maxPositions) { paperWait(`동시 보유 한도 ${held.size}/${config.maxPositions}개에 도달`); return; }
   const candidate = marketCatalog.map((row) => { const flow=flowMetrics(row.symbol); const book=bookStats(row.symbol); const longOk=flow&&flow.rise30>=.01&&flow.activity>=1.1&&flow.pullback<=.12&&(!isFutures||book&&book.lead>=5&&book.spread<=.07); const shortOk=isFutures&&flow&&flow.rise30<=-.01&&flow.activity>=1.1&&flow.rebound<=.12&&book&&book.lead<=-5&&book.spread<=.07; return {row,flow,book,side:longOk?'LONG':shortOk?'SHORT':null}; })
     .filter((item) => !held.has(item.row.symbol) && item.side)
     .sort((left, right) => (Math.abs(right.flow.rise30) * right.row.quoteVolume) - (Math.abs(left.flow.rise30) * left.row.quoteVolume))[0];
-  if (!candidate) return;
+  if (!candidate) { paperWait('전수 마켓에서 30초 가격·거래 집중 후보 탐색 중'); return; }
   autoState.selecting = true; autoState.cooldownUntil = Date.now() + 1_500;
   try {
     market.symbol = candidate.row.symbol; config.symbol = market.symbol; saveConfig(); await seedMarket(); connectMarket(); autoState.initialCandidateSelected = true; autoState.candidateSide=candidate.side; autoState.candidateSelectedAt=Date.now(); autoState.waitReason='';
@@ -541,10 +550,10 @@ function autoEvaluate() {
     for (const position of [...paperPositions()]) {
       const view = paperPositionView(position); if (!view) continue;
       // 확장 배포 이전 보유분에는 박스 경계·진입 근거가 저장돼 있지 않다.
-      // 새 규칙으로 임의 재해석하거나 구형 손절로 닫지 않고, 사용자가 정리할 때까지 보존한다.
+      // 새 박스 규칙과 자동 청산을 임의로 덮어쓰지 않고, 사용자의 직접 청산만 허용한다.
       if (!position.auto?.dupont) {
         position.auto ||= {};
-        if (!position.auto.legacyDupont) { position.auto.legacyDupont = true; paperEvent(`${position.symbol} 기존 PAPER 보유분 보존 · 새 듀퐁 박스 규칙은 신규 진입부터 적용`); savePaper(); }
+        if (!position.auto.legacyDupont) { position.auto.legacyDupont = true; paperEvent(`${position.symbol} 기존 보유분 보존 · 청산 버튼으로 직접 정리 가능`); savePaper(); }
         continue;
       }
       if (evaluateDupontExit(position, view)) { autoState.cooldownUntil = Date.now() + 3_000; continue; }
@@ -553,7 +562,8 @@ function autoEvaluate() {
       if (st.protected) { st.peak = Math.max(num(st.peak), price); if ((st.peak - price) / st.peak * 100 >= .15) { closePaperFraction(1, '반대 강세 대리 청산', position.symbol); autoState.cooldownUntil = Date.now() + 3_000; continue; } }
       if (view.pnlPct <= -.25) { st.dangerAt ||= Date.now(); if (view.pnlPct >= -.19) delete st.dangerAt; else if (view.pnlPct <= -.4 || Date.now() - st.dangerAt >= 3_000) { closePaperFraction(1, '손절 주의 확인 후 비상 손절', position.symbol); autoState.cooldownUntil = Date.now() + 3_000; } }
     }
-    if (paperPositions().length >= config.maxPositions || !autoState.initialCandidateSelected || Date.now() < autoState.cooldownUntil || market.candles.length < 20) return;
+    if (paperPositions().length >= config.maxPositions) { paperWait(`동시 보유 한도 ${paperPositions().length}/${config.maxPositions}개에 도달`); return; }
+    if (!autoState.initialCandidateSelected || Date.now() < autoState.cooldownUntil || market.candles.length < 20) return;
     const flow = flowMetrics(market.symbol); if (!flow) return;
     const side=autoState.candidateSide; if(!side)return paperWait('전수 후보 방향을 고르는 중');
     const flowOk=side==='SHORT'?flow.rise30<=-.01&&flow.activity>=1.1&&flow.rebound<=.12:flow.rise30>=.01&&flow.activity>=1.1&&flow.pullback<=.12;
@@ -573,38 +583,54 @@ function recordPaperTrade(type, detail, amountKrw, pnlKrw = null) {
   paper.trades.unshift({ id: crypto.randomUUID(), time: Date.now(), type, detail, amountKrw, pnlKrw, source: 'PAPER' });
   paper.trades = paper.trades.slice(0, 120);
 }
+function orderIntent(body = {}) {
+  const raw = String(body.intent || body.action || body.side || '').toLowerCase();
+  return raw === 'sell' ? 'close' : raw;
+}
+function orderSymbol(body = {}) {
+  const code = String(body.symbol || body.market || '').trim().toUpperCase();
+  if (/^[A-Z0-9]{2,}USDT$/.test(code)) return code;
+  const symbol = code ? uiSymbol(code) : market.symbol;
+  return /^[A-Z0-9]{2,}USDT$/.test(symbol) ? symbol : market.symbol;
+}
 function paperOrder(body) {
-  const action = String(body.action || '').toLowerCase();
+  const action = orderIntent(body);
+  const symbol = orderSymbol(body);
   const amountKrw = Math.max(10_000, Math.floor(num(body.amountKrw, config.paperOrderKrw)));
   if (action === 'reset') {
     const initialKrw = Math.max(10_000, Math.floor(num(body.initialKrw, config.paperInitialKrw)));
     config.paperInitialKrw = initialKrw; config.paperOrderKrw = Math.min(Math.max(10_000, amountKrw), initialKrw); saveConfig();
     paper = defaultPaper(initialKrw); savePaper();
-    return { ok: true, message: `${initialKrw.toLocaleString('ko-KR')}원 PAPER 계좌를 완전히 초기화했습니다` };
+    return { ok: true, message: `${initialKrw.toLocaleString('ko-KR')}원 모의 계좌를 완전히 초기화했습니다` };
   }
-  if (!market.price || !market.usdKrw) throw new Error('실시간 Binance 시세와 환율을 받은 뒤 주문할 수 있습니다');
+  if (!market.usdKrw) throw new Error('주문 실패 · Binance 환율 수신을 기다리는 중입니다');
   const positions = paperPositions();
-  const position = paperPositionView(positions.find((item) => item.symbol === market.symbol) || positions[0]);
+  const selectedPosition = positions.find((item) => item.symbol === symbol);
+  const position = selectedPosition ? paperPositionView(selectedPosition) : null;
   if (action === 'close') {
-    if (!position) throw new Error('정리할 PAPER 보유분이 없습니다');
+    if (!position) throw new Error(`청산 실패 · ${uiCode(symbol)} 보유 수량을 찾지 못했습니다`);
     paper.availableKrw += position.marginKrw + position.pnlKrw;
     paper.realizedKrw += position.pnlKrw;
-    recordPaperTrade(isFutures ? 'PAPER 포지션 정리' : 'PAPER 매도', `${position.symbol} 보유분 정리`, position.marginKrw + position.pnlKrw, position.pnlKrw);
-    paper.positions = positions.filter((item) => item.symbol !== position.symbol); paperPositions(); savePaper(); return { ok: true, message: 'PAPER 보유분을 정리했습니다' };
+    recordPaperTrade(isFutures ? '선물 청산' : '현물 청산', `${uiCode(position.symbol)} 전량 청산`, position.marginKrw + position.pnlKrw, position.pnlKrw);
+    paper.positions = positions.filter((item) => item.symbol !== position.symbol); paperPositions(); savePaper(); return { ok: true, message: `${uiCode(position.symbol)} 청산 완료` };
   }
-  if (positions.some((item) => item.symbol === market.symbol)) throw new Error('해당 PAPER 종목을 이미 보유 중입니다');
+  if (!['buy', 'short'].includes(action)) throw new Error('주문 실패 · 매수 또는 청산 동작을 선택하세요');
+  if (!safeSymbol(symbol)) throw new Error(`주문 실패 · ${uiCode(symbol)}은 현재 거래 가능한 Binance USDT 종목이 아닙니다`);
+  const price = chartLivePrice(symbol);
+  if (!price) throw new Error(`주문 실패 · ${uiCode(symbol)} 실시간 시세 수신을 기다리는 중입니다`);
+  if (positions.some((item) => item.symbol === symbol)) throw new Error(`주문 실패 · ${uiCode(symbol)}은 이미 보유 중입니다`);
   if (positions.length >= config.maxPositions) throw new Error(`동시 보유 한도 ${config.maxPositions}개에 도달했습니다`);
-  if (amountKrw > paper.availableKrw) throw new Error('PAPER 주문가능 원화가 부족합니다');
+  if (amountKrw > paper.availableKrw) throw new Error('주문 실패 · 모의 계좌 주문가능 원화가 부족합니다');
   const side = action === 'short' && isFutures ? 'SHORT' : 'LONG';
   const leverage = isFutures ? Math.max(1, Math.min(125, Math.floor(num(body.leverage, config.futuresLeverage)))) : 1;
   const notionalKrw = amountKrw * leverage;
-  const qty = notionalKrw / krw(market.price);
+  const qty = notionalKrw / krw(price);
   paper.availableKrw -= amountKrw;
-  const opened = { symbol: market.symbol, side, qty, entryKrw: krw(market.price), marginKrw: amountKrw, leverage, openedAt: Date.now() };
+  const opened = { symbol, side, qty, entryKrw: krw(price), marginKrw: amountKrw, leverage, openedAt: Date.now() };
   paper.positions = [...positions, opened]; paper.position = paper.positions[0];
-  recordPaperTrade(side === 'SHORT' ? 'PAPER 숏 진입' : 'PAPER 매수', `${market.symbol} · ${leverage}배`, amountKrw);
+  recordPaperTrade(side === 'SHORT' ? '선물 숏 진입' : '현물 매수', `${symbol} · ${leverage}배`, amountKrw);
   savePaper();
-  return { ok: true, message: `${side === 'SHORT' ? 'PAPER 숏' : 'PAPER 매수'} 주문을 기록했습니다` };
+  return { ok: true, message: `${uiCode(symbol)} ${side === 'SHORT' ? '숏 진입' : '매수'} 완료` };
 }
 
 function addLiveEvent(event) {
@@ -706,37 +732,53 @@ function formatUserEvent(data) {
 async function liveOrder(body) {
   if (!body.confirmLive) throw new Error('실계좌 주문 확인창에서 최종 확인해야 합니다');
   if (!config.apiKey || !config.secretKey) throw new Error('실계좌 주문 전 API Key와 Secret Key를 로컬 설정에 입력하세요');
-  const side = String(body.action || '').toLowerCase();
+  const side = orderIntent(body);
+  const symbol = orderSymbol(body);
   const type = String(body.orderType || 'market').toUpperCase() === 'LIMIT' ? 'LIMIT' : 'MARKET';
   const amountKrw = Math.max(10_000, Math.floor(num(body.amountKrw, config.paperOrderKrw)));
   const quoteAmount = amountKrw / Math.max(market.usdKrw, 1);
-  if (!market.price) throw new Error('실시간 시세를 받은 뒤 주문할 수 있습니다');
+  const price = chartLivePrice(symbol);
+  if (!safeSymbol(symbol) || !price) throw new Error(`실전 주문 실패 · ${uiCode(symbol)} 실시간 시세 수신을 기다리는 중입니다`);
   if (!isFutures) {
     const isBuy = side === 'buy';
-    const isSell = side === 'sell';
+    const isSell = side === 'close';
     if (!isBuy && !isSell) throw new Error('현물 주문 방향을 확인하세요');
-    const params = { symbol: market.symbol, side: isBuy ? 'BUY' : 'SELL', type };
+    const params = { symbol, side: isBuy ? 'BUY' : 'SELL', type };
     if (isBuy && type === 'MARKET') params.quoteOrderQty = fixed(quoteAmount, 4);
     else {
-      const price = type === 'LIMIT' ? num(body.limitPrice, market.price) : market.price;
-      const qty = isSell ? Math.max(0, num(body.qty)) : quoteAmount / price;
+      const orderPrice = type === 'LIMIT' ? num(body.limitPrice, price) : price;
+      let qty = isSell ? Math.max(0, num(body.qty)) : quoteAmount / orderPrice;
+      if (isSell && !qty) {
+        const account = await signedRequest('GET', SPOT_REST, '/api/v3/account');
+        const asset = (account.balances || []).find((item) => item.asset === symbol.replace(/USDT$/, ''));
+        qty = Math.max(0, num(asset?.free) * Math.min(1, Math.max(.0001, num(body.ratio, 1))));
+      }
+      if (!qty) throw new Error(`청산 실패 · ${uiCode(symbol)} 주문가능 수량이 없습니다`);
       params.quantity = fixed(qty, 6); if (type === 'LIMIT') { params.price = fixed(price, 2); params.timeInForce = 'GTC'; }
     }
     const order = await signedRequest('POST', SPOT_REST, '/api/v3/order', params);
-    addLiveEvent({ kind: 'ORDER_SENT', message: `${market.symbol} ${isBuy ? '매수' : '매도'} 주문 접수` });
+    addLiveEvent({ kind: 'ORDER_SENT', message: `${symbol} ${isBuy ? '매수' : '청산'} 주문 접수` });
     await refreshLiveAccount();
     return { live: true, order: normalizeLiveOrder(order) };
   }
   const action = side === 'short' ? 'SELL' : 'BUY';
   const closing = side === 'close';
   const leverage = Math.max(1, Math.min(125, Math.floor(num(body.leverage, config.futuresLeverage))));
-  if (!closing) await signedRequest('POST', FUTURES_REST, '/fapi/v1/leverage', { symbol: market.symbol, leverage });
-  const qty = Math.max(0.001, fixed((quoteAmount * leverage) / market.price, 3));
-  const params = { symbol: market.symbol, side: closing ? String(body.closeSide || 'SELL').toUpperCase() : action, type, quantity: qty };
+  if (!closing) await signedRequest('POST', FUTURES_REST, '/fapi/v1/leverage', { symbol, leverage });
+  let qty = Math.max(0.001, fixed((quoteAmount * leverage) / price, 3));
+  let closeSide = String(body.closeSide || '').toUpperCase();
+  if (closing) {
+    const account = await signedRequest('GET', FUTURES_REST, '/fapi/v2/account');
+    const position = (account.positions || []).find((item) => item.symbol === symbol && num(item.positionAmt));
+    if (!position) throw new Error(`청산 실패 · ${uiCode(symbol)} 실전 포지션이 없습니다`);
+    qty = Math.abs(num(position.positionAmt)) * Math.min(1, Math.max(.0001, num(body.ratio, 1)));
+    closeSide = num(position.positionAmt) > 0 ? 'SELL' : 'BUY';
+  }
+  const params = { symbol, side: closing ? closeSide : action, type, quantity: qty };
   if (closing) params.reduceOnly = 'true';
-  if (type === 'LIMIT') { params.price = fixed(num(body.limitPrice, market.price), 2); params.timeInForce = 'GTC'; }
+  if (type === 'LIMIT') { params.price = fixed(num(body.limitPrice, price), 2); params.timeInForce = 'GTC'; }
   const order = await signedRequest('POST', FUTURES_REST, '/fapi/v1/order', params);
-  addLiveEvent({ kind: 'ORDER_SENT', message: `${market.symbol} ${params.side} 선물 주문 접수` });
+  addLiveEvent({ kind: 'ORDER_SENT', message: `${symbol} ${closing ? '선물 청산' : `${params.side} 선물 주문`} 접수` });
   await refreshLiveAccount();
   return { live: true, order: normalizeLiveOrder(order) };
 }
@@ -892,6 +934,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/order') {
       const body = await readBody(req);
+      body.intent = orderIntent(body);
+      body.symbol = orderSymbol(body);
       const result = config.mode === 'live' ? await liveOrder(body) : paperOrder(body);
       requestBroadcast(); return json(res, 200, { ok: true, ...result, state: snapshot() });
     }

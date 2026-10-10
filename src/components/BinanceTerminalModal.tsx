@@ -28,7 +28,7 @@ export function BinanceTerminalModal({ kind, onClose }: { kind: TerminalKind; on
 
   if (!kind) return null;
   const label = kind === "spot" ? "바이낸스 · 현물" : "바이낸스 · USDⓈ-M 선물";
-  const detail = kind === "spot" ? "로컬 분석 · PAPER/실계좌 주문 터미널" : "로컬 분석 · PAPER/실계좌 선물 터미널";
+  const detail = kind === "spot" ? "로컬 분석 · 모의·실전 전환 주문 터미널" : "로컬 분석 · 모의·실전 전환 선물 터미널";
 
   return (
     <dialog ref={dialog} className={styles.dialog} aria-labelledby="binance-terminal-title" onCancel={(event) => { event.preventDefault(); onClose(); }}>
