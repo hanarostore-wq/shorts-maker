@@ -300,7 +300,7 @@ const handlers = {
         </article></body></html>`);
     }
     if (u.pathname === '/feedpost-en' || u.pathname === '/feedpost-fail') {
-      const body = u.pathname.endsWith('fail') ? 'FAILTEST sunset walk on the beach today' : 'Took a sunset walk on the beach today. It was so beautiful!';
+      const body = u.pathname.endsWith('fail') ? 'FAILTEST sunset walk on the beach today' : 'Took a sunset walk on the beach today. It was so beautiful! Join https:// 18livehub.com/signup';
       return html(res, `<!doctype html><html><head><meta charset="utf-8"><title>Home / X</title></head><body style="margin:0;background:#000;color:#eee">
         <article style="width:660px;margin:20px">
           <div style="display:flex;gap:8px;align-items:center"><div data-testid="Tweet-User-Avatar" style="width:40px;height:40px;border-radius:50%;background:#4a8"></div><div data-testid="User-Name"><b>Emma</b> <span style="color:#888">@emma_test · Jun 2</span></div></div>
@@ -995,7 +995,9 @@ const handlers = {
     const q = u.searchParams.get('q') || '';
     log.push({ host: 'translate.googleapis.com', tl: u.searchParams.get('tl'), q });
     if (/FAILTEST/.test(q)) return json(req, res, { error: 'boom' }, 500);
-    return json(req, res, [[['오늘 해변에서 노을을 보며 산책했어요. 정말 아름다웠어요!', q, null, null, 1]], null, 'en']);
+    // 번역기에 주소가 넘어오면 표시(LINKSENT), 번역문에는 주소를 되붙여 돌려준다(번역 뒤에도 빼는지 확인)
+    const sent = /livehub/i.test(q || '') ? ' LINKSENT' : '';
+    return json(req, res, [[[`오늘 해변에서 노을을 보며 산책했어요. 정말 아름다웠어요!${sent} 18livehub.com/signup`, q, null, null, 1]], null, 'en']);
   },
   'bsky.social': (req, res, u) => {
     // 팔로우 버튼용 (PDS → 앱뷰 프록시)

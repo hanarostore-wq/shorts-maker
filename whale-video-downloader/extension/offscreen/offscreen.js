@@ -2,13 +2,12 @@
 //   OPFS 임시 파일에 쓴 뒤 blob 주소를 서비스워커에 넘겨 웨일 다운로드 폴더(사용자가 지정한 폴더)로 저장한다.
 //   사진은 원본 그대로, jpg·png·gif 가 아니면 PNG 로 변환한다.
 import { copyFile, mergeStreams, remuxHls, StepError, STEP } from './engine.js';
-import { summarize, captionImage, captionVideo, feedImage, canvasPng, coverVideo, introVideo, cropShot, needsKorean, translateToKorean, withTranslation, postCard, authorLine, ensureH264Aac } from './caption.js';
+import { summarize, captionImage, captionVideo, feedImage, canvasPng, coverVideo, introVideo, cropShot, needsKorean, translateToKorean, stripLinks, withTranslation, postCard, authorLine, ensureH264Aac } from './caption.js';
 
 // ① 방식: 찍어 둔 피드 글 부분 캡처가 있으면 그것을, 없으면 요약 글자를 붙인다
 async function overlayFor(cap, summary, warns) {
   // 피드 본문 글자만(해시태그·링크 제외). 한국어가 아니면 번역문으로 바꿔 쓴다(원문은 넣지 않음).
-  const body = String(cap.text || '')
-    .replace(/https?:\/\/\S+/g, ' ')
+  const body = stripLinks(cap.text)
     .replace(/(^|\s)[#＃][\p{L}\p{N}_]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -17,7 +16,7 @@ async function overlayFor(cap, summary, warns) {
   let ko = '';
   if (body && cap.translate && needsKorean(body)) {
     try {
-      ko = await translateToKorean(body);
+      ko = stripLinks(await translateToKorean(body)); // 번역기가 주소를 되살리거나 새로 붙여도 다시 뺀다
     } catch (err) {
       warns.push(`피드 글 번역 실패(번역 단계): ${err?.message || err} → 원문 그대로 넣었습니다. 인터넷 연결을 확인하거나 설정에서 '피드 글 한국어 번역'을 끄세요.`);
     }

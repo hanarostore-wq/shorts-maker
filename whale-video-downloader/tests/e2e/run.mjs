@@ -2383,7 +2383,7 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       await pp.close();
       if (expectOk) {
         if (saved) execFileSync('cp', [saved, path.join(SHOTS, 'caption-translated.jpg')]);
-        record('[번역] 한국어가 아닌 피드 글은 한국어 번역만(원문 없음)', /^\[피드 글\+번역\]/.test(h.captionUsed || '') && /해변/.test(h.captionUsed || '') && !/sunset/i.test(h.captionUsed || '') && !h.warning, { note: `${saved ? path.basename(saved) : '저장 안 됨'} · ${h.captionUsed || '(없음)'} · 안내: ${h.warning || '없음'}` });
+        record('[번역] 한국어가 아닌 피드 글은 한국어 번역만(원문·주소 없음)', /^\[피드 글\+번역\]/.test(h.captionUsed || '') && /해변/.test(h.captionUsed || '') && !/sunset|livehub|https|LINKSENT/i.test(h.captionUsed || '') && !h.warning, { note: `${saved ? path.basename(saved) : '저장 안 됨'} · ${h.captionUsed || '(없음)'} · 안내: ${h.warning || '없음'}` });
       } else {
         record('[번역] 번역 실패 시 원문 글자 + 단계·원인·조치 안내', !!saved && /^\[피드 글\]/.test(h.captionUsed || '') && /번역 실패\(번역 단계\)/.test(h.warning || '') && /HTTP 500/.test(h.warning || ''), { note: `${h.captionUsed || '(없음)'} · 안내: ${h.warning || '없음'}` });
       }

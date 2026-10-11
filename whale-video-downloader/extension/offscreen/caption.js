@@ -20,10 +20,25 @@ export function textPx(w, h) {
   return Math.max(12, Math.round((TEXT_PX * short) / TEXT_BASE));
 }
 
+// ── 링크 빼기: 영상에 넣는 본문은 글자만 ──
+//  https://… / 'https:// 18live.com' 처럼 띄어 쓴 주소 / www.… / example.com/… / t.co/… / 'site[.]com' 같은 가린 주소
+const TLD = 'com|net|org|io|co|me|tv|ly|gg|xyz|app|info|link|live|site|online|top|vip|club|kr|jp|cn|us|uk|to|cc|fun|shop|store|pro|biz|ai|ru|in|ph|th|vn|id|my|sg|hk|tw|de|fr|es|it|br|mx|ca|au|bio|page|fans|chat|cam|sex|xxx|porn|tk|ml|ga|cf|gq|ws|su|ee|lol|onl|icu|buzz|asia|tel|mobi|one|win|bet|cash|world|life|today|space|website|tech|dev';
+const DOMAIN_RE = new RegExp(`(?<![\\p{L}\\p{N}@_.-])(?:[\\p{L}\\p{N}-]+(?:\\.|\\[\\.\\]|\\(\\.\\)))+(?:${TLD})(?![\\p{L}\\p{N}])(?:[/?#][^\\s)\\]>]*)?`, 'giu');
+export function stripLinks(text) {
+  return String(text || '')
+    .replace(/\b(?:https?|hxxps?)\s*:\s*\/\/\s*[^\s)\]>]*/gi, ' ')
+    .replace(/\bwww\s*\.\s*[^\s)\]>]+/gi, ' ')
+    .replace(DOMAIN_RE, ' ')
+    .replace(/[(\[<]\s*[)\]>]/g, ' ') // 주소를 뺀 뒤 남은 빈 괄호
+    .replace(/[ \t]*[:：→👉➡]+[ \t]*(?=\n|$)/gu, '') // '가입: (주소)' 에서 남은 끝의 ':'·화살표
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .trim();
+}
+
 // ── 요약 ──
 export function quickSummary(text) {
-  let s = String(text || '')
-    .replace(/https?:\/\/\S+/g, ' ')
+  let s = stripLinks(text)
     .replace(/[#@][\p{L}\p{N}_]+/gu, ' ')
     .replace(/\p{Extended_Pictographic}|️|‍/gu, ' ')
     .replace(/\s+/g, ' ')
@@ -500,7 +515,7 @@ export async function introVideo(file, { image, seconds = 3, overlay = null }, w
 // ── 한국어가 아닌 피드 글 번역 ──
 // 한글 비율이 낮고 다른 글자가 충분하면 '한국어 아님'
 export function needsKorean(text) {
-  const t = String(text || '').replace(/https?:\/\/\S+|[#@][\p{L}\p{N}_]+/gu, ' ');
+  const t = stripLinks(text).replace(/[#@][\p{L}\p{N}_]+/gu, ' ');
   const letters = (t.match(/\p{L}/gu) || []).length;
   const hangul = (t.match(/[\uac00-\ud7a3\u3131-\u318e]/g) || []).length;
   return letters >= 4 && hangul / letters < 0.3;
