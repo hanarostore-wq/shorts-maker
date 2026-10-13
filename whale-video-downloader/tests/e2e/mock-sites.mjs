@@ -688,7 +688,7 @@ const handlers = {
     if (u.pathname === '/xposter') {
       // 재생 전 X 게시물: <video> 없이 표지 사진(amplify_video_thumb)과 재생 단추만
       return html(res, page('X 재생 전', `<article data-testid="tweet" style="width:520px"><a href="/tester/status/1790000000000000009">시간</a>
-        <div data-testid="videoPlayer" id="vp" style="position:relative;width:480px;height:270px"><img src="https://cdn.example-videos.com/img/photo.jpg?amplify_video_thumb" style="width:480px;height:270px;object-fit:cover;display:block"><div role="button" aria-label="재생" style="position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px;border-radius:50%;background:#1d9bf0"></div></div></article>`));
+        <div ${u.searchParams.has('notid') ? 'class="r-1p0dtai"' : 'data-testid="videoPlayer"'} id="vp" style="position:relative;width:480px;height:270px">${u.searchParams.has('notid') ? '<video preload="none" style="display:none"></video>' : ''}<img src="https://cdn.example-videos.com/img/photo.jpg?amplify_video_thumb" style="width:480px;height:270px;object-fit:cover;display:block"><div role="button" aria-label="재생" style="position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px;border-radius:50%;background:#1d9bf0"></div></div></article>`));
     }
     if (u.pathname === '/autoplaytest') {
       // 사이트가 0.6초 뒤 스스로 play() (스크롤 자동재생 흉내), 영상 위 막을 누르면 play()

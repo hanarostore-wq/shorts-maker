@@ -1583,6 +1583,26 @@
       if (r.width < 140 || r.height < 100 || r.bottom < 0 || r.top > innerHeight) continue;
       out.push(box);
     }
+    // 영상 칸 표시(data-testid)가 없거나 바뀐 경우: X 영상 표지 사진 주소(…video_thumb/…)로 영상 칸을 찾는다
+    for (const img of document.querySelectorAll('img[src*="video_thumb"]')) {
+      const ir = img.getBoundingClientRect();
+      if (ir.width < 140 || ir.height < 100 || ir.bottom < 0 || ir.top > innerHeight) continue;
+      // 표지 사진과 크기가 거의 같은 가장 바깥 묶음 = 영상 칸
+      let box = img;
+      for (let p = img.parentElement, i = 0; p && i < 8 && !p.matches('article'); p = p.parentElement, i++) {
+        const pr = p.getBoundingClientRect();
+        if (pr.width > ir.width * 1.1 + 4 || pr.height > ir.height * 1.15 + 4) break;
+        box = p;
+      }
+      if (out.some((o) => o === box || o.contains(box) || box.contains(o))) continue;
+      // 그 칸에 이미 보이는 <video> 가 있으면 그 영상에 버튼이 뜬다
+      const v = box.querySelector('video');
+      if (v) {
+        const vr = v.getBoundingClientRect();
+        if (vr.width >= 140 && vr.height >= 100 && getComputedStyle(v).visibility !== 'hidden' && Number(getComputedStyle(v).opacity) > 0) continue;
+      }
+      out.push(box);
+    }
     return out;
   }
   function scan() {

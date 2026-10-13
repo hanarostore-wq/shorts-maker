@@ -521,7 +521,8 @@
     offset: 50,
     ingest: ingestX,
     async resolve(video, ctx) {
-      const poster = video.getAttribute('poster') || '';
+      // 재생 전 영상 칸(<video> 없음)이면 안의 표지 사진 주소에서 영상 번호를 읽는다
+      const poster = video.getAttribute('poster') || (video.matches?.('img') ? video.src : video.querySelector?.('img[src*="video_thumb"]')?.src) || '';
       const mediaId = /(?:ext_tw_video_thumb|amplify_video_thumb|tweet_video_thumb)\/(\d+)/.exec(poster)?.[1];
       const article = video.closest('article') || U.container(video);
       let tweetId = null;

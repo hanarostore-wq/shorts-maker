@@ -460,6 +460,19 @@ const toastHist = (page) => page.evaluate(() => document.querySelector('smd-toas
       return { n: inside.length, txt: inside.map((b) => b.textContent.trim()).join('|'), photo: inside.some((b) => /사진/.test(b.title || '')) };
     });
     record('[X] 재생 전(표지 사진만)에도 영상 다운로드 버튼 1개', r.n === 1 && /다운로드/.test(r.txt) && !r.photo, { note: JSON.stringify(r) });
+    // 영상 칸에 data-testid 가 없고 숨은 <video> 만 있는 모양(실제 X 에서 버튼이 안 뜨던 경우)
+    await page.goto('https://x.com/xposter?notid=1', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2500);
+    const r2 = await page.evaluate(() => {
+      const vr = document.getElementById('vp').getBoundingClientRect();
+      const btns = [...document.querySelectorAll('smd-anchor')].map((h) => h.shadowRoot?.querySelector('.btn.show')).filter(Boolean);
+      const inside = btns.filter((b) => {
+        const br = b.getBoundingClientRect();
+        return br.left >= vr.left - 2 && br.right <= vr.right + 2 && br.top >= vr.top - 2 && br.bottom <= vr.bottom + 2;
+      });
+      return { n: inside.length, photo: inside.some((b) => /사진/.test(b.title || '')) };
+    });
+    record('[X] 재생 전: 영상 칸 표시가 없어도 표지 사진 주소로 영상 버튼 1개', r2.n === 1 && !r2.photo, { note: JSON.stringify(r2) });
   } catch (err) {
     record('[X] 재생 전 버튼', false, { note: err.message.split('\n')[0] });
   } finally {
