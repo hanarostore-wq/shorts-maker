@@ -9,7 +9,13 @@ const VAULT = 'blackPwVault';
 const KEYK = 'blackPwKey';
 const RECENT = 'blackPwRecent';
 const UNDO = 'blackPwUndo'; // 되돌리기용(바꾸기 전 비밀번호) — 브라우저를 닫으면 사라지는 저장소, 2분만
-const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+// 큰 보관함(비밀번호 수천 개)도 되도록 조금씩 나눠 바꾼다(한 번에 펼치면 'Maximum call stack size exceeded')
+const b64 = (buf) => {
+  const u = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(s);
+};
 const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 let cache = null; // 풀어 둔 항목(서비스워커가 살아 있는 동안만)
 let lock = Promise.resolve();
@@ -40,9 +46,19 @@ async function load() {
   return cache;
 }
 async function store(items) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await key(), new TextEncoder().encode(JSON.stringify(items)));
-  await chrome.storage.local.set({ [VAULT]: { iv: b64(iv), data: b64(data), n: items.length } });
+  let rec;
+  try {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await key(), new TextEncoder().encode(JSON.stringify(items)));
+    rec = { iv: b64(iv), data: b64(data), n: items.length };
+  } catch (err) {
+    throw { step: '보관함 암호화', reason: `비밀번호 ${items.length}개를 암호화하지 못했습니다 (${err?.message || err})`, action: '확장을 최신으로 업데이트한 뒤 다시 해 보세요. 계속되면 이 안내를 그대로 보내 주세요.' };
+  }
+  try {
+    await chrome.storage.local.set({ [VAULT]: rec });
+  } catch (err) {
+    throw { step: '보관함 저장', reason: `확장 저장소에 쓰지 못했습니다 (${err?.message || err})`, action: '디스크 공간을 확인한 뒤 다시 해 보세요.' };
+  }
   cache = items;
 }
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -52,7 +68,8 @@ async function opts() {
 }
 const ext = (sender) => sender.id === chrome.runtime.id && String(sender.url || '').startsWith(`chrome-extension://${chrome.runtime.id}/`);
 const pageHost = (sender) => (sender.frameId === 0 && sender.tab ? hostOf(sender.url || '') : '');
-const fail = (e) => ({ error: e?.step ? e : { step: '비밀번호 처리', reason: String(e?.message || e), action: '페이지를 새로고침(F5)한 뒤 다시 해 보세요.' } });
+const STEP = { 'smd:pw-query': '저장된 비밀번호 불러오기', 'smd:pw-pick': '저장된 계정 고르기', 'smd:pw-capture': '비밀번호 저장', 'smd:pw-recent': '저장 알림', 'smd:pw-undo': '저장 되돌리기', 'smd:pw-list': '비밀번호 목록', 'smd:pw-import': 'CSV 합치기', 'smd:pw-delete': '지우기' };
+const fail = (e, type) => ({ error: e?.step ? e : { step: STEP[type] || '비밀번호 처리', reason: String(e?.message || e), action: '확장을 최신으로 업데이트한 뒤 다시 해 보세요. 계속되면 이 안내를 그대로 보내 주세요.' } });
 
 const handlers = {
   // ── 페이지(로그인 화면) ──
@@ -145,6 +162,6 @@ const handlers = {
 chrome.runtime.onMessage.addListener((msg, sender, send) => {
   const h = handlers[msg?.type];
   if (!h) return;
-  h(msg, sender).then(send, (e) => send(fail(e)));
+  h(msg, sender).then(send, (e) => send(fail(e, msg.type)));
   return true;
 });

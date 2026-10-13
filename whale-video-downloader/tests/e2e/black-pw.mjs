@@ -100,6 +100,27 @@ try {
   const n5 = await pp.evaluate(() => document.getElementById('pwCount').textContent);
   await pp.close();
   record('[비밀번호] CSV 불러오기: 새 항목·이미 있음·건너뛴 줄(줄 번호·이유) 안내', /새로 2개/.test(m5) && /이미 있음 1개/.test(m5) && /4째 줄\(주소 없음\)/.test(m5) && /저장된 비밀번호 4개/.test(n5), `${m5.replace(/\n/g, ' / ')} · ${n5}`);
+  // 5-1) 큰 CSV(3000개): 'Maximum call stack size exceeded' 없이 불러오고, 다시 읽어도 그대로
+  {
+    const big = path.join(path.dirname(csv), 'big.csv');
+    const rows = ['name,url,username,password,note'];
+    for (let i = 0; i < 3000; i++) rows.push(`s${i},https://site${i}.example-big.com/login,user${i},${'p'.repeat(20)}${i},메모 ${i}`);
+    fs.writeFileSync(big, rows.join('\n'));
+    const bp = await popup();
+    await bp.setInputFiles('#pwFile', big);
+    await bp.waitForFunction(() => /완료|실패/.test(document.getElementById('pwMsg').textContent), null, { timeout: 30000 });
+    const mb = await bp.evaluate(() => document.getElementById('pwMsg').textContent);
+    await bp.close();
+    const lb = await list();
+    record('[비밀번호] 큰 CSV(3000개)도 불러오기(멈춤·오류 없음)', /새로 3000개/.test(mb) && lb.items.length === 3004 && lb.items.some((i) => i.username === 'user2999' && i.password === `${'p'.repeat(20)}2999`), `${mb.split('\n')[0]} · 목록 ${lb.items.length}개`);
+    // 다음 시험을 위해 큰 항목 지우기
+    const dp = await popup();
+    await dp.evaluate(async () => {
+      const r = await chrome.runtime.sendMessage({ type: 'smd:pw-list' });
+      for (const it of r.items.filter((i) => i.host.endsWith('example-big.com'))) await chrome.runtime.sendMessage({ type: 'smd:pw-delete', id: it.id });
+    });
+    await dp.close();
+  }
   // 6) 같은 주소에 계정이 둘 → 자동으로 채우지 않고, 칸을 누르면 목록에서 고르기
   await page.goto(`${W}/pwlogin`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
