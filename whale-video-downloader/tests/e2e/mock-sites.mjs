@@ -191,6 +191,14 @@ function tiktokItem(id, desc, big) {
 
 const videoTwimg = (req, res, u) => serveFile(req, res, u.pathname.endsWith('high.mp4') || u.pathname.endsWith('synd.mp4') ? 'progressive_1080x1920.mp4' : 'progressive_360p.mp4');
 
+// 비밀번호 관리 시험용 로그인 화면: /pwlogin(폼 제출 → /pwdone 으로 이동), /pwspa(폼 없이 단추, 페이지 안 바뀜)
+function pwPage(res, u) {
+  if (u.pathname === '/pwdone') return html(res, '<!doctype html><meta charset="utf-8"><title>로그인됨</title><p id="ok">로그인 완료</p>');
+  if (u.pathname === '/pwspa')
+    return html(res, `<!doctype html><meta charset="utf-8"><title>SPA 로그인</title><div id="app" style="padding:20px"><div><input id="user" type="text" placeholder="아이디"></div><div><input id="pass" type="password" placeholder="비밀번호"></div><div role="button" id="go" style="display:inline-block;padding:6px 14px;background:#03c75a;color:#fff" onclick="document.getElementById('app').insertAdjacentHTML('beforeend','<p id=welcome>환영합니다</p>')">로그인</div></div>`);
+  return html(res, `<!doctype html><meta charset="utf-8"><title>로그인</title><form id="f" method="post" action="/pwdone" style="padding:20px"><input type="search" name="q" placeholder="검색"><div><input id="user" name="username" type="text" autocomplete="username"></div><div><input id="pass" name="password" type="password" autocomplete="current-password"></div><button id="go" type="submit">로그인</button></form>
+    <script>window.__events=0;for(const id of ['user','pass'])document.getElementById(id).addEventListener('input',()=>window.__events++)</script>`);
+}
 const handlers = {
   // ── 구글 검색 결과(블랙전용 '구글 검색 결과는 새 탭으로' 시험) ──
   'www.google.com': (req, res, u) => {
@@ -211,6 +219,7 @@ const handlers = {
   },
   // ── 공용 테스트 CDN / 일반 사이트 ──
   'cdn.example-videos.com': (req, res, u) => {
+    if (/^\/(pwlogin|pwspa|pwdone)$/.test(u.pathname)) return pwPage(res, u);
     if (u.pathname === '/__upload') {
       const out = path.join(process.env.E2E_OUT || '/tmp', path.basename(u.searchParams.get('name') || 'upload.bin'));
       const f = fs.createWriteStream(out);
@@ -238,6 +247,7 @@ const handlers = {
     serveFile(req, res, path.basename(u.pathname));
   },
   'www.example-videos.com': (req, res, u) => {
+    if (/^\/(pwlogin|pwspa|pwdone)$/.test(u.pathname)) return pwPage(res, u);
     if (u.pathname === '/watch') {
       return html(res, page('일반 사이트 영상', `<div class="card"><h3>일반 사이트</h3><video src="https://cdn.example-videos.com/progressive_1080p_land.mp4" controls muted style="width:640px;height:360px;background:#000"></video></div>`));
     }

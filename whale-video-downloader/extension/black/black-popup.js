@@ -38,6 +38,25 @@
         <input type="checkbox" id="blackBmFolders" /><span class="sw"><i></i></span>
       </label>
       <p class="note" id="blackBmMsg" style="white-space:pre-line" hidden></p>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="grow"><strong>비밀번호 관리</strong><small>크롬처럼 로그인하면 아이디·비밀번호를 저장하고, 다음에 그 사이트에서 자동으로 채웁니다. 이 PC 에만 보관합니다(동기화·설정 내보내기에 들어가지 않음, 잠금 없음)</small></div></div>
+      <label class="row-toggle">
+        <div><b>비밀번호 자동 입력</b><small>저장된 계정이 하나면 바로 채우고, 여러 개면 칸을 누를 때 고릅니다</small></div>
+        <input type="checkbox" id="blackPwOn" /><span class="sw"><i></i></span>
+      </label>
+      <label class="row-toggle">
+        <div><b>로그인하면 자동 저장</b><small>로그인하는 순간 저장하고 화면 아래에 [되돌리기] 알림을 띄웁니다 (확인 창 없음)</small></div>
+        <input type="checkbox" id="blackPwSave" /><span class="sw"><i></i></span>
+      </label>
+      <div class="btns" style="display:flex;gap:8px;margin:8px 0">
+        <button class="btn" type="button" id="pwImport">CSV 불러오기</button>
+        <input type="file" id="pwFile" accept=".csv,text/csv" hidden />
+        <input type="search" id="pwSearch" placeholder="사이트·아이디 찾기" style="flex:1;min-width:0" />
+      </div>
+      <p class="note" id="pwMsg" style="white-space:pre-line" hidden></p>
+      <div id="pwCount" class="note"></div>
+      <ul id="pwList" style="list-style:none;margin:0;padding:0;max-height:260px;overflow:auto"></ul>
     </div>`;
   main.appendChild(pane);
 
@@ -64,6 +83,105 @@
       say(`저장 실패 — 단계: 설정 저장 / 원인: ${err?.message || err} / 조치: 팝업을 닫았다 다시 여세요.`);
     }
   });
+
+  // 비밀번호 관리
+  {
+    const on = pane.querySelector('#blackPwOn');
+    const sv = pane.querySelector('#blackPwSave');
+    const msgEl = pane.querySelector('#pwMsg');
+    const list = pane.querySelector('#pwList');
+    const search = pane.querySelector('#pwSearch');
+    const pwSay = (t, err = false) => {
+      msgEl.hidden = !t;
+      msgEl.textContent = t;
+      msgEl.style.color = err ? '#ff6b81' : '';
+    };
+    const errText = (what, e) => `${what} 실패\n단계: ${e.step}\n원인: ${e.reason}\n조치: ${e.action || '팝업을 닫았다 다시 여세요.'}`;
+    chrome.storage.local.get('settings').then((r) => {
+      on.checked = r.settings?.blackPwOn !== false;
+      sv.checked = r.settings?.blackPwSave !== false;
+    }, () => {});
+    for (const [el, k] of [[on, 'blackPwOn'], [sv, 'blackPwSave']]) {
+      el.addEventListener('change', async () => {
+        try {
+          const { settings } = await chrome.storage.local.get('settings');
+          await chrome.storage.local.set({ settings: { ...(settings || {}), [k]: el.checked } });
+        } catch (err) {
+          el.checked = !el.checked;
+          pwSay(errText('설정 저장', { step: '설정 저장', reason: err?.message || err }), true);
+        }
+      });
+    }
+    let items = [];
+    const render = () => {
+      const q = search.value.trim().toLowerCase();
+      const shownItems = items.filter((i) => !q || i.host.includes(q) || (i.username || '').toLowerCase().includes(q)).sort((a, b) => a.host.localeCompare(b.host));
+      pane.querySelector('#pwCount').textContent = `저장된 비밀번호 ${items.length}개${q ? ` · 찾은 것 ${shownItems.length}개` : ''}`;
+      list.innerHTML = '';
+      for (const it of shownItems.slice(0, 300)) {
+        const li = document.createElement('li');
+        li.className = 'pw-item';
+        li.style.cssText = 'display:flex;gap:6px;align-items:center;padding:6px 0;border-top:1px solid rgba(127,127,127,.15);font-size:12px';
+        li.innerHTML = '<div style="flex:1;min-width:0;overflow:hidden"><b class="h" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></b><small class="u" style="display:block;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></small><code class="p" style="opacity:.8">●●●●●●</code></div><button type="button" class="link pw-show">보기</button><button type="button" class="link pw-del">지우기</button>';
+        li.querySelector('.h').textContent = it.host;
+        li.querySelector('.u').textContent = it.username || '(아이디 없음)';
+        li.querySelector('.pw-show').addEventListener('click', (e) => {
+          const p = li.querySelector('.p');
+          const showing = e.target.textContent === '숨기기';
+          p.textContent = showing ? '●●●●●●' : it.password;
+          e.target.textContent = showing ? '보기' : '숨기기';
+        });
+        li.querySelector('.pw-del').addEventListener('click', async () => {
+          try {
+            const r = await chrome.runtime.sendMessage({ type: 'smd:pw-delete', id: it.id });
+            if (r?.error) return pwSay(errText('지우기', r.error), true);
+            items = items.filter((x) => x.id !== it.id);
+            pwSay(`지웠습니다: ${it.host} ${it.username || ''}`);
+            render();
+          } catch (err) {
+            pwSay(errText('지우기', { step: '확장 백그라운드 연결', reason: err?.message || err }), true);
+          }
+        });
+        list.appendChild(li);
+      }
+    };
+    const loadList = async () => {
+      try {
+        const r = await chrome.runtime.sendMessage({ type: 'smd:pw-list' });
+        if (r?.error) return pwSay(errText('비밀번호 목록', r.error), true);
+        items = r.items || [];
+        render();
+      } catch (err) {
+        pwSay(errText('비밀번호 목록', { step: '확장 백그라운드 연결', reason: err?.message || err }), true);
+      }
+    };
+    search.addEventListener('input', render);
+    tab.addEventListener('click', loadList);
+    if (document.querySelector('.tab.on')?.dataset.tab === 'black') loadList();
+    const file = pane.querySelector('#pwFile');
+    pane.querySelector('#pwImport').addEventListener('click', () => file.click());
+    file.addEventListener('change', async () => {
+      const f = file.files?.[0];
+      file.value = '';
+      if (!f) return;
+      pwSay('불러오는 중…');
+      let text;
+      try {
+        text = await f.text();
+      } catch (err) {
+        return pwSay(errText('CSV 불러오기', { step: '파일 읽기', reason: err?.message || err, action: '파일을 다른 프로그램이 쓰고 있지 않은지 확인한 뒤 다시 고르세요.' }), true);
+      }
+      try {
+        const r = await chrome.runtime.sendMessage({ type: 'smd:pw-import', text });
+        if (r?.error) return pwSay(errText('CSV 불러오기', r.error), true);
+        const sk = r.skipped?.length ? `\n건너뜀 ${r.skipped.length}줄: ${r.skipped.slice(0, 5).map((x) => `${x.line}째 줄(${x.why})`).join(', ')}${r.skipped.length > 5 ? ' …' : ''}` : '';
+        pwSay(`불러오기 완료: 새로 ${r.added}개, 비밀번호 바뀜 ${r.updated}개, 이미 있음 ${r.same}개 (전체 ${r.total}개)${sk}\n※ CSV 파일에는 비밀번호가 그대로 적혀 있으니 바로 지우고 휴지통도 비우세요.`);
+        loadList();
+      } catch (err) {
+        pwSay(errText('CSV 불러오기', { step: '확장 백그라운드 연결', reason: err?.message || err }), true);
+      }
+    });
+  }
 
   // 북마크바 아이콘만
   const bm = pane.querySelector('#blackBmIcons');
