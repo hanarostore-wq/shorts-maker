@@ -1,7 +1,7 @@
 // 유료판 만들기: extension/ 을 복사하면서 블랙전용(개인용) 기능을 뺀다.
 //   node tools/make-paid.mjs [출력 폴더]  →  기본 dist/paid/extension
 //   - black/ 폴더 통째로 뺌
-//   - manifest.json 에서 black/ 스크립트 묶음 뺌
+//   - manifest.json 에서 black/ 스크립트 묶음과 북마크 권한(블랙전용 북마크바 아이콘만) 뺌
 //   - '블랙전용 (유료판에서 빠짐)' 표시가 붙은 줄을 뺌(서비스워커 import, 팝업 <script>)
 //   - 끝나고 결과물 안에 블랙전용 흔적이 남았는지 검사해서, 남았으면 어느 파일·몇째 줄인지 알리고 실패로 끝낸다
 import fs from 'node:fs';
@@ -18,6 +18,9 @@ fs.cpSync(src, out, { recursive: true, filter: (p) => path.relative(src, p).spli
 const mfPath = path.join(out, 'manifest.json');
 const mf = JSON.parse(fs.readFileSync(mfPath, 'utf8'));
 mf.content_scripts = (mf.content_scripts || []).filter((g) => !g.js.some((f) => f.startsWith('black/')));
+// 블랙전용 북마크바 아이콘만에만 쓰는 권한
+mf.optional_permissions = (mf.optional_permissions || []).filter((p) => p !== 'bookmarks');
+if (!mf.optional_permissions.length) delete mf.optional_permissions;
 fs.writeFileSync(mfPath, `${JSON.stringify(mf, null, 2)}\n`);
 
 const problems = [];
@@ -35,7 +38,7 @@ const problems = [];
       fs.writeFileSync(full, text);
     }
     text.split('\n').forEach((l, i) => {
-      if (/black\/|블랙전용|smd:black|blackAltW/.test(l)) problems.push(`${path.relative(out, full)}:${i + 1}: ${l.trim().slice(0, 120)}`);
+      if (/black\/|블랙전용|smd:black|blackAltW|blackBm|blackGoogle|"bookmarks"/.test(l)) problems.push(`${path.relative(out, full)}:${i + 1}: ${l.trim().slice(0, 120)}`);
     });
   }
 })(out);

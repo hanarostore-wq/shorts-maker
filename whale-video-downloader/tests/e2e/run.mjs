@@ -2429,7 +2429,7 @@ if (!only || '팝업'.includes(only) || only === 'popup') {
     pp = await extPage();
     const tabs = await pp.evaluate(() => [...document.querySelectorAll('.tab')].map((t) => t.textContent.trim()));
     await pp.click('.tab[data-tab="black"]');
-    const shown = await pp.evaluate(() => document.querySelector('.pane[data-pane="black"]')?.classList.contains('on') && document.getElementById('blackAltW').checked);
+    const shown = await pp.evaluate(() => document.querySelector('.pane[data-pane="black"]')?.classList.contains('on') && document.getElementById('blackAltW').checked && document.getElementById('blackGoogleNewTab').checked && !document.getElementById('blackBmIcons').checked && !!document.getElementById('blackBmFolders'));
     await pp.click('label:has(#blackAltW)');
     await pp.waitForTimeout(400);
     const after = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.blackAltW);
@@ -2439,6 +2439,47 @@ if (!only || '팝업'.includes(only) || only === 'popup') {
   } finally {
     await pp?.close().catch(() => {});
     await setSettings({ blackAltW: true });
+  }
+}
+
+// ── 블랙전용: 구글 검색 결과는 새 탭으로 ──
+{
+  const page = await ctx.newPage();
+  const clickOpens = async (sel) => {
+    const before = page.url();
+    const np = ctx.waitForEvent('page', { timeout: 4000 }).then((p) => p, () => null);
+    await page.click(sel);
+    const p = await np;
+    await page.waitForTimeout(600);
+    let r;
+    if (p) {
+      await p.waitForLoadState('domcontentloaded').catch(() => {});
+      r = { newTab: true, url: p.url(), same: page.url() === before };
+      await p.close().catch(() => {});
+    } else r = { newTab: false, url: page.url(), same: page.url() === before };
+    if (!r.same) await page.goto(before, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(400);
+    return r;
+  };
+  try {
+    await setSettings({ blackGoogleNewTab: true });
+    await page.goto('https://www.google.com/search?q=test', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(800);
+    const r1 = await clickOpens('#r1');
+    const r2 = await clickOpens('#r2');
+    record('[블랙전용] 구글 검색 결과를 누르면 새 탭으로 열림(바로 주소·/url?q= 주소 모두, 검색 화면은 그대로)', r1.newTab && r1.same && /example-videos\.com\/float/.test(r1.url) && r2.newTab && r2.same && /example-videos\.com\/float/.test(r2.url), { note: JSON.stringify({ r1, r2 }) });
+    const rn = await clickOpens('#next');
+    const ri = await clickOpens('#tabimg');
+    record('[블랙전용] 구글 메뉴·다음 쪽은 같은 탭 그대로', !rn.newTab && !ri.newTab, { note: JSON.stringify({ rn, ri }) });
+    await setSettings({ blackGoogleNewTab: false });
+    await page.waitForTimeout(400);
+    const r3 = await clickOpens('#r1');
+    record('[블랙전용] 끄면 구글 검색 결과가 같은 탭에서 열림', !r3.newTab && /example-videos\.com\/float/.test(r3.url), { note: JSON.stringify(r3) });
+  } catch (err) {
+    record('[블랙전용] 구글 새 탭', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ blackGoogleNewTab: true });
+    await page.close().catch(() => {});
   }
 }
 

@@ -192,6 +192,23 @@ function tiktokItem(id, desc, big) {
 const videoTwimg = (req, res, u) => serveFile(req, res, u.pathname.endsWith('high.mp4') || u.pathname.endsWith('synd.mp4') ? 'progressive_1080x1920.mp4' : 'progressive_360p.mp4');
 
 const handlers = {
+  // ── 구글 검색 결과(블랙전용 '구글 검색 결과는 새 탭으로' 시험) ──
+  'www.google.com': (req, res, u) => {
+    if (u.pathname === '/search') {
+      return html(res, `<!doctype html><meta charset="utf-8"><title>${u.searchParams.get('q') || ''} - Google 검색</title>
+        <div id="hdtb"><a id="tabimg" href="/search?q=test&tbm=isch">이미지</a></div>
+        <div id="search"><div id="rso">
+          <div class="g"><a id="r1" href="https://www.example-videos.com/float"><h3>결과 1</h3></a></div>
+          <div class="g"><a id="r2" href="/url?q=https://www.example-videos.com/float&sa=U"><h3>결과 2 (/url?q=)</h3></a></div>
+        </div></div>
+        <div id="botstuff"><a id="next" href="/search?q=test&start=10">다음</a></div>`);
+    }
+    if (u.pathname === '/url') {
+      res.writeHead(302, { Location: u.searchParams.get('q') || '/' });
+      return res.end();
+    }
+    return html(res, '<p>google</p>');
+  },
   // ── 공용 테스트 CDN / 일반 사이트 ──
   'cdn.example-videos.com': (req, res, u) => {
     if (u.pathname === '/__upload') {

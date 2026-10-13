@@ -3,7 +3,7 @@
   "manifest_version": 3,
   "name": "웨일 영상 다운로더",
   "short_name": "영상 다운로더",
-  "version": "1.32.1",
+  "version": "1.33.0",
   "description": "유튜브·쇼츠·틱톡·인스타·X·블루스카이·빌리빌리 등 17개 사이트 영상을 원본화질로 바로 저장합니다. 별도 프로그램 없이 확장프로그램만으로 동작합니다.",
   "minimum_chrome_version": "116",
   "icons": {
@@ -40,6 +40,9 @@
   ],
   "host_permissions": [
     "<all_urls>"
+  ],
+  "optional_permissions": [
+    "bookmarks"
   ],
   "content_scripts": [
     {
@@ -171,6 +174,22 @@
       ],
       "run_at": "document_start",
       "all_frames": true
+    },
+    {
+      "matches": [
+        "*://www.google.com/search*",
+        "*://www.google.co.kr/search*",
+        "*://www.google.co.jp/search*",
+        "*://www.google.co.uk/search*",
+        "*://www.google.de/search*",
+        "*://www.google.fr/search*",
+        "*://www.google.ca/search*",
+        "*://www.google.com.au/search*"
+      ],
+      "js": [
+        "black/black-google.js"
+      ],
+      "run_at": "document_start"
     }
   ],
   "content_security_policy": {
