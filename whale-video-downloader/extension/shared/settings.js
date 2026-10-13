@@ -12,7 +12,6 @@ export const DEFAULT_SETTINGS = {
   noAutoplay: false, // 사이트가 스스로 영상을 트는 자동재생 막기(직접 누른 영상만 재생). X·블루스카이는 사이트별 기본값으로 켬
   siteSettings: {}, // 사이트별 기능 켜고 끄기 { x: { noAutoplay: true, … } } — 없으면 위의 전체 기본값
   captionAuthor: true, // 영상·사진 위 글자 첫 줄에 '작성자 이름 (@아이디) · 사이트'
-  pauseOffscreen: true, // 재생 중인 영상이 스크롤로 화면에서 벗어나면 멈춤
   forceH264Aac: true, // 영상은 MP4 · H.264 영상 · AAC 소리로 맞춰 저장(이미 H.264 면 영상은 그대로 복사)
   audioKbps: 320, // AAC 소리 비트레이트(kbps)
   preventDuplicates: true, // 같은 파일 중복 다운로드 막기(파일이 지워졌으면 다시 받음)
@@ -20,12 +19,8 @@ export const DEFAULT_SETTINGS = {
   aiLabel: true, // AI 영상·사진 표시 + 파일 이름 [AI]
   downloadedMark: true, // 받은 적 있는 영상·사진 버튼 초록 표시
   xPhotoTapClose: false, // 사진 확대 보기에서 사진 누르면 닫기(모든 사이트 기본값 끔, X 는 사이트별 기본값으로 켬)
-  videoSmall: false, // 영상 화면 크기 줄이기(모든 사이트 기본값 끔, 유튜브는 사이트별 기본값으로 켬)
-  videoScale: 70, // 줄인 크기(%)
   ytShortsStats: true, // 유튜브 쇼츠 오른쪽 위에 조회수·구독자 수
   seekBar: true, // 영상 아래 재생바(재생 위치 이동). 자체 재생바가 있는 사이트는 사이트별 기본값으로 끔
-  hideTextPosts: true, // 피드에서 글만 있는(사진·영상 없는) 게시물 숨기기(X·블루스카이·스레드·페이스북·웨이보·유튜브 커뮤니티)
-  postActions: true, // 사진·영상 다운로드 버튼 아래 팔로우 · 차단 · 좋아요 버튼
   ytLikeFloat: true, // 모든 사이트: 화면 오른쪽 아래 좋아요 플로팅 버튼(보고 있는 게시물)
   followFloat: true, // 모든 사이트: 화면 오른쪽 아래 팔로우 플로팅 버튼(보고 있는 게시물 작성자)
   xFollowButtons: true, // X 피드 작성자 옆 팔로우/팔로잉 버튼
@@ -98,8 +93,21 @@ export async function getSettings() {
     s.siteSettings = ss;
     s.siteSettingsV = 3;
   }
+  // v1.32.0: 사이트별 설정에서 뺀 기능 정리 — 삭제한 기능(화면 밖 영상 정지·팔로우/차단/좋아요 버튼·글만 있는 피드 숨기기·영상 화면 크기 줄이기)과
+  //          '저장 설정' 전체 값으로만 쓰게 옮긴 기능(MP4 변환·중복 막기·글자 넣기)의 사이트별 값을 지운다(안 보이는 사이트 값이 남아 덮어쓰지 않게)
+  if (!(s.siteSettingsV >= 4)) {
+    const gone = ['pauseOffscreen', 'postActions', 'hideTextPosts', 'videoSmall', 'videoScale', 'forceH264Aac', 'preventDuplicates', 'captionOnMedia', 'captionAuthor', 'translateCaption', 'captionCover', 'captionIntro'];
+    const ss = {};
+    for (const [id, v] of Object.entries(s.siteSettings || {})) {
+      const o = { ...(v || {}) };
+      for (const k of gone) delete o[k];
+      if (Object.keys(o).length) ss[id] = o;
+    }
+    s.siteSettings = ss;
+    s.siteSettingsV = 4;
+  }
   // 삭제한 기능의 설정은 지운다(광고 차단, 마우스 올리면 재생, 소리 자동 켜기, 영상 정지 막기)
-  for (const k of ['adBlock', 'hoverPlay', 'xHoverPlay', 'bskyAutoSound', 'xAutoSound', 'xAutoPlay', 'keepScroll', 'noClickPause', 'xWideLayout', 'xKeepControls', 'xThickBar', 'xHighQuality', 'playLock']) delete s[k];
+  for (const k of ['adBlock', 'hoverPlay', 'xHoverPlay', 'bskyAutoSound', 'xAutoSound', 'xAutoPlay', 'keepScroll', 'noClickPause', 'xWideLayout', 'xKeepControls', 'xThickBar', 'xHighQuality', 'playLock', 'pauseOffscreen', 'postActions', 'hideTextPosts', 'videoSmall', 'videoScale', 'ytLikeFloat', 'followFloat']) delete s[k];
   // 바뀐 기본값(마이그레이션)은 바로 저장해 둔다 — 페이지 쪽 스크립트는 저장된 값을 그대로 읽기 때문
   const stored = r.settings || {};
   if (stored.subfolderV !== s.subfolderV || stored.siteFolderV !== s.siteFolderV || stored.siteSettingsV !== s.siteSettingsV || stored.posVersion !== s.posVersion) {
@@ -146,22 +154,11 @@ export const SITE_FEATURES = [
   { key: 'imageButtons', group: '버튼', name: '사진에도 저장 버튼', desc: '사진에도 원본 저장 버튼을 띄웁니다' },
   { key: 'downloadedMark', group: '버튼', name: '받은 적 있는 영상·사진 초록 표시', desc: '이미 받은 것은 버튼이 초록 체크로 바뀝니다' },
   { key: 'aiLabel', group: '버튼', name: 'AI 영상·사진 표시', desc: 'AI 생성으로 표시된 것에 표시를 붙이고 파일 이름에 [AI]' },
-  { key: 'forceH264Aac', group: '저장', name: 'MP4(H.264·AAC 320kbps)로 저장', desc: '영상은 H.264, 소리는 AAC 320kbps 로 맞춰 저장합니다. 이미 H.264 면 영상은 그대로(화질 손실 없음), 아니면 다시 인코딩(시간 걸림)' },
-  { key: 'preventDuplicates', group: '저장', name: '같은 파일 중복 다운로드 막기', desc: '이미 받은 것은 다시 받지 않고 위치를 알려 줍니다' },
-  { key: 'captionOnMedia', group: '글자 넣기', name: '영상·사진에 본문 글자 넣기', desc: '게시물 본문을 왼쪽 위에 넣습니다' },
-  { key: 'captionAuthor', group: '글자 넣기', name: '글자 첫 줄에 작성자 줄', desc: "'작성자 이름 (@아이디) · 사이트'" },
-  { key: 'translateCaption', group: '글자 넣기', name: '한국어가 아니면 번역해서 넣기', desc: '원문 대신 한국어 번역을 넣습니다' },
-  { key: 'captionCover', group: '글자 넣기', name: '영상 표지에 피드 화면', desc: '영상 표지(썸네일)에 게시물 화면을 넣습니다' },
-  { key: 'captionIntro', group: '글자 넣기', name: '영상 앞 3초에 피드 화면', desc: '영상 맨 앞에 게시물 화면을 3초 붙입니다' },
   { key: 'noAutoplay', group: '재생', name: '자동재생 끄기', desc: '사이트가 스스로 영상을 틀지 못하게 합니다. 직접 누른 영상만 재생 (바꾼 뒤 새로고침)' },
   { key: 'potPlayer', group: '재생', name: '재생 버튼 → 팟플레이어로 재생', desc: '재생을 누르면 웨일 대신 팟플레이어로 원본을 엽니다 (처음에 웨일이 묻는 "외부 프로그램 열기" 허용 · 바꾼 뒤 새로고침)' },
-  { key: 'pauseOffscreen', group: '재생', name: '화면 밖 영상 정지', desc: '스크롤로 화면에서 벗어난 영상은 멈춥니다' },
-  { key: 'postActions', group: '버튼', name: '팔로우 · 차단 · 좋아요 버튼', desc: '사진·영상 다운로드 버튼 아래에 작성자 팔로우·차단, 게시물 좋아요 버튼 (차단은 X·블루스카이·인스타그램)' },
   { key: 'autoFollow', group: '팔로우', name: '다운로드하면 작성자 자동 팔로우', desc: '저장 버튼을 누른 게시물의 작성자를 팔로우(유튜브는 구독)합니다' },
   { key: 'followAllButton', group: '팔로우', name: '팔로우 목록 전부 팔로우 버튼', desc: '팔로워·팔로잉 목록 화면(창)에 버튼을 띄웁니다' },
-  { key: 'hideTextPosts', group: '보기', name: '글만 있는 피드 숨기기', desc: '피드에서 사진·영상이 없는 게시물을 가립니다 (게시물을 연 화면은 그대로)' },
   { key: 'seekBar', group: '보기', name: '영상 재생바', desc: '재생바가 없는 영상 아래에 재생바와 시간을 띄웁니다. 누르거나 끌어서 위치 이동' },
   { key: 'xPhotoTapClose', group: '보기', name: '사진 확대 보기에서 누르면 닫기', desc: '크게 본 사진(확대 창)을 누르면 닫힙니다' },
-  { key: 'videoSmall', group: '보기', name: '영상 화면 크기 줄이기', desc: '영상 플레이어를 아래에서 고른 크기로 줄입니다 (전체 화면은 그대로)', scaleKey: 'videoScale' },
   { key: 'ytShortsStats', group: '보기', name: '쇼츠 조회수·구독자 표시', desc: '쇼츠 오른쪽 위에 조회수·구독자 수 (유튜브 데이터로만 가능)', sites: ['youtube'] },
 ];

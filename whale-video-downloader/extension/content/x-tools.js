@@ -300,36 +300,6 @@
     })();
   });
 
-  // 게시물 아래 '차단' 버튼(core.js 의 팔로우·차단·좋아요 줄): X 화면의 ⋯ 메뉴 → '@아이디 차단하기' → 확인
-  document.addEventListener('smd:block', (ev) => {
-    const d = ev.detail;
-    if (!d?.el) return;
-    d.handled = true;
-    let article = d.el.closest('article[data-testid="tweet"]');
-    if (!article) {
-      const id = /\/status\/(\d+)/.exec(location.pathname)?.[1];
-      if (id) article = [...document.querySelectorAll('article[data-testid="tweet"]')].find((a) => a.querySelector(`a[href*="/status/${id}"]`)) || null;
-    }
-    const sn = handleOf(article) || /^\/([A-Za-z0-9_]{1,15})\/status\//.exec(location.pathname)?.[1] || '';
-    if (!sn || !article) return d.report?.({ error: { step: '작성자 찾기', reason: '이 사진·영상의 게시물을 찾지 못했습니다', action: '게시물이 보이는 화면에서 다시 누르세요.' } });
-    if (sn.toLowerCase() === myHandle()) return d.report?.({ error: { step: '작성자 확인', reason: '내 계정은 차단할 수 없습니다', action: '' } });
-    (async () => {
-      const caret = article.querySelector('[data-testid="caret"]');
-      if (!caret) return d.report?.({ who: `@${sn}`, error: { step: '⋯ 메뉴 열기', reason: '게시물의 ⋯ 메뉴 단추를 찾지 못했습니다', action: '게시물 오른쪽 위 ⋯ 에서 직접 차단하세요.' } });
-      caret.click();
-      const menu = await waitFor(() => document.querySelector('[role="menu"]'));
-      const item = menu && [...menu.querySelectorAll('[role="menuitem"]')].find((el) => /차단|block/i.test(el.textContent || '') && !/차단 해제|unblock/i.test(el.textContent || ''));
-      if (!item) {
-        closeMenu();
-        return d.report?.({ who: `@${sn}`, error: { step: '차단 메뉴 찾기', reason: '⋯ 메뉴에 차단 항목이 없습니다(이미 차단했거나 X 화면이 바뀜)', action: '게시물 ⋯ 메뉴에서 직접 확인하세요.' } });
-      }
-      item.click();
-      const ok = await waitFor(() => document.querySelector('[data-testid="confirmationSheetConfirm"]'), 2000);
-      if (ok) ok.click();
-      d.report?.({ ok: true, who: `@${sn}` });
-    })();
-  });
-
   // 2) 마우스 올리면 재생·소리 켜기는 모든 사이트 공용 hover-play.js 가 맡는다
 
   // ── 반복 확인 ──

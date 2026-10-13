@@ -154,19 +154,6 @@
   .aibadge{position:absolute;left:0;top:0;display:none;align-items:center;height:22px;padding:0 9px;border-radius:999px;pointer-events:auto;
     font:800 11.5px/1 inherit;color:#fff;letter-spacing:.02em;background:linear-gradient(135deg,#f59e0b,#ef4444);box-shadow:0 6px 16px -6px rgba(239,68,68,.8);white-space:nowrap}
   .aibadge.show{display:inline-flex}
-  .acts{position:absolute;left:0;top:0;display:none;flex-wrap:nowrap;align-items:center;width:max-content;height:22px;padding:0 2px;border-radius:999px;pointer-events:auto;
-    background:rgba(12,12,20,.55);box-shadow:0 2px 8px -2px rgba(0,0,0,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);writing-mode:horizontal-tb}
-  .acts.show{display:inline-flex}
-  .act{all:unset;flex:none;display:inline-block;cursor:pointer;height:22px;padding:0 8px;color:#fff;font-size:11px;font-weight:700;line-height:22px;
-    white-space:nowrap;word-break:keep-all;writing-mode:horizontal-tb;opacity:.92;text-shadow:0 1px 2px rgba(0,0,0,.6)}
-  .act+.act{border-left:1px solid rgba(255,255,255,.22)}
-  .act:hover{opacity:1;background:rgba(255,255,255,.12)}
-  .act:first-child{border-radius:999px 0 0 999px}
-  .act:last-child{border-radius:0 999px 999px 0}
-  .act.f{color:#8cc0ff}
-  .act.b{color:#e5e7eb}
-  .act.l{color:#ff9bb3}
-  .act.busy{opacity:.55;pointer-events:none}
   .btn.downloaded{background:linear-gradient(135deg,#0fb57d,#34d399);box-shadow:0 8px 20px -8px rgba(16,185,129,.8),inset 0 1px 0 rgba(255,255,255,.35)}
   .btn.edit{cursor:grab;outline:2px dashed #fff;outline-offset:3px;animation:smdpulse 1.2s ease-in-out infinite}
   .btn.edit:active{cursor:grabbing}
@@ -333,36 +320,6 @@
     badge.textContent = 'AI 영상';
     badge.title = '작성자나 플랫폼이 AI 생성 콘텐츠로 표시한 영상입니다';
     entry.layer.appendChild(badge);
-    // 게시물 아래 팔로우 · 차단 · 좋아요 (사이트마다 켜고 끄기: postActions)
-    const acts = document.createElement('div');
-    acts.className = 'acts';
-    acts.innerHTML = '<button type="button" class="act f" title="이 게시물 작성자 팔로우">팔로우</button><button type="button" class="act b" title="이 게시물 작성자 차단">차단</button><button type="button" class="act l" title="이 게시물 좋아요">좋아요</button>';
-    const busy = (btn, ms = 2500) => {
-      btn.classList.add('busy');
-      setTimeout(() => btn.classList.remove('busy'), ms);
-    };
-    acts.querySelector('.f').addEventListener('click', (ev) => {
-      ev.preventDefault();
-      busy(ev.currentTarget);
-      autoFollow(entry.el, true);
-    });
-    acts.querySelector('.b').addEventListener('click', (ev) => {
-      ev.preventDefault();
-      busy(ev.currentTarget);
-      blockAuthor(entry.el);
-    });
-    acts.querySelector('.l').addEventListener('click', async (ev) => {
-      ev.preventDefault();
-      const btn = ev.currentTarget;
-      busy(btn, 1500);
-      const like = globalThis.__SMD_LIKE_NOW;
-      if (typeof like !== 'function') return actToast('좋아요', { error: { step: '좋아요 기능 준비', reason: '좋아요 기능이 아직 준비되지 않았습니다', action: '페이지를 새로고침(F5)한 뒤 다시 누르세요.' } });
-      const r = await like(entry.el);
-      if (r.error) actToast('좋아요', r);
-      else if (r.liked !== null && r.liked !== undefined) actToast('좋아요', { custom: r.liked ? '좋아요 했습니다' : '좋아요를 취소했습니다' });
-    });
-    entry.layer.appendChild(acts);
-    entry.acts = acts;
     entry.badge = badge;
     const b = document.createElement('button');
     b.className = 'btn';
@@ -1091,47 +1048,6 @@
     }, 4500);
   }
 
-  // 팔로우·차단·좋아요 버튼 결과 알림(성공·실패 단계/원인/조치)
-  function actToast(what, r) {
-    if (!r) return;
-    const who = r.who ? ` ${r.who}` : '';
-    if (r.custom) return followToast({ custom: r.custom });
-    if (r.error) {
-      const e = r.error;
-      return followToast({ custom: `${what} 실패${who}\n단계: ${e.step || what}\n원인: ${e.reason || e}\n조치: ${e.action || '페이지를 새로고침한 뒤 다시 누르세요.'}`, err: true });
-    }
-    followToast({ custom: `${what}:${who} ${r.already ? '이미 되어 있습니다' : '완료했습니다'}` });
-  }
-  // 차단: X·블루스카이는 각 도구(x-tools / bsky-tools)가, 인스타그램은 인스타 웹 요청으로. 그 밖의 사이트는 안내
-  function blockAuthor(el) {
-    const detail = { el, handled: false, report: (r) => actToast('차단', r) };
-    document.dispatchEvent(new CustomEvent('smd:block', { detail }));
-    if (detail.handled) return;
-    if (adapter.id === 'instagram') return igBlock(el).then((r) => actToast('차단', r), (err) => actToast('차단', { error: { step: '차단 요청', reason: String(err?.message || err) } }));
-    actToast('차단', { error: { step: '차단 지원 확인', reason: `${adapter.name || '이 사이트'}에서는 아직 차단 버튼을 지원하지 않습니다 (지원: X·블루스카이·인스타그램)`, action: '작성자 프로필의 ⋯ 메뉴에서 직접 차단하세요.' } });
-  }
-  async function igBlock(el) {
-    const handle = postAuthor(el, {}).handle;
-    if (!handle) return { error: { step: '작성자 찾기', reason: '이 게시물의 작성자를 찾지 못했습니다', action: '게시물을 눌러 연 화면에서 다시 누르세요.' } };
-    const who = `@${handle}`;
-    const csrf = (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/) || [])[1];
-    const me = (document.cookie.match(/(?:^|; )ds_user_id=([^;]+)/) || [])[1];
-    if (!csrf || !me) return { who, error: { step: '로그인 확인', reason: '인스타그램 로그인 정보를 찾지 못했습니다', action: '인스타그램에 로그인한 뒤 새로고침(F5)하세요.' } };
-    const H = { 'X-IG-App-ID': '936619743392459', 'X-Requested-With': 'XMLHttpRequest' };
-    let id = SITES.igUsers?.get(handle.toLowerCase())?.id;
-    if (!id) {
-      const r = await fetch(`/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`, { headers: H, credentials: 'include' }).catch(() => null);
-      if (!r?.ok) return { who, error: { step: '작성자 정보 확인', reason: `인스타그램이 작성자 정보를 주지 않았습니다 (HTTP ${r?.status || '연결 실패'})`, action: r?.status === 429 ? '몇 분 뒤 다시 누르세요.' : '작성자 프로필에서 직접 차단하세요.' } };
-      id = (await r.json().catch(() => ({})))?.data?.user?.id;
-    }
-    if (!id) return { who, error: { step: '작성자 정보 확인', reason: '작성자 계정 번호를 찾지 못했습니다', action: '작성자 프로필에서 직접 차단하세요.' } };
-    if (String(id) === String(me)) return { who, error: { step: '작성자 확인', reason: '내 계정은 차단할 수 없습니다', action: '' } };
-    const r2 = await fetch(`/api/v1/friendships/block/${id}/`, { method: 'POST', credentials: 'include', headers: { ...H, 'X-CSRFToken': decodeURIComponent(csrf), 'content-type': 'application/x-www-form-urlencoded' }, body: `user_id=${id}&surface=profile` }).catch(() => null);
-    const j = r2 ? await r2.json().catch(() => ({})) : {};
-    if (r2?.ok && j.status === 'ok') return { who, ok: true };
-    return { who, error: { step: '차단 요청', reason: `인스타그램이 차단을 받아들이지 않았습니다 (HTTP ${r2?.status || '연결 실패'}${j.message ? ` · ${j.message}` : ''})`, action: '작성자 프로필의 ⋯ 메뉴에서 직접 차단하세요.' } };
-  }
-
   // 유튜브: @아이디 → 채널 번호(resolve_url) → 구독(subscription/subscribe). 로그인 쿠키로 만든 인증 값은 요청에만 쓰고 저장·기록하지 않는다
   async function ytSubscribe(handle) {
     const who = `@${handle}`;
@@ -1194,8 +1110,6 @@
     domFollow(el, followToast);
   }
 
-  // 떠 있는 팔로우 버튼(float-tools.js): 설정과 관계없이 지금 보이는 게시물 작성자를 팔로우
-  globalThis.__SMD_FOLLOW_NOW = (el) => autoFollow(el, true);
   globalThis.__SMD_SITE_ID = adapter.id;
   globalThis.__SMD_POST_SEL = POST_SEL;
 
@@ -1813,7 +1727,6 @@
           b.classList.remove('show');
           entry.visible = false;
         }
-        entry.acts?.classList.remove('show');
         if (entry.panel && !show) closePanel(entry);
         continue;
       }
@@ -1841,24 +1754,6 @@
         entry.aiCheck = now;
         entry.ai = aiInDom(entry);
         if (entry.ai && isImg) entry.badge.textContent = 'AI 이미지';
-      }
-      // 팔로우·차단·좋아요 줄: 사진·영상 맨 위에 얇게(오른쪽 맞춤). 다운로드 버튼과 겹치면 버튼 왼쪽으로
-      if (entry.acts) {
-        const want = settings.postActions !== false && !editMode;
-        entry.acts.classList.toggle('show', want);
-        if (want) {
-          const ah = 22;
-          const aw = entry.acts.offsetWidth || 130;
-          const left = r.left - o.left + 4;
-          const ay = Math.max(r.top, 0) - o.top + 6;
-          let ax = Math.max(left, r.right - o.left - aw - 6);
-          if (ax < x + bw + 4 && ax + aw > x - 4 && ay < y + bh + 4 && ay + ah > y - 4) ax = Math.max(left, x - aw - 6);
-          const atf = `translate3d(${Math.round(ax)}px,${Math.round(ay)}px,0)`;
-          if (entry.atf !== atf) {
-            entry.atf = atf;
-            entry.acts.style.transform = atf;
-          }
-        }
       }
       const showBadge = settings.aiLabel !== false && entry.ai && (!isImg || visible);
       entry.badge.classList.toggle('show', !!showBadge);

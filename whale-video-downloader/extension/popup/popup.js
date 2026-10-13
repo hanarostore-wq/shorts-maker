@@ -150,7 +150,7 @@ async function renderFolder() {
   renderPreview();
 }
 renderFolder();
-for (const id of ['captionOnMedia', 'captionCover', 'captionIntro', 'captionKeepOriginal', 'translateCaption', 'ytShortsStats', 'pauseOffscreen', 'preventDuplicates', 'autoFollow', 'aiLabel', 'downloadedMark', 'xPhotoTapClose', 'followAllButton', 'noAutoplay', 'captionAuthor', 'alwaysShowButtons', 'seekBar', 'forceH264Aac', 'hideTextPosts', 'photosOneFolder', 'postActions']) {
+for (const id of ['captionOnMedia', 'captionCover', 'captionIntro', 'captionKeepOriginal', 'translateCaption', 'ytShortsStats', 'preventDuplicates', 'autoFollow', 'aiLabel', 'downloadedMark', 'xPhotoTapClose', 'followAllButton', 'noAutoplay', 'captionAuthor', 'alwaysShowButtons', 'seekBar', 'forceH264Aac', 'photosOneFolder']) {
   $(`#${id}`).checked = settings[id] !== false;
   $(`#${id}`).addEventListener('change', (e) => save({ [id]: e.target.checked }));
 }
@@ -165,9 +165,6 @@ $('#countryFolders').addEventListener('change', (e) => save({ countryFolders: e.
 $('#flagPrefix').checked = settings.flagPrefix !== false;
 $('#flagPrefix').addEventListener('change', (e) => save({ flagPrefix: e.target.checked }));
 seg($('#flagStyle'), settings.flagStyle || 'name', (v) => save({ flagStyle: v }));
-$('#videoSmall').checked = settings.videoSmall === true;
-$('#videoSmall').addEventListener('change', (e) => save({ videoSmall: e.target.checked }));
-seg($('#videoScale'), String(settings.videoScale || 70), (v) => save({ videoScale: Number(v) }));
 $('#imageButtons').checked = settings.imageButtons !== false;
 $('#imageButtons').addEventListener('change', (e) => save({ imageButtons: e.target.checked }));
 
@@ -305,8 +302,50 @@ function renderSitePanel(id) {
     h.textContent = t;
     return h;
   };
-  // 버튼 표시·저장 폴더(사이트 고유 설정)
-  box.appendChild(head('이 사이트'));
+  let group = '';
+  for (const f of SITE_FEATURES) {
+    if (f.sites && !f.sites.includes(id)) continue;
+    if (f.group !== group) {
+      group = f.group;
+      box.appendChild(head(group));
+    }
+    box.appendChild(row(f.name, f.desc, eff[f.key] === true, f.key in own, async (on) => {
+      const ss = { ...(settings.siteSettings || {}) };
+      ss[id] = { ...(ss[id] || {}), [f.key]: on };
+      await save({ siteSettings: ss });
+      renderSitePanel(id);
+    }));
+  }
+}
+$('#spReset').addEventListener('click', async () => {
+  const ss = { ...(settings.siteSettings || {}) };
+  delete ss[spSite];
+  await save({ siteSettings: ss });
+  renderSitePanel(spSite);
+});
+
+// ───────────── 저장 설정: 사이트별 저장(저장 버튼 표시·따로 폴더·떠 있는 버튼 위치·성능 진단) ─────────────
+// '이 사이트' 탭에 있던 것을 사용자 요청으로 여기로 옮김
+let ssSite = 'generic';
+function renderSiteSave(id) {
+  ssSite = id;
+  const meta = siteMeta[id] || siteMeta.generic;
+  $('#ssDot').style.background = meta.color;
+  const sel = $('#ssSelect');
+  if (!sel.options.length) {
+    for (const s of SITE_LIST) sel.add(new Option(s.name, s.id));
+    sel.addEventListener('change', () => renderSiteSave(sel.value));
+  }
+  sel.value = id;
+  const box = $('#ssList');
+  box.innerHTML = '';
+  const row = (name, desc, checked, _changed, onChange) => {
+    const l = document.createElement('label');
+    l.className = 'row-toggle';
+    l.innerHTML = `<div><b>${escapeHtml(name)}</b><small>${escapeHtml(desc)}</small></div><input type="checkbox" ${checked ? 'checked' : ''} /><span class="sw"><i></i></span>`;
+    l.querySelector('input').addEventListener('change', (e) => onChange(e.target.checked));
+    return l;
+  };
   box.appendChild(row('이 사이트에서 저장 버튼 표시', '끄면 이 사이트에서는 버튼을 띄우지 않습니다', !(settings.disabledSites || []).includes(id), false, async (on) => {
     const set = new Set(settings.disabledSites || []);
     if (on) set.delete(id);
@@ -321,9 +360,9 @@ function renderSitePanel(id) {
     else delete map[id];
     await save({ siteFolderMap: map });
     renderSites();
-    renderSitePanel(id);
+    renderSiteSave(id);
   }));
-  // 떠 있는 버튼(좋아요·팔로우·목록 전부 팔로우)을 끌어서 옮긴 위치 되돌리기
+  // 떠 있는 버튼(목록 전부 팔로우)을 끌어서 옮긴 위치 되돌리기
   {
     const moved = Object.keys(floatPos[id] || {}).length > 0;
     const r = document.createElement('div');
@@ -340,7 +379,7 @@ function renderSitePanel(id) {
         delete all[id];
         await chrome.storage.local.set({ floatPos: all });
         floatPos = all;
-        renderSitePanel(id);
+        renderSiteSave(id);
       } catch (err) {
         b.textContent = '되돌리기 실패';
         b.title = `단계: 위치 저장소 쓰기 · 원인: ${err?.message || err} · 조치: 팝업을 닫았다 다시 열고 누르세요`;
@@ -367,41 +406,7 @@ function renderSitePanel(id) {
     r.appendChild(b);
     box.appendChild(r);
   }
-  let group = '';
-  for (const f of SITE_FEATURES) {
-    if (f.sites && !f.sites.includes(id)) continue;
-    if (f.group !== group) {
-      group = f.group;
-      box.appendChild(head(group));
-    }
-    box.appendChild(row(f.name, f.desc, eff[f.key] === true, f.key in own, async (on) => {
-      const ss = { ...(settings.siteSettings || {}) };
-      ss[id] = { ...(ss[id] || {}), [f.key]: on };
-      await save({ siteSettings: ss });
-      renderSitePanel(id);
-    }));
-    // 크기(%) 고르기 — 이 사이트만 따로
-    if (f.scaleKey) {
-      const sel = document.createElement('div');
-      sel.className = 'seg sp-scale';
-      sel.style.margin = '0 0 8px';
-      sel.innerHTML = [40, 50, 60, 70, 80, 90].map((n) => `<button type="button" data-v="${n}">${n}%</button>`).join('');
-      seg(sel, String(eff[f.scaleKey] || 70), async (v) => {
-        const ss = { ...(settings.siteSettings || {}) };
-        ss[id] = { ...(ss[id] || {}), [f.scaleKey]: Number(v) };
-        await save({ siteSettings: ss });
-        renderSitePanel(id);
-      });
-      box.appendChild(sel);
-    }
-  }
 }
-$('#spReset').addEventListener('click', async () => {
-  const ss = { ...(settings.siteSettings || {}) };
-  delete ss[spSite];
-  await save({ siteSettings: ss });
-  renderSitePanel(spSite);
-});
 
 // ───────────── 현재 탭 ─────────────
 const SITE_HOSTS = [
@@ -450,6 +455,7 @@ async function renderPage() {
   list.innerHTML = '';
   if (!tab || !/^https?:/.test(tab.url || '')) {
     renderSitePanel('generic');
+    renderSiteSave('generic');
     $('#pageSite').textContent = '이 페이지에서는 사용할 수 없어요';
     hint.textContent = '웹사이트 탭에서 확장프로그램 아이콘을 눌러 주세요';
     return;
@@ -458,6 +464,7 @@ async function renderPage() {
   const host = new URL(tab.url).hostname;
   const siteId = SITE_HOSTS.find(([re]) => re.test(host))?.[1] || 'generic';
   renderSitePanel(siteId);
+  renderSiteSave(siteId);
   const meta = siteMeta[siteId];
   $('#pageSite').textContent = siteId === 'generic' ? host : meta.name;
   $('#pageDot').style.background = meta.color;

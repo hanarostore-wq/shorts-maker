@@ -202,10 +202,6 @@
           <input type="checkbox" id="captionAuthor" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
-          <div><b>화면 밖 영상 정지</b><small>재생 중인 영상이 스크롤로 화면에서 완전히 벗어나면 멈춥니다 (화면 속 화면·전체 화면은 제외, 다시 보여도 저절로 재생하지 않음)</small></div>
-          <input type="checkbox" id="pauseOffscreen" /><span class="sw"><i></i></span>
-        </label>
-        <label class="row-toggle">
           <div><b>MP4(H.264·AAC 320kbps)로 저장</b><small>모든 영상을 MP4 · 영상 H.264 · 소리 AAC 320kbps 로 맞춰 저장합니다. 원본이 이미 H.264 면 영상은 그대로 복사(화질 손실 없음)하고 소리만 바꿉니다. VP9·AV1 원본(유튜브 4K 등)은 다시 인코딩해서 시간이 걸립니다. 바꾸지 못하면 원본 형식으로 저장하고 이유를 알려 줍니다</small></div>
           <input type="checkbox" id="forceH264Aac" /><span class="sw"><i></i></span>
         </label>
@@ -226,23 +222,8 @@
           <input type="checkbox" id="downloadedMark" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
-          <div><b>영상 화면 크기 줄이기 (모든 사이트 기본값)</b><small>영상 플레이어를 아래에서 고른 크기로 줄입니다 (전체 화면은 그대로). 처음에는 유튜브만 70% 로 켜져 있고, 사이트마다 '이 사이트' 탭에서 켜기·크기를 따로 정할 수 있습니다</small></div>
-          <input type="checkbox" id="videoSmall" /><span class="sw"><i></i></span>
-        </label>
-        <div class="seg" id="videoScale" style="margin:-2px 0 8px">
-          <button data-v="50">50%</button><button data-v="60">60%</button><button data-v="70">70%</button><button data-v="80">80%</button><button data-v="90">90%</button>
-        </div>
-        <label class="row-toggle">
           <div><b>유튜브 쇼츠 조회수·구독자 표시</b><small>재생 중인 쇼츠 오른쪽 위에 조회수와 구독자 수를 띄웁니다</small></div>
           <input type="checkbox" id="ytShortsStats" /><span class="sw"><i></i></span>
-        </label>
-        <label class="row-toggle">
-          <div><b>팔로우 · 차단 · 좋아요 버튼 (모든 사이트 기본값)</b><small>사진·영상 다운로드 버튼 바로 아래에 작성자 팔로우·차단과 게시물 좋아요 버튼을 띄웁니다. 차단은 X·블루스카이·인스타그램에서 됩니다</small></div>
-          <input type="checkbox" id="postActions" /><span class="sw"><i></i></span>
-        </label>
-        <label class="row-toggle">
-          <div><b>글만 있는 피드 숨기기 (모든 사이트 기본값)</b><small>X·블루스카이·스레드·페이스북·웨이보 피드와 유튜브 커뮤니티 게시물 중 사진·영상이 없는 것을 가립니다. 게시물을 눌러 연 화면(상세·답글)은 그대로 보입니다</small></div>
-          <input type="checkbox" id="hideTextPosts" /><span class="sw"><i></i></span>
         </label>
         <label class="row-toggle">
           <div><b>영상 재생바 (모든 사이트)</b><small>재생바가 없는 영상 아래에 재생바와 시간을 띄웁니다. 유튜브·X 등 자체 재생바가 있는 사이트는 처음에 꺼져 있습니다('이 사이트' 탭에서 켜기)</small></div>
@@ -260,6 +241,9 @@
           <div><b>그 밖의 사이트에서도 표시</b><small>목록에 없는 사이트도 실제 영상 파일이 감지되면 버튼을 띄웁니다</small></div>
           <input type="checkbox" id="genericButtons" /><span class="sw"><i></i></span>
         </label>
+        <div class="sp-group">사이트별 저장</div>
+        <div class="sp-pick"><span class="sdot" id="ssDot"></span><select id="ssSelect" aria-label="사이트 고르기"></select></div>
+        <div id="ssList"></div>
         <div class="backup">
           <b>설정 백업</b>
           <small>켜고 끈 설정은 새 버전을 덮어써도 그대로 유지되고, 웨일 동기화 저장소에도 자동 백업됩니다. 다른 PC로 옮기거나 확장을 지웠다 다시 설치할 때는 파일로 내보내 두었다가 불러오세요.</small>
@@ -303,6 +287,7 @@
     </li>
   </template>
 
+  <script src="../black/black-popup.js"></script><!-- 블랙전용 (유료판에서 빠짐) -->
   <script type="module" src="popup.js"></script>
 </body>
 </html>

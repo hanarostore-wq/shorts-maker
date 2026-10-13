@@ -232,7 +232,7 @@ const scenarios = [
 
 console.log(`확장프로그램 ID: ${extId}\n`);
 // 일반 시나리오는 원본 그대로 저장되는지 보므로 요약 글자 넣기는 끄고, 아래 전용 테스트에서 켠다.
-await setSettings({ hideTextPosts: false, subfolder: '', subfolderV: 2, forceH264Aac: false, captionOnMedia: false, preventDuplicates: false, siteFolders: false, noAutoplay: false, alwaysShowButtons: false, siteSettings: {}, siteSettingsV: 3, siteFolderV: 2 }); // 사이트별 기능 설정은 전용 테스트에서 확인. 저장 버튼 항상 표시는 전용 테스트에서 확인(다른 테스트는 마우스를 올린 사진의 버튼을 누름). 자동재생 끄기는 전용 테스트에서 확인. 사이트별 폴더는 전용 테스트에서 확인. 같은 페이지를 여러 번 받는 시나리오가 많아 중복 막기는 전용 테스트에서만 켠다
+await setSettings({ subfolder: '', subfolderV: 2, forceH264Aac: false, captionOnMedia: false, preventDuplicates: false, siteFolders: false, noAutoplay: false, alwaysShowButtons: false, siteSettings: {}, siteSettingsV: 3, siteFolderV: 2 }); // 사이트별 기능 설정은 전용 테스트에서 확인. 저장 버튼 항상 표시는 전용 테스트에서 확인(다른 테스트는 마우스를 올린 사진의 버튼을 누름). 자동재생 끄기는 전용 테스트에서 확인. 사이트별 폴더는 전용 테스트에서 확인. 같은 페이지를 여러 번 받는 시나리오가 많아 중복 막기는 전용 테스트에서만 켠다
 for (const s of scenarios) await scenario(s);
 
 // ── 저장 위치: 하위 폴더 설정 반영 ──
@@ -337,84 +337,9 @@ if (!only || only === 'folder') {
   }
 }
 
-// 사진·영상 버튼 아래 팔로우·차단·좋아요 줄에서 하나 누르기(그 요소 근처에 뜬 줄)
-const clickAct = (page, sel, cls) => page.evaluate(([sel, cls]) => {
-  const el = document.querySelector(sel);
-  if (!el) return 'no-el';
-  const r = el.getBoundingClientRect();
-  for (const h of document.querySelectorAll('smd-anchor')) {
-    const a = h.shadowRoot?.querySelector('.acts.show');
-    if (!a) continue;
-    const ar = a.getBoundingClientRect();
-    // 그 사진·영상과 겹치거나 바로 위·아래(40px 안)에 있는 줄
-    if (ar.width && ar.right > r.left && ar.left < r.right && ar.top >= r.top - 40 && ar.bottom <= r.bottom + 40) {
-      a.querySelector(`.act.${cls}`).click();
-      return 'ok';
-    }
-  }
-  return 'no-acts';
-}, [sel, cls]);
 const toastHist = (page) => page.evaluate(() => document.querySelector('smd-toast')?.dataset.history || '');
 
-// ── 모든 사이트: 사진·영상 아래 팔로우 · 차단 · 좋아요 버튼 ──
-{
-  const page = await ctx.newPage();
-  try {
-    await setSettings({ siteSettings: {}, autoFollow: false, alwaysShowButtons: true, postActions: true });
-    await page.goto('https://www.example-videos.com/float', { waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => document.getElementById('fp2').scrollIntoView({ block: 'center' }));
-    await page.waitForTimeout(2000);
-    const floats = await page.evaluate(() => document.querySelectorAll('smd-float').length);
-    // 위치·크기: 사진·영상 맨 위 안쪽에 얇은 한 줄(글자가 세로로 쌓이지 않음), 다운로드 버튼과 안 겹침
-    const lay = await page.evaluate(() => {
-      const r = document.getElementById('fp2').getBoundingClientRect();
-      for (const h of document.querySelectorAll('smd-anchor')) {
-        const a = h.shadowRoot?.querySelector('.acts.show');
-        if (!a) continue;
-        const ar = a.getBoundingClientRect();
-        if (!(ar.right > r.left && ar.left < r.right && ar.top >= r.top - 40 && ar.bottom <= r.bottom + 40)) continue;
-        const b = h.shadowRoot.querySelector('.btn.show')?.getBoundingClientRect();
-        const acts = [...a.querySelectorAll('.act')].map((x) => Math.round(x.getBoundingClientRect().height));
-        const overlap = !!b && ar.left < b.right && ar.right > b.left && ar.top < b.bottom && ar.bottom > b.top;
-        const cs = getComputedStyle(a.querySelector('.act')); return { top: Math.round(ar.top - r.top), h: Math.round(ar.height), inside: ar.left >= r.left && ar.right <= r.right, acts, overlap, dbg: [cs.height, cs.lineHeight, cs.display, cs.fontSize, cs.writingMode, cs.paddingTop, Math.round(a.querySelector('.act').getBoundingClientRect().width), Math.round(ar.width), Math.round(r.top), Math.round(r.height)].join('|') };
-      }
-      return null;
-    });
-    record('[팔로우·차단·좋아요] 사진·영상 맨 위에 얇은 한 줄(높이 24px 이하, 다운로드 버튼과 안 겹침)', !!lay && lay.top >= 0 && lay.top <= 12 && lay.h <= 24 && lay.inside && lay.acts.every((x) => x <= 24) && !lay.overlap, { note: JSON.stringify(lay) });
-    await page.locator('#fp2').screenshot({ path: path.join(SHOTS, 'acts-top.png') }).catch(() => {});
-    const c1 = await clickAct(page, '#fp2', 'l');
-    await page.waitForTimeout(1300);
-    const like = await page.evaluate(() => ({ lk1: window.__lk1 || 0, lk2: window.__lk2 || 0, clk: window.__clk || 0, label: document.getElementById('lk2').getAttribute('aria-label') }));
-    record('[팔로우·차단·좋아요] 좋아요: 그 게시물 좋아요만 눌림(댓글 하트·다른 게시물 안 눌림), 떠 있는 버튼 없음', c1 === 'ok' && like.lk2 === 1 && like.lk1 === 0 && like.clk === 0 && like.label === '좋아요 취소' && floats === 0, { note: JSON.stringify({ c1, floats, ...like }) });
-    const c2 = await clickAct(page, '#fp2', 'f');
-    await page.waitForTimeout(5200);
-    const f = await page.evaluate(() => ({ f1: window.__fol1 || 0, f2: window.__fol2 || 0 }));
-    const t2 = await toastHist(page);
-    record('[팔로우·차단·좋아요] 팔로우: 그 게시물 작성자만 팔로우 + 결과 알림', c2 === 'ok' && f.f2 === 1 && f.f1 === 0 && /팔로우했습니다/.test(t2), { note: JSON.stringify({ c2, ...f, toast: t2.slice(-80) }) });
-    await clickAct(page, '#fp2', 'b');
-    await page.waitForTimeout(600);
-    const t3 = await toastHist(page);
-    record('[팔로우·차단·좋아요] (오류 경로) 차단 미지원 사이트는 단계·원인·조치 안내', /차단 실패/.test(t3) && /단계: 차단 지원 확인/.test(t3) && /조치:/.test(t3), { note: t3.slice(-160) });
-    await page.goto('https://www.example-videos.com/float?stuck=1', { waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => document.getElementById('fp2').scrollIntoView({ block: 'center' }));
-    await page.waitForTimeout(2000);
-    await clickAct(page, '#fp2', 'l');
-    await page.waitForTimeout(1300);
-    const t4 = await toastHist(page);
-    record('[팔로우·차단·좋아요] (오류 경로) 좋아요가 안 바뀌면 단계·원인·조치', /좋아요 실패/.test(t4) && /단계: 좋아요 누르기/.test(t4), { note: t4.slice(-160) });
-    await setSettings({ postActions: false });
-    await page.waitForTimeout(800);
-    const shown = await page.evaluate(() => [...document.querySelectorAll('smd-anchor')].some((h) => h.shadowRoot?.querySelector('.acts.show')));
-    record('[팔로우·차단·좋아요] 끄면 숨김', !shown, { note: shown ? '보임' : '숨김' });
-  } catch (err) {
-    record('[팔로우·차단·좋아요]', false, { note: err.message.split('\n')[0] });
-  } finally {
-    await setSettings({ siteSettings: {}, autoFollow: true, alwaysShowButtons: false, postActions: true });
-    await page.close();
-  }
-}
-
-// ── 성능 진단(팝업 '이 사이트'): 기능별 시간·페이지 멈춤 표시 ──
+// ── 저장 설정 → 사이트별 저장: 저장 버튼 표시·따로 폴더·버튼 위치·성능 진단(이 사이트 탭에서 옮김) ──
 {
   const page = await ctx.newPage();
   try {
@@ -423,15 +348,24 @@ const toastHist = (page) => page.evaluate(() => document.querySelector('smd-toas
     const pp = await extPage();
     const tabId = await pp.evaluate(async () => (await chrome.tabs.query({ url: 'https://www.example-videos.com/float*' }))[0]?.id);
     await pp.goto(`chrome-extension://${extId}/popup/popup.html?tabId=${tabId}`);
-    await pp.click('.tab[data-tab="site"]');
+    await pp.click('.tab[data-tab="settings"]');
     await pp.waitForTimeout(600);
+    const ss = await pp.evaluate(() => ({ site: document.getElementById('ssSelect').value, items: [...document.querySelectorAll('#ssList .row-toggle b')].map((b) => b.textContent) }));
+    await pp.locator('#ssList .row-toggle', { hasText: '따로 폴더에 저장' }).click();
+    await pp.waitForTimeout(400);
+    const map = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.siteFolderMap || {});
+    record('[저장 설정] 사이트별 저장: 지금 사이트 기준 저장 버튼 표시·따로 폴더·버튼 위치·성능 진단, 따로 폴더 켜면 그 사이트만', ss.site === 'generic' && ['저장 버튼 표시', '따로 폴더에 저장', '떠 있는 버튼 위치', '성능 진단'].every((k) => ss.items.some((t) => t.includes(k))) && !!map.generic && Object.keys(map).length === 1, { note: JSON.stringify({ ...ss, map }) });
+    await pp.evaluate(async () => {
+      const { settings } = await chrome.storage.local.get('settings');
+      await chrome.storage.local.set({ settings: { ...settings, siteFolderMap: {} } });
+    });
     await pp.click('.sp-perf-run');
     await pp.waitForTimeout(800);
     const out = await pp.evaluate(() => document.querySelector('.sp-perf-out').textContent);
     // 오류 경로: 연결할 수 없는 탭
     await page.goto('about:blank');
     await pp.goto(`chrome-extension://${extId}/popup/popup.html?tabId=${tabId}`);
-    await pp.click('.tab[data-tab="site"]');
+    await pp.click('.tab[data-tab="settings"]');
     await pp.waitForTimeout(600);
     await pp.click('.sp-perf-run');
     await pp.waitForTimeout(800);
@@ -505,29 +439,6 @@ const toastHist = (page) => page.evaluate(() => document.querySelector('smd-toas
     const p1 = await extPage();
     await p1.evaluate(() => chrome.storage.local.set({ downloadedKeys: [] }));
     await p1.close();
-    await page.close();
-  }
-}
-
-// ── 글만 있는 피드 숨기기(켜고 끄기, 늦게 뜬 사진은 다시 보임) ──
-{
-  const page = await ctx.newPage();
-  try {
-    await setSettings({ siteSettings: {}, hideTextPosts: true });
-    await page.goto('https://x.com/xtextfeed', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2200);
-    const vis = () => page.evaluate(() => Object.fromEntries(['t1', 'p1', 'v1', 'late'].map((id) => [id, getComputedStyle(document.getElementById(id)).display !== 'none'])));
-    const a = await vis();
-    await page.waitForTimeout(2500); // 3초에 사진이 생긴 게시물
-    const b = await vis();
-    await setSettings({ siteSettings: { x: { hideTextPosts: false } } });
-    await page.waitForTimeout(800);
-    const c = await vis();
-    record('[글만 있는 피드] 글만 숨김·사진/영상은 보임·늦게 뜬 사진은 다시 보임·끄면 모두 보임', !a.t1 && a.p1 && a.v1 && !a.late && b.late && !b.t1 && c.t1, { note: JSON.stringify({ 처음: a, 사진생긴뒤: b, 끈뒤: c }) });
-  } catch (err) {
-    record('[글만 있는 피드]', false, { note: err.message.split('\n')[0] });
-  } finally {
-    await setSettings({ siteSettings: {}, hideTextPosts: false });
     await page.close();
   }
 }
@@ -714,73 +625,6 @@ for (const [SITE, URL_] of [['틱톡', 'https://www.tiktok.com/ttguard'], ['샤�
   }
 }
 
-// ── 영상 화면 크기 줄이기(모든 사이트, 켜기·끄기·사이트별 %) ──
-{
-  const page = await ctx.newPage();
-  try {
-    // 처음 설치 값: 유튜브만 70% 로 켬(마이그레이션)
-    await setSettings({ siteSettingsV: 2, siteSettings: {} });
-    const mig = await (async () => {
-      const p = await ctx.newPage();
-      await p.goto(`chrome-extension://${extId}/popup/popup.html`);
-      await p.waitForTimeout(800);
-      const r = await p.evaluate(async () => (await chrome.storage.local.get('settings')).settings.siteSettings.youtube);
-      await p.close();
-      return r;
-    })();
-    await page.goto('https://www.youtube.com/watch?v=YTwatch0001', { waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => {
-      const f = document.createElement('ytd-watch-flexy');
-      f.innerHTML = '<div id="primary-inner"><div id="player" style="width:800px;height:450px"><video src="https://cdn.example-videos.com/preview.webm" muted style="width:800px;height:450px"></video></div></div>';
-      document.body.prepend(f);
-    });
-    await page.waitForTimeout(1500);
-    const zy = () => page.evaluate(() => getComputedStyle(document.querySelector('ytd-watch-flexy #player')).zoom);
-    const z70 = await zy();
-    // 그 밖의 사이트: 기본값은 끔 → 이 사이트만 50% 로 켬 → 끔
-    await page.goto('https://www.example-videos.com/seek', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1500);
-    const w = () => page.evaluate(() => Math.round(document.getElementById('sv').getBoundingClientRect().width));
-    const g0 = await w();
-    await setSettings({ siteSettings: { generic: { videoSmall: true, videoScale: 50 } } });
-    await page.waitForTimeout(1600);
-    const g50 = await w();
-    await setSettings({ siteSettings: { generic: { videoSmall: false } } });
-    await page.waitForTimeout(800);
-    const goff = await w();
-    record('[모든 사이트] 영상 화면 크기: 유튜브 70% 기본·다른 사이트 50% 켜기/끄기', mig?.videoSmall === true && mig?.videoScale === 70 && z70 === '0.7' && g0 === 640 && g50 === 320 && goff === 640, { note: JSON.stringify({ 유튜브기본: mig, z70, 일반끔: g0, 일반50: g50, 다시끔: goff }) });
-  } catch (err) {
-    record('[모든 사이트] 영상 화면 크기', false, { note: err.message.split('\n')[0] });
-  } finally {
-    await setSettings({ siteSettings: {}, siteSettingsV: 3 });
-    await page.close();
-  }
-}
-
-// ── 유튜브: 영상 아래 좋아요 버튼(팔로우·차단·좋아요 줄) ──
-{
-  const page = await ctx.newPage();
-  try {
-    await setSettings({ siteSettings: {}, postActions: true, autoFollow: false });
-    await page.goto('https://www.youtube.com/watch?v=YTlike00001', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
-    const c = await clickAct(page, 'video', 'l');
-    await page.waitForTimeout(1300);
-    const r = await page.evaluate(() => ({ liked: window.__liked || 0, pressed: document.getElementById('ytlike').getAttribute('aria-pressed') }));
-    record('[유튜브] 영상 아래 좋아요 → 유튜브 좋아요가 눌림', c === 'ok' && r.liked === 1 && r.pressed === 'true', { note: JSON.stringify({ c, ...r }) });
-    await page.goto('https://www.youtube.com/watch?v=YTwatch0001', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
-    await clickAct(page, 'video', 'l');
-    await page.waitForTimeout(600);
-    const m = await toastHist(page);
-    record('[유튜브] (오류 경로) 좋아요 단추가 없으면 단계·원인·조치', /좋아요 실패/.test(m) && /단계: 좋아요 단추 찾기/.test(m) && /조치:/.test(m), { note: m.slice(-160) });
-  } catch (err) {
-    record('[유튜브] 영상 아래 좋아요', false, { note: err.message.split('\n')[0] });
-  } finally {
-    await setSettings({ siteSettings: {}, autoFollow: true });
-    await page.close();
-  }
-}
 // ── 저장 버튼 항상 표시: 마우스를 올리거나 재생하지 않아도 사진·영상 버튼이 보임 ──
 {
   const page = await ctx.newPage();
@@ -1105,28 +949,6 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   } catch (err) {
     record('[X] 재생 단추', false, { note: err.message.split('\n')[0] });
   } finally {
-    await page.close();
-  }
-}
-
-// ── 블루스카이: 사진 아래 차단 버튼 ──
-{
-  const page = await ctx.newPage();
-  try {
-    await setSettings({ siteSettings: {}, postActions: true, alwaysShowButtons: true, autoFollow: false });
-    await page.goto('https://bsky.app/afollow', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
-    const feedBtns = await page.evaluate(() => document.querySelectorAll('smd-bfollow').length);
-    const l = log.length;
-    const c = await clickAct(page, '#pic', 'b');
-    await page.waitForTimeout(1500);
-    const r = log.slice(l).find((x) => x.bskyFollow === 'create');
-    const t = await toastHist(page);
-    record('[블루스카이] 사진 아래 차단 → 차단 기록(app.bsky.graph.block) + 알림, 피드 팔로우 버튼 없음', c === 'ok' && r?.collection === 'app.bsky.graph.block' && /carol/.test(r.subject || '') && r.auth && /차단: @carol\.test 완료/.test(t) && feedBtns === 0, { note: JSON.stringify({ c, feedBtns, r, t: t.slice(-80) }) });
-  } catch (err) {
-    record('[블루스카이] 차단', false, { note: err.message.split('\n')[0] });
-  } finally {
-    await setSettings({ alwaysShowButtons: false, autoFollow: true });
     await page.close();
   }
 }
@@ -1574,40 +1396,6 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
-// ── 화면 밖 영상 정지: 재생 중 스크롤로 화면에서 벗어나면 멈춤 ──
-{
-  const page = await ctx.newPage();
-  try {
-    await setSettings({ pauseOffscreen: true });
-    await page.goto('https://www.example-videos.com/scrollpause', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1500);
-    const st = () => page.evaluate(() => ({ v1: !document.getElementById('v1').paused, bg: !document.getElementById('bgv').paused }));
-    const s0 = await st();
-    await page.evaluate(() => scrollTo(0, 3000));
-    await page.waitForTimeout(800);
-    const s1 = await st();
-    await page.evaluate(() => scrollTo(0, 0));
-    await page.waitForTimeout(800);
-    const s2 = await st();
-    record('[화면 밖 정지] 스크롤로 벗어나면 멈춤, 다시 보여도 저절로 재생 안 함', s0.v1 && !s1.v1 && !s2.v1, { note: JSON.stringify({ 처음: s0.v1, 벗어난후: s1.v1, 돌아온후: s2.v1 }) });
-    record('[화면 밖 정지] (예외 경로) 처음부터 숨은 영상(음악·광고용)은 건드리지 않음', s0.bg && s1.bg, { note: JSON.stringify({ 숨은영상재생중: s1.bg }) });
-    // 설정을 끄면 화면에서 벗어나도 계속 재생
-    await setSettings({ pauseOffscreen: false });
-    await page.waitForTimeout(400);
-    await page.evaluate(() => document.getElementById('v1').play());
-    await page.waitForTimeout(500);
-    await page.evaluate(() => scrollTo(0, 3000));
-    await page.waitForTimeout(800);
-    const s3 = await st();
-    record('[화면 밖 정지] 설정 끄면 벗어나도 계속 재생', s3.v1, { note: `벗어난 뒤 재생 중=${s3.v1}` });
-  } catch (err) {
-    record('[화면 밖 정지]', false, { note: err.message.split('\n')[0] });
-  } finally {
-    await setSettings({ pauseOffscreen: true });
-    await page.close();
-  }
-}
-
 // ── 팝업 최근 다운로드: 대기 중인 작업이 많아도 전부 표시 ──
 {
   const pp = await extPage();
@@ -1681,6 +1469,26 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
+// ── 설정 정리(v1.32.0): 삭제한 기능·저장 설정으로 옮긴 기능의 사이트별 값은 지우고, 나머지 사이트 값은 그대로 ──
+{
+  try {
+    const ep = await extPage();
+    const after = await ep.evaluate(async () => {
+      const { settings } = await chrome.storage.local.get('settings');
+      await chrome.storage.local.set({ settings: { ...settings, siteSettingsV: 3, pauseOffscreen: true, siteSettings: { x: { noAutoplay: true, hideTextPosts: false, forceH264Aac: false }, youtube: { videoSmall: true, videoScale: 70 } } } });
+      const mod = await import('../shared/settings.js');
+      const s = await mod.getSettings();
+      return { ss: s.siteSettings, v: s.siteSettingsV, po: 'pauseOffscreen' in s };
+    });
+    await ep.close();
+    record('[설정 정리] 삭제·이동한 기능의 사이트별 값 지움(다른 사이트 값은 유지)', JSON.stringify(after.ss) === JSON.stringify({ x: { noAutoplay: true } }) && after.v === 4 && !after.po, { note: JSON.stringify(after) });
+  } catch (err) {
+    record('[설정 정리]', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await setSettings({ siteSettings: {} });
+  }
+}
+
 // ── 팝업 '이 사이트': 지금 사이트 기능만 보이고, 바꾸면 그 사이트에만 적용 ──
 {
   const page = await ctx.newPage();
@@ -1699,8 +1507,10 @@ if (!only || only === 'place' || '배치'.includes(only)) {
     const hasBsky = !info.items.some((t) => /피드 게시물 팔로우 버튼/.test(t)); // 피드 팔로우 버튼은 없앰
     const hasX = info.items.some((t) => /피드 작성자 옆/.test(t));
     const hasYt = info.items.some((t) => /쇼츠/.test(t));
-    const shared = ['팔로우 · 차단 · 좋아요', '영상 재생바', '사진 확대 보기에서 누르면 닫기', '영상 화면 크기'].every((k) => info.items.some((t) => t.includes(k)));
-    record('[팝업] 이 사이트: 블루스카이에서 열면 공용 기능 + 블루스카이 기능(X·유튜브 데이터 전용 기능 없음)', /블루스카이 기능/.test(info.title) && hasBsky && shared && !hasX && !hasYt, { note: `${info.title} · ${info.items.length}개 · 공용 ${shared}` });
+    const shared = ['영상 재생바', '사진 확대 보기에서 누르면 닫기', '자동재생 끄기'].every((k) => info.items.some((t) => t.includes(k)));
+    // 삭제한 기능·저장 설정으로 옮긴 기능은 '이 사이트'에 없음
+    const gone = ['팔로우 · 차단 · 좋아요', '영상 화면 크기', '글만 있는 피드', '화면 밖 영상 정지', '본문 글자 넣기', '작성자 줄', '번역해서 넣기', '피드 화면', 'MP4', '중복 다운로드', '저장 버튼 표시', '따로 폴더', '떠 있는 버튼 위치', '성능 진단'].filter((k) => info.items.some((t) => t.includes(k)));
+    record('[팝업] 이 사이트: 공용 기능만(삭제·저장 설정으로 옮긴 기능 없음, X·유튜브 전용 없음)', /블루스카이 기능/.test(info.title) && hasBsky && shared && !hasX && !hasYt && gone.length === 0, { note: `${info.title} · ${info.items.length}개 · 공용 ${shared} · 남은 것 ${gone.join(',') || '없음'}` });
     await pp.locator('#spList .row-toggle', { hasText: '자동재생 끄기' }).click();
     await pp.waitForTimeout(500);
     const st = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings);
@@ -2008,11 +1818,10 @@ if (!only || only === 'place' || '배치'.includes(only)) {
   }
 }
 
-// ── X: 사진 아래 차단(⋯ 메뉴로 실제 차단) + 자동 팔로우 ──
+// ── X: 자동 팔로우(이미 팔로우 중이면 요청 안 함) + 팔로우·차단·좋아요 줄 없음 ──
 if (!only || only === 'x' || '팔로우'.includes(only)) {
   const page = await ctx.newPage();
   try {
-    await setSettings({ postActions: true });
     await page.goto('https://x.com/explore', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2500);
     const feedBtns = await page.evaluate(() => document.querySelectorAll('smd-follow').length);
@@ -2027,15 +1836,13 @@ if (!only || only === 'x' || '팔로우'.includes(only)) {
       const req = log.slice(lf).filter((l) => l.follow);
       record('[자동 팔로우] X: 이미 팔로우 중이면 아무 요청도 안 함', req.length === 0, { note: req.length ? JSON.stringify(req) : '요청 없음' });
     }
+    // 팔로우·차단·좋아요 줄은 삭제함(사용자 요청) — 사진 위에 줄이 없고, 피드 팔로우 버튼도 없음
     await page.locator('#fpic').hover();
     await page.waitForTimeout(500);
-    const c = await clickAct(page, '#fpic', 'b');
-    await page.waitForTimeout(1500);
-    const blocked = await page.evaluate(() => window.__blocked || '');
-    const t = await toastHist(page);
-    record('[X] 사진 아래 차단 → ⋯ 메뉴 · 확인으로 실제 차단 + 알림, 피드 팔로우 버튼 없음', c === 'ok' && blocked === 'followed_user' && /차단: @followed_user 완료/.test(t) && feedBtns === 0, { note: JSON.stringify({ c, blocked, feedBtns, t: t.slice(-80) }) });
+    const acts = await page.evaluate(() => [...document.querySelectorAll('smd-anchor')].filter((h) => h.shadowRoot?.querySelector('.acts, .act')).length);
+    record('[X] 팔로우·차단·좋아요 줄 없음(삭제), 피드 팔로우 버튼 없음', acts === 0 && feedBtns === 0, { note: JSON.stringify({ acts, feedBtns }) });
   } catch (err) {
-    record('[X] 차단', false, { note: err.message.split('\n')[0] });
+    record('[X] 자동 팔로우', false, { note: err.message.split('\n')[0] });
   } finally {
     await page.close();
   }
@@ -2580,6 +2387,48 @@ if (!only || '팝업'.includes(only) || only === 'popup') {
   await p.close();
 }
 
+// ── 블랙전용: Alt+W 탭 닫기 + 팝업 '블랙전용' 탭 ──
+{
+  let pp = null;
+  try {
+    await setSettings({ blackAltW: true });
+    // 정상 경로: Alt+W → 그 탭이 닫힘(한글 입력처럼 글자가 달라도 키 위치로)
+    const p1 = await ctx.newPage();
+    await p1.goto('https://www.example-videos.com/float', { waitUntil: 'domcontentloaded' });
+    await p1.waitForTimeout(1200);
+    const closed1 = p1.waitForEvent('close', { timeout: 6000 }).then(() => true, () => false);
+    await p1.keyboard.press('Alt+KeyW');
+    const c1 = await closed1;
+    record('[블랙전용] Alt+W 를 누르면 지금 탭이 닫힘', c1, { note: c1 ? '닫힘' : '안 닫힘' });
+    if (!c1) await p1.close().catch(() => {});
+    // 끄면 안 닫힘
+    await setSettings({ blackAltW: false });
+    const p2 = await ctx.newPage();
+    await p2.goto('https://www.example-videos.com/float', { waitUntil: 'domcontentloaded' });
+    await p2.waitForTimeout(1200);
+    await p2.keyboard.press('Alt+KeyW');
+    await p2.waitForTimeout(1500);
+    const c2 = p2.isClosed();
+    record('[블랙전용] 끄면 Alt+W 로 안 닫힘', !c2, { note: c2 ? '닫힘' : '그대로' });
+    await p2.close().catch(() => {});
+    // 팝업: '블랙전용' 탭이 다섯째로 생기고, 스위치로 켜고 끔
+    await setSettings({ blackAltW: true });
+    pp = await extPage();
+    const tabs = await pp.evaluate(() => [...document.querySelectorAll('.tab')].map((t) => t.textContent.trim()));
+    await pp.click('.tab[data-tab="black"]');
+    const shown = await pp.evaluate(() => document.querySelector('.pane[data-pane="black"]')?.classList.contains('on') && document.getElementById('blackAltW').checked);
+    await pp.click('label:has(#blackAltW)');
+    await pp.waitForTimeout(400);
+    const after = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.blackAltW);
+    record('[블랙전용] 팝업에 블랙전용 탭(켜고 끄기 스위치)', tabs.join(',') === '다운로드,이 사이트,저장 설정,지원 사이트,블랙전용' && shown && after === false, { note: `${tabs.join(',')} · 처음 켜짐=${shown} · 누른 뒤=${after}` });
+  } catch (err) {
+    record('[블랙전용]', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await pp?.close().catch(() => {});
+    await setSettings({ blackAltW: true });
+  }
+}
+
 // ── (맨 마지막) 확장 업데이트로 열린 페이지와 연결이 끊겼을 때: 전부 팔로우가 영어 오류 대신 새로고침 안내 ──
 {
   const page = await ctx.newPage();
@@ -2587,9 +2436,24 @@ if (!only || '팝업'.includes(only) || only === 'popup') {
     await setSettings({ followAllButton: true });
     await page.goto('https://x.com/spacestar/following', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('smd-followall', { timeout: 8000 });
+    const bp2 = await ctx.newPage();
+    await bp2.goto('https://www.example-videos.com/float', { waitUntil: 'domcontentloaded' });
+    await bp2.waitForTimeout(1200);
+    const oldMark = await bp2.evaluate(() => document.documentElement.getAttribute('data-smd-black'));
     const ep = await extPage();
     await ep.evaluate(() => setTimeout(() => chrome.runtime.reload(), 50)).catch(() => {});
     await page.waitForTimeout(2500);
+    // 블랙전용 Alt+W 가 업데이트 뒤 새로고침 없이 되는지는 이 시험 브라우저가 reload 뒤 확장을 다시 켜지 않아 확인 불가(실제 웨일에서 확인)
+    // 오류 경로: 새 스크립트가 없으면(다시 넣기 실패) 단계·원인·조치 안내
+    await bp2.bringToFront();
+    // 새로 넣은 스크립트의 표시를 예전 것으로 되돌려 '다시 넣기 실패'를 흉내 낸다
+    await bp2.evaluate((m) => document.documentElement.setAttribute('data-smd-black', m), oldMark);
+    await bp2.keyboard.press('Alt+KeyW');
+    await bp2.waitForTimeout(800);
+    const bErr = bp2.isClosed() ? '(닫힘)' : await bp2.evaluate(() => document.querySelector('[data-smd-black-err]')?.textContent || '');
+    record('[블랙전용] (오류 경로) 연결이 끊긴 채면 Alt+W 가 단계·원인·조치 안내', /탭 닫기\(Alt\+W\) 실패/.test(bErr) && /단계: 확장프로그램 연결 확인/.test(bErr) && /조치:/.test(bErr), { note: bErr.replace(/\n/g, ' / ') });
+    await bp2.close().catch(() => {});
+    await page.bringToFront();
     await page.evaluate(() => document.querySelector('smd-followall').shadowRoot.querySelector('.go').click()).catch(() => {});
     await page.waitForTimeout(500);
     const m = await page.evaluate(() => document.querySelector('smd-followall')?.shadowRoot.querySelector('.msg')?.textContent || '');
