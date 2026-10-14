@@ -119,16 +119,20 @@ $('#resetPlacement').addEventListener('click', async () => {
 $('#genericButtons').checked = settings.genericButtons !== false;
 $('#genericButtons').addEventListener('change', (e) => save({ genericButtons: e.target.checked }));
 
-// ───────────── 저장 폴더 (웨일 다운로드 폴더) ─────────────
+// ───────────── 저장 폴더 (브라우저 다운로드 폴더) ─────────────
 let shownFolder = '다운로드 폴더';
+// 크롬에 whale:// 주소를 열면 오류 없이 빈 탭이 생길 수 있어서, 지금 브라우저의 설정 주소를 먼저 연다
+const IS_WHALE = /\bWhale\//.test(navigator.userAgent);
+const SETTINGS_URLS = IS_WHALE ? ['whale://settings/downloads', 'chrome://settings/downloads'] : ['chrome://settings/downloads'];
 $('#changeFolder').addEventListener('click', async () => {
-  for (const url of ['whale://settings/downloads', 'chrome://settings/downloads']) {
+  let why = '';
+  for (const url of SETTINGS_URLS) {
     try {
       await chrome.tabs.create({ url });
       return;
-    } catch {}
+    } catch (e) { why = e?.message || String(e); }
   }
-  $('#folderHint').textContent = '설정 창을 열지 못했어요. 주소창에 whale://settings/downloads 를 입력하세요.';
+  $('#folderHint').textContent = `설정 창 열기 실패 — 원인: ${why || '알 수 없는 응답'} · 조치: 주소창에 ${SETTINGS_URLS[0]} 를 직접 입력하세요.`;
 });
 
 async function renderFolder() {
@@ -145,7 +149,7 @@ async function renderFolder() {
     $('#folderPath').textContent = dir;
     $('#folderPath').title = dir;
   } else {
-    $('#folderPath').textContent = '웨일 다운로드 폴더';
+    $('#folderPath').textContent = '브라우저 다운로드 폴더';
   }
   renderPreview();
 }

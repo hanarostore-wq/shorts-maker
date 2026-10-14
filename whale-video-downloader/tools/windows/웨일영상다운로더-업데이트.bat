@@ -3,7 +3,6 @@ chcp 65001 >nul
 setlocal EnableExtensions
 title 웨일 영상 다운로더 업데이트
 rem 웨일 영상 다운로더 업데이트 - 더블클릭할 때만 동작합니다. 자동 실행 등록은 하지 않습니다.
-rem 웨일 다운로드 기본 폴더가 아직 다운로드 폴더(기본값)이면 바탕화면으로 바꿉니다 - 웨일을 닫아야 해서 먼저 묻습니다.
 rem 마지막에 이 bat 파일도 최신으로 바꿉니다.
 rem 윈도우 기본 도구(curl, tar, robocopy)만 씁니다.
 
@@ -33,11 +32,11 @@ mkdir "%WORK%" 2>nul
 if not exist "%WORK%" goto :fail_tmp
 
 echo.
-echo [1/4] 최신 버전 받는 중...
+echo [1/3] 최신 버전 받는 중...
 curl.exe -L --fail --silent --show-error --retry 2 -o "%WORK%\latest.zip" "%URL%"
 if errorlevel 1 goto :fail_download
 
-echo [2/4] 압축 푸는 중...
+echo [2/3] 압축 푸는 중...
 tar.exe -xf "%WORK%\latest.zip" -C "%WORK%"
 if errorlevel 1 goto :fail_unzip
 
@@ -53,19 +52,12 @@ rem 새 bat 은 맨 끝에 덮어씀(실행 중인 bat 을 바로 덮으면 다�
 if exist "%NEWBAT%" del "%NEWBAT%" >nul 2>nul
 if exist "%TOOLS%\웨일영상다운로더-업데이트.bat" copy /y "%TOOLS%\웨일영상다운로더-업데이트.bat" "%NEWBAT%" >nul 2>nul
 
-echo [3/4] 웨일 저장 폴더 확인 중 - 기본값이면 바탕화면으로...
-if not exist "%TOOLS%\set-desktop-folder.ps1" (
-  echo [저장 폴더 건너뜀] 단계: 저장 폴더 바꾸기 / 원인: 받은 파일에 set-desktop-folder.ps1 이 없습니다 / 해결: whale://settings/downloads 에서 위치를 바탕화면으로 바꾸세요.
-) else (
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%TOOLS%\set-desktop-folder.ps1"
-  if errorlevel 1 echo    저장 폴더는 그대로 두고 확장 업데이트는 계속합니다.
-)
 
 call :readver "%SRC%\manifest.json"
 set "NEWVER=%VER%"
 if defined OLDVER if "%OLDVER%"=="%NEWVER%" goto :already
 
-echo [4/4] 확장 폴더에 덮어쓰는 중...
+echo [3/3] 확장 폴더에 덮어쓰는 중...
 if not exist "%EXT%" mkdir "%EXT%"
 robocopy "%SRC%" "%EXT%" /MIR /XF *.bat /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 goto :fail_copy
@@ -76,10 +68,10 @@ if not defined VER goto :fail_check
 echo.
 if defined OLDVER (
   echo 업데이트 완료: v%OLDVER% 에서 v%VER% 으로
-  echo 웨일에서 확장 팝업을 열고 위쪽의 [업데이트] 단추를 누른 뒤, 열려 있던 사이트를 새로고침[F5]하세요.
+  echo 크롬[또는 웨일]에서 확장 팝업을 열고 위쪽의 [업데이트] 단추를 누른 뒤, 열려 있던 사이트를 새로고침[F5]하세요.
 ) else (
   echo 설치 완료: v%VER%
-  echo 웨일 주소창에 whale://extensions 입력 - 개발자 모드 켜기 - [압축해제된 확장 프로그램을 로드합니다] - %EXT% 폴더 선택
+  echo 크롬 주소창에 chrome://extensions 입력[웨일은 whale://extensions] - 개발자 모드 켜기 - [압축해제된 확장 프로그램을 로드합니다] - %EXT% 폴더 선택
 )
 echo.
 goto :finish
