@@ -2111,6 +2111,40 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
       record('[피드③] 실패 경로', false, { note: err.message.split('\n')[0] });
     }
   }
+  // 장면별로 나누기: 사이트별 설정에서 켠 사이트만(기본 꺼짐)
+  {
+    const dur = (f) => Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]).toString().trim());
+    await setSettings({ captionOnMedia: false, captionCover: false, captionIntro: false, captionKeepOriginal: false, sceneMinSec: 2, sceneCut: 'precise', siteSettings: { generic: { sceneSplit: true } } });
+    await clearDownloaded();
+    try {
+      const { added, warn } = await grab('https://www.example-videos.com/scenes', 4, 2500);
+      const scenes = added.filter((f) => /\(장면 \d\d\)\.mp4$/.test(f)).sort();
+      const main = added.find((f) => !/\(장면/.test(f));
+      const d = scenes.map(dur);
+      const ok = scenes.length === 3 && !!main && Math.abs(dur(main) - 9.6) < 0.2 && Math.abs(d[0] - 3.6) < 0.15 && Math.abs(d[1] - 3) < 0.15 && Math.abs(d[2] - 3) < 0.15 && path.dirname(scenes[0]) === path.dirname(main);
+      record('[장면] 이 사이트에서 켜면 전체 영상 + (장면 01~03) 저장, 0.6초 번쩍임은 최소 2초로 합쳐짐', ok, { note: `${scenes.map((f) => path.basename(f)).join(', ') || '장면 없음'} · 길이 ${d.map((x) => x.toFixed(2)).join('/')} · 전체 ${main ? dur(main).toFixed(2) : '?'}s · 안내: ${warn.slice(0, 80) || '없음'}` });
+    } catch (err) {
+      record('[장면] 사이트에서 켬', false, { note: err.message.split('\n')[0] });
+    }
+    await setSettings({ siteSettings: { youtube: { sceneSplit: true } } });
+    await clearDownloaded();
+    try {
+      const { added } = await grab('https://www.example-videos.com/scenes', 1, 4000);
+      record('[장면] 켜지 않은 사이트(다른 사이트만 켬)는 나누지 않음', added.length === 1 && !/\(장면/.test(added[0]), { note: added.map((f) => path.basename(f)).join(', ') });
+    } catch (err) {
+      record('[장면] 기본 꺼짐', false, { note: err.message.split('\n')[0] });
+    }
+    await setSettings({ siteSettings: { generic: { sceneSplit: true } }, sceneMinSec: 5 });
+    await clearDownloaded();
+    try {
+      // 최소 5초면 9.6초 영상에서 두 장면 모두 5초를 넘을 수 없어 → 장면 파일 없음 + 안내
+      const { added, warn } = await grab('https://www.example-videos.com/scenes', 1, 4000);
+      record('[장면] 나눌 장면이 없으면 전체 영상만 + 이유 안내', added.length === 1 && /장면 전환을 찾지 못해.*최소 길이 5초/.test(warn), { note: `${added.length}개 · 안내: ${warn.slice(0, 90)}` });
+    } catch (err) {
+      record('[장면] 장면 없음 안내', false, { note: err.message.split('\n')[0] });
+    }
+    await setSettings({ siteSettings: {}, sceneMinSec: 2 });
+  }
   // 피드 본문(탭 제목 아님) + 첫 프레임이 검은 영상에서도 인물 없는 아래쪽에 글자
   {
     await setSettings({ captionOnMedia: true, captionCover: false, captionIntro: false, captionKeepOriginal: true });

@@ -40,3 +40,7 @@ echo "픽스처 생성 완료: $(pwd)"
 ff -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i anoisesrc=color=white:amplitude=1:sample_rate=48000 -t 6 -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a aac -b:a 320k -ac 2 -movflags +faststart h264_aac320.mp4
 # H.264 영상 + Opus 소리(MP4) — 소리만 AAC 320kbps 로 다시 만드는지 확인용(영상은 그대로 복사)
 ff -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i anoisesrc=color=pink:amplitude=0.4:sample_rate=48000 -t 6 -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a libopus -b:a 128k -ac 2 -movflags +faststart h264_opus.mp4
+# 장면 나누기 확인용: 테스트화면 3초 → 빨간 번쩍임 0.6초 → 컬러바 3초 → 만델브로 3초 (VP8, 키프레임은 맨 앞 하나뿐 — 장면 경계가 키프레임이 아님)
+ff -f lavfi -i "testsrc2=size=640x360:rate=30" -f lavfi -i "color=c=red:size=640x360:rate=30" -f lavfi -i "smptebars=size=640x360:rate=30" -f lavfi -i "mandelbrot=size=640x360:rate=30" -f lavfi -i "sine=frequency=440:sample_rate=48000" \
+  -filter_complex "[0:v]trim=duration=3,setpts=PTS-STARTPTS[a];[1:v]trim=duration=0.6,setpts=PTS-STARTPTS[b];[2:v]trim=duration=3,setpts=PTS-STARTPTS[c];[3:v]trim=duration=3,setpts=PTS-STARTPTS[d];[a][b][c][d]concat=n=4:v=1:a=0,format=yuv420p[v]" \
+  -map "[v]" -map 4:a -t 9.6 -c:v libvpx -b:v 800k -g 600 -keyint_min 600 -deadline realtime -cpu-used 8 -auto-alt-ref 0 -lag-in-frames 0 -c:a libopus -b:a 64k scenes.webm

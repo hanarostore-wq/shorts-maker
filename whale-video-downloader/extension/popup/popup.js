@@ -169,6 +169,9 @@ $('#countryFolders').addEventListener('change', (e) => save({ countryFolders: e.
 $('#flagPrefix').checked = settings.flagPrefix !== false;
 $('#flagPrefix').addEventListener('change', (e) => save({ flagPrefix: e.target.checked }));
 seg($('#flagStyle'), settings.flagStyle || 'name', (v) => save({ flagStyle: v }));
+// 장면별로 나누기: 켜고 끄기는 사이트별 설정에서만. 여기는 켠 사이트에 공통으로 쓰는 값
+seg($('#sceneMinSec'), String(settings.sceneMinSec || 2), (v) => save({ sceneMinSec: Number(v) }));
+seg($('#sceneCut'), settings.sceneCut === 'fast' ? 'fast' : 'precise', (v) => save({ sceneCut: v }));
 $('#imageButtons').checked = settings.imageButtons !== false;
 $('#imageButtons').addEventListener('change', (e) => save({ imageButtons: e.target.checked }));
 
@@ -528,7 +531,7 @@ renderPage();
 
 // ───────────── 다운로드 기록 ─────────────
 const fmtBytes = (n) => (n >= 1073741824 ? `${(n / 1073741824).toFixed(2)}GB` : n >= 1048576 ? `${(n / 1048576).toFixed(1)}MB` : n > 0 ? `${Math.max(1, Math.round(n / 1024))}KB` : '');
-const PHASE = { encode: 'H.264·AAC 변환 중', caption: '피드 내용 넣는 중', shot: '피드 화면 찍는 중', queue: '대기 중', resolve: '원본 주소 찾는 중', download: '받는 중', mux: '영상·음성 합치는 중', save: '파일 저장 중' };
+const PHASE = { scene: '장면 나누는 중', encode: 'H.264·AAC 변환 중', caption: '피드 내용 넣는 중', shot: '피드 화면 찍는 중', queue: '대기 중', resolve: '원본 주소 찾는 중', download: '받는 중', mux: '영상·음성 합치는 중', save: '파일 저장 중' };
 
 async function renderJobs() {
   const [{ jobs = [] }, { history = [] }] = await Promise.all([chrome.storage.session.get('jobs'), chrome.storage.local.get('history')]);

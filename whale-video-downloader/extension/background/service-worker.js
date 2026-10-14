@@ -2,6 +2,7 @@
 import { getSettings, DEFAULT_SETTINGS, effectiveSettings } from '../shared/settings.js';
 import { buildFilename, sanitizeFolder, countryFolder, strictName } from '../shared/filename.js';
 import { buildFromInfo } from './builders.js';
+import { clampMinSec } from '../shared/scenes.js';
 import { resolveBg } from './resolvers.js';
 import '../black/black-sw.js'; // 블랙전용 (유료판에서 빠짐)
 import '../black/black-bookmarks.js'; // 블랙전용 (유료판에서 빠짐)
@@ -515,13 +516,15 @@ async function runEngine(job, d, settings) {
     await startBrowserDownload(job, result.blobUrl, settings, 'save');
     // 함께 저장할 파일: 원본은 이름 끝에 (원본), 피드 스크린샷은 같은 이름 .png
     const extras = result.extras || (result.extra ? [{ ...result.extra, suffix: ' (원본)' }] : []);
+    const main = job.filename;
+    const dl = job.downloadId;
+    const where = job.where;
+    // 같은 이름 파일이 있어 '(1)' 처럼 바뀌어 저장됐으면 함께 저장하는 파일도 그 이름을 따른다
+    // (본 파일 이름을 한 번만 정한다 — 추가 파일마다 앞 파일 이름을 따르면 '(장면 01) (장면 02)' 처럼 쌓임)
+    const savedStem = (where || '').split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '');
+    const stem = savedStem ? main.replace(/[^/]+$/, savedStem) : main.replace(/\.[^.]+$/, '');
     for (const ex of extras) {
       if (!ex?.blobUrl) continue;
-      const main = job.filename;
-      const dl = job.downloadId;
-      // 같은 이름 파일이 있어 '(1)' 처럼 바뀌어 저장됐으면 함께 저장하는 파일도 그 이름을 따른다
-      const savedStem = (job.where || '').split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '');
-      const stem = savedStem ? main.replace(/[^/]+$/, savedStem) : main.replace(/\.[^.]+$/, '');
       job.filename = `${stem}${ex.suffix || ''}.${ex.ext || main.split('.').pop()}`;
       try {
         await startBrowserDownload(job, ex.blobUrl, settings, 'save');
@@ -530,6 +533,7 @@ async function runEngine(job, d, settings) {
       } finally {
         job.filename = main;
         job.downloadId = dl;
+        job.where = where;
       }
     }
   } finally {
@@ -542,7 +546,7 @@ async function attempt(job, d, settings) {
   try {
     // 브라우저 다운로드 관리자 요청에는 declarativeNetRequest 헤더가 붙지 않는다(실측).
     // Referer/User-Agent 가 필요한 CDN 은 처음부터 확장 엔진으로 받아 웨일 다운로드 목록에 실패 항목이 남지 않게 한다.
-    const native = d.type === 'file' && !d.caption && !d.encode && !d.rangeParam && d.credentials !== 'omit' && !headerOps(d.headers || {}).length;
+    const native = d.type === 'file' && !d.caption && !d.encode && !d.scenes && !d.rangeParam && d.credentials !== 'omit' && !headerOps(d.headers || {}).length;
     if (native) {
       job.phase = 'download';
       notify(job);
@@ -638,6 +642,11 @@ async function runJob(job) {
   if (!play && !isImage && settings.forceH264Aac !== false) {
     const encode = { h264aac: true, audioBitrate: Math.min(512, Math.max(64, Number(settings.audioKbps) || 320)) * 1000 };
     for (const d of [desc, ...(desc.fallbacks || [])]) d.encode = encode;
+  }
+  // 장면별로 나누기(기본 꺼짐): 전체 영상 + 장면마다 '(장면 01)' 파일
+  if (!play && !isImage && settings.sceneSplit === true) {
+    const scenes = { minSec: clampMinSec(settings.sceneMinSec), precise: settings.sceneCut !== 'fast' };
+    for (const d of [desc, ...(desc.fallbacks || [])]) d.scenes = scenes;
   }
   delete req.shotData;
   // 동시에 너무 많이 받지 않도록 최대 5개씩(사진 일괄 저장 대비)

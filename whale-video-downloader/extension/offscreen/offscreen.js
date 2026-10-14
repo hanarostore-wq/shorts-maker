@@ -3,6 +3,8 @@
 //   사진은 원본 그대로, jpg·png·gif 가 아니면 PNG 로 변환한다.
 import { copyFile, mergeStreams, remuxHls, StepError, STEP } from './engine.js';
 import { summarize, captionImage, captionVideo, feedImage, canvasPng, coverVideo, introVideo, cropShot, needsKorean, translateToKorean, stripLinks, withTranslation, postCard, authorLine, ensureH264Aac } from './caption.js';
+import { findScenes, sceneCodec, cutScene } from './scenes.js';
+import { sceneSuffix } from '../shared/scenes.js';
 
 // ① 방식: 찍어 둔 피드 글 부분 캡처가 있으면 그것을, 없으면 요약 글자를 붙인다
 async function overlayFor(cap, summary, warns) {
@@ -298,6 +300,47 @@ async function run({ jobId, desc, filename, mode, prefer }) {
       } catch (err) {
         await en.fail().catch(() => {});
         warns.push(`H.264·AAC 로 바꾸지 못해 원본 형식으로 저장했습니다 — 단계: ${err?.step || '변환'} · 원인: ${err?.message || err} · 조치: 웨일을 최신 버전으로 업데이트하거나, 팝업 '저장 설정'에서 'MP4(H.264·AAC 320kbps)로 저장'을 끄세요.`);
+      }
+    }
+    // 장면별로 나누기: 전체 영상은 그대로 저장하고, 장면마다 '(장면 01)' 이름의 MP4 를 옆에 더 저장한다
+    if (desc.scenes) {
+      const made = [];
+      const minSec = desc.scenes.minSec;
+      try {
+        send({ type: 'smd:engine-progress', jobId, phase: 'scene', percent: 0, quality });
+        const found = await findScenes(outFile, { minSec }, (f) => onProgress({ phase: 'scene', percent: Math.round(f * 30) }));
+        const n = found.ranges.length;
+        if (n < 2) {
+          warns.push(`장면 전환을 찾지 못해 장면 파일은 만들지 않았습니다(최소 길이 ${minSec}초 기준, 전체 영상만 저장).`);
+        } else {
+          let codec = null;
+          if (desc.scenes.precise) {
+            codec = await sceneCodec(outFile).catch(() => null);
+            if (!codec) warns.push('이 브라우저에서 영상 인코더를 쓸 수 없어 장면을 빠르게(다시 인코딩 없이) 잘랐습니다 — 일부 플레이어에서 장면 앞 1~2초가 보일 수 있습니다.');
+          }
+          for (let i = 0; i < n; i++) {
+            const t = await opfsTarget(`${jobId}-sc${i}`, filename);
+            try {
+              await cutScene(outFile, { ...found.ranges[i], codec }, t.writable);
+              const f = await t.fh.getFile();
+              if (!f.size) throw new Error('결과 파일이 비어 있습니다');
+              made.push({ t, f });
+            } catch (err) {
+              await t.fail().catch(() => {});
+              throw Object.assign(err instanceof Error ? err : new Error(String(err)), { step: `장면 ${i + 1}/${n} 자르기${err?.step ? `(${err.step})` : ''}` });
+            }
+            onProgress({ phase: 'scene', percent: Math.min(99, 30 + Math.round((69 * (i + 1)) / n)) });
+          }
+          made.forEach(({ f }, i) => extras.push({ blobUrl: URL.createObjectURL(f.slice(0, f.size, 'video/mp4')), ext: 'mp4', suffix: sceneSuffix(i, n), label: `장면 ${i + 1} 영상` }));
+          const prev = cleanup;
+          cleanup = async () => {
+            await prev().catch(() => {});
+            for (const m of made) await m.t.cleanup().catch(() => {});
+          };
+        }
+      } catch (err) {
+        for (const m of made) await m.t.cleanup().catch(() => {});
+        warns.push(`장면별로 나누지 못했습니다(전체 영상은 저장) — 단계: ${err?.step || '장면 나누기'} · 원인: ${err?.message || err} · 조치: ${desc.scenes.precise ? "다시 받아 보거나, 팝업 '저장 설정'에서 장면 자르기를 '빠르게'로 바꾸세요" : '다시 받아 보세요. 계속 실패하면 장면 나누기를 끄세요'}.`);
       }
     }
     warning = warns.join(' ');

@@ -364,6 +364,9 @@ const handlers = {
           <video src="https://cdn.example-videos.com/person_top.webm" muted style="width:640px;height:360px;background:#000"></video>
         </article></body></html>`);
     }
+    if (u.pathname === '/scenes') {
+      return html(res, page('장면 나누기 시험 영상', `<div class="card"><video src="https://cdn.example-videos.com/scenes.webm" muted style="width:640px;height:360px;background:#000"></video></div>`));
+    }
     if (u.pathname === '/watch-vp9') {
       return html(res, page('VP9 영상 게시물 오늘 공원에서 강아지와 산책했어요', `<div class="card"><video src="https://cdn.example-videos.com/preview.webm" muted style="width:640px;height:360px;background:#000"></video></div>`));
     }

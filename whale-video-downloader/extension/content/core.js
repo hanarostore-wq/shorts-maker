@@ -1239,6 +1239,7 @@
           : j.phase === 'queue' ? '대기 중…'
           : j.phase === 'caption' ? `피드 내용 넣는 중 ${Math.floor(j.percent || 0)}%`
           : j.phase === 'encode' ? `H.264·AAC 변환 중 ${Math.floor(j.percent || 0)}%`
+          : j.phase === 'scene' ? `장면 나누는 중 ${Math.floor(j.percent || 0)}%`
           : j.phase === 'mux' ? `${q}합치는 중 ${Math.floor(j.percent || 0)}%`
           : j.phase === 'save' ? '저장 중…'
           : j.percent != null ? `${q}${Math.floor(j.percent)}%`
