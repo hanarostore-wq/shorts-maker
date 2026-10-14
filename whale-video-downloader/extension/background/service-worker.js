@@ -505,6 +505,8 @@ async function runEngine(job, d, settings) {
   job.engine = null;
   // 사진은 실제 형식에 맞춰 확장자를 정한다(jpg/png/gif 그대로, 그 밖은 PNG 로 변환됨)
   if (result.ext) job.filename = job.filename.replace(/\.[^.]+$/, `.${result.ext}`);
+  // 장면 나누기: 본 파일은 1번 장면이라 이름 끝에 '(장면 01)'
+  if (result.mainSuffix) job.filename = job.filename.replace(/(\.[^.]+)$/, `${result.mainSuffix}$1`);
   if (!job.duration && result.duration) job.duration = result.duration;
   if (result.warning) job.warning = result.warning;
   if (result.captionUsed) job.captionUsed = result.captionUsed;
@@ -522,7 +524,12 @@ async function runEngine(job, d, settings) {
     // 같은 이름 파일이 있어 '(1)' 처럼 바뀌어 저장됐으면 함께 저장하는 파일도 그 이름을 따른다
     // (본 파일 이름을 한 번만 정한다 — 추가 파일마다 앞 파일 이름을 따르면 '(장면 01) (장면 02)' 처럼 쌓임)
     const savedStem = (where || '').split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '');
-    const stem = savedStem ? main.replace(/[^/]+$/, savedStem) : main.replace(/\.[^.]+$/, '');
+    let stem = savedStem ? main.replace(/[^/]+$/, savedStem) : main.replace(/\.[^.]+$/, '');
+    // 본 파일 이름 끝의 '(장면 01)' 은 빼고 붙인다 → '제목 (장면 02)'. '제목 (장면 01) (1)' 처럼 바뀌었으면 '제목 (1) (장면 02)'
+    if (result.mainSuffix) {
+      const i = stem.lastIndexOf(result.mainSuffix);
+      if (i >= 0) stem = stem.slice(0, i) + stem.slice(i + result.mainSuffix.length);
+    }
     for (const ex of extras) {
       if (!ex?.blobUrl) continue;
       job.filename = `${stem}${ex.suffix || ''}.${ex.ext || main.split('.').pop()}`;

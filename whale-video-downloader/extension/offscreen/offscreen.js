@@ -302,7 +302,8 @@ async function run({ jobId, desc, filename, mode, prefer }) {
         warns.push(`H.264·AAC 로 바꾸지 못해 원본 형식으로 저장했습니다 — 단계: ${err?.step || '변환'} · 원인: ${err?.message || err} · 조치: 웨일을 최신 버전으로 업데이트하거나, 팝업 '저장 설정'에서 'MP4(H.264·AAC 320kbps)로 저장'을 끄세요.`);
       }
     }
-    // 장면별로 나누기: 전체 영상은 그대로 저장하고, 장면마다 '(장면 01)' 이름의 MP4 를 옆에 더 저장한다
+    // 장면별로 나누기: 장면마다 '(장면 01)' 이름의 MP4 만 저장한다(장면이 하나뿐이거나 실패하면 전체 영상을 저장)
+    let mainSuffix = '';
     if (desc.scenes) {
       const made = [];
       const minSec = desc.scenes.minSec;
@@ -331,7 +332,12 @@ async function run({ jobId, desc, filename, mode, prefer }) {
             }
             onProgress({ phase: 'scene', percent: Math.min(99, 30 + Math.round((69 * (i + 1)) / n)) });
           }
-          made.forEach(({ f }, i) => extras.push({ blobUrl: URL.createObjectURL(f.slice(0, f.size, 'video/mp4')), ext: 'mp4', suffix: sceneSuffix(i, n), label: `장면 ${i + 1} 영상` }));
+          // 장면 파일만 저장(사용자 요청: 장면 나누기를 켜면 전체·원본 영상은 저장하지 않음). 1번 장면이 본 파일, 나머지는 함께 저장
+          for (let k = extras.length - 1; k >= 0; k--) if (extras[k].label === '원본 영상') { URL.revokeObjectURL(extras[k].blobUrl); extras.splice(k, 1); }
+          outFile = made[0].f;
+          ext = 'mp4';
+          mainSuffix = sceneSuffix(0, n);
+          made.slice(1).forEach(({ f }, i) => extras.push({ blobUrl: URL.createObjectURL(f.slice(0, f.size, 'video/mp4')), ext: 'mp4', suffix: sceneSuffix(i + 1, n), label: `장면 ${i + 2} 영상` }));
           const prev = cleanup;
           cleanup = async () => {
             await prev().catch(() => {});
@@ -346,7 +352,7 @@ async function run({ jobId, desc, filename, mode, prefer }) {
     warning = warns.join(' ');
     const url = URL.createObjectURL(outFile.slice(0, outFile.size, MIME[ext] || 'video/mp4'));
     finished.set(jobId, { url, cleanup, extraUrls: extras.map((x) => x.blobUrl) });
-    send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: outFile.size, quality, duration: measured, ext: ext !== (filename.split('.').pop() || '').toLowerCase() ? ext : undefined, extras, warning, captionUsed });
+    send({ type: 'smd:engine-result', jobId, kind: 'ready', blobUrl: url, size: outFile.size, quality, duration: measured, ext: ext !== (filename.split('.').pop() || '').toLowerCase() ? ext : undefined, extras, mainSuffix, warning, captionUsed });
   } catch (err) {
     running.delete(jobId);
     await target?.fail().catch(() => {});

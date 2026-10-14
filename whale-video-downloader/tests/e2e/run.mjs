@@ -2117,12 +2117,14 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
     await setSettings({ captionOnMedia: false, captionCover: false, captionIntro: false, captionKeepOriginal: false, sceneMinSec: 2, sceneCut: 'precise', siteSettings: { generic: { sceneSplit: true } } });
     await clearDownloaded();
     try {
-      const { added, warn } = await grab('https://www.example-videos.com/scenes', 4, 2500);
+      await setSettings({ captionOnMedia: true, captionKeepOriginal: true }); // 원본 함께 저장을 켜 둬도 장면 나누기가 되면 원본·전체 영상은 저장 안 함
+      const { added, warn } = await grab('https://www.example-videos.com/scenes', 3, 5000);
+      await setSettings({ captionOnMedia: false, captionKeepOriginal: false });
       const scenes = added.filter((f) => /\(장면 \d\d\)\.mp4$/.test(f)).sort();
-      const main = added.find((f) => !/\(장면/.test(f));
+      const others = added.filter((f) => !/\(장면 \d\d\)\.mp4$/.test(f));
       const d = scenes.map(dur);
-      const ok = scenes.length === 3 && !!main && Math.abs(dur(main) - 9.6) < 0.2 && Math.abs(d[0] - 3.6) < 0.15 && Math.abs(d[1] - 3) < 0.15 && Math.abs(d[2] - 3) < 0.15 && path.dirname(scenes[0]) === path.dirname(main);
-      record('[장면] 이 사이트에서 켜면 전체 영상 + (장면 01~03) 저장, 0.6초 번쩍임은 최소 2초로 합쳐짐', ok, { note: `${scenes.map((f) => path.basename(f)).join(', ') || '장면 없음'} · 길이 ${d.map((x) => x.toFixed(2)).join('/')} · 전체 ${main ? dur(main).toFixed(2) : '?'}s · 안내: ${warn.slice(0, 80) || '없음'}` });
+      const ok = scenes.length === 3 && !others.length && Math.abs(d[0] - 3.6) < 0.15 && Math.abs(d[1] - 3) < 0.15 && Math.abs(d[2] - 3) < 0.15 && new Set(scenes.map((f) => path.dirname(f))).size === 1;
+      record('[장면] 이 사이트에서 켜면 (장면 01~03)만 저장(전체·원본 영상 없음), 0.6초 번쩍임은 최소 2초로 합쳐짐', ok, { note: `${scenes.map((f) => path.basename(f)).join(', ') || '장면 없음'} · 그 밖 ${others.map((f) => path.basename(f)).join(', ') || '없음'} · 길이 ${d.map((x) => x.toFixed(2)).join('/')} · 안내: ${warn.slice(0, 80) || '없음'}` });
     } catch (err) {
       record('[장면] 사이트에서 켬', false, { note: err.message.split('\n')[0] });
     }
