@@ -438,8 +438,8 @@ function saveFolder(job, settings) {
   if (settings.siteFolders === true) parts.push(sanitizeFolder(siteFolderOf(job)));
   else if (own) parts.push(sanitizeFolder(own));
   if (settings.sortFolders !== false) parts.push(job.request?.kind === 'image' ? FOLDERS.image : (job.duration || 0) > 90 ? FOLDERS.long : FOLDERS.short);
-  // 그 안에 나라별 하위 폴더 (한국 / 미국 / 중국 … / 기타). 파일 이름 앞 [국가] 표시와 같은 판단을 쓴다.
-  if (settings.countryFolders !== false) parts.push(job.country || '기타');
+  // 그 안에 나라별 하위 폴더 (한국 / 중국 / 일본 / 서양). 파일 이름 앞 [국가] 표시와 같은 판단을 쓴다.
+  if (settings.countryFolders !== false) parts.push(job.country || '서양');
   return parts.filter(Boolean).join('/');
 }
 

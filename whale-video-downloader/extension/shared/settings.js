@@ -31,7 +31,7 @@ export const DEFAULT_SETTINGS = {
   siteFolderMap: {}, // 사이트별 저장 폴더 이름(비우면 다운로드 폴더). 같은 이름이면 한 폴더로 합쳐짐
   siteFolders: false, // 가장 위에 사이트별 폴더(유튜브/블루스카이/X …)
   sortFolders: true,
-  countryFolders: true, // 그 안에 나라별 하위 폴더(한국/미국/중국…/기타) // 사진 / 영상 1분30초 이하 / 영상 1분30초 초과 폴더로 자동 분류
+  countryFolders: true, // 그 안에 나라별 하위 폴더(한국/중국/일본/서양 네 개) // 사진 / 영상 1분30초 이하 / 영상 1분30초 초과 폴더로 자동 분류
   flagPrefix: true,
   flagStyle: 'name', // 'name' = [한국] (윈도우 권장), 'emoji' = 🇰🇷 (윈도우 탐색기에선 KR 글자로 보임) // 파일 이름 맨 앞에 영상 국적 깃발 이모지
   filenameTemplate: '{title} [{site}-{id}]',

@@ -222,24 +222,32 @@ test('요약: URL·해시태그·이모지 빼고 첫 문장, 60자 이내', asy
 });
 
 import { countryFolder } from '../../extension/shared/filename.js';
-test('나라별 하위 폴더 이름', () => {
+test('나라별 하위 폴더 이름: 한국 · 중국 · 일본 · 서양 네 개만', () => {
   assert.equal(countryFolder('오늘 공원 산책', 'generic'), '한국');
-  assert.equal(countryFolder('Sunset at the beach', 'generic'), '미국');
+  assert.equal(countryFolder('Sunset at the beach', 'generic'), '서양');
   assert.equal(countryFolder('今日は海へ', 'generic'), '일본');
   assert.equal(countryFolder('今天去海边', 'generic'), '중국');
-  assert.equal(countryFolder('', 'generic'), '기타');
-  assert.equal(countryFolder('12345', 'generic'), '기타');
+  assert.equal(countryFolder('今天天氣很好，我們去公園', 'x'), '중국'); // 대만도 중국 폴더
+  assert.equal(countryFolder('Hôm nay tôi rất vui, cảm ơn bạn', 'x'), '서양'); // 그 밖의 나라는 서양
+  assert.equal(countryFolder('วันนี้อากาศดีมาก', 'x'), '서양');
+  assert.equal(countryFolder('Сегодня был отличный день', 'x'), '서양');
+  assert.equal(countryFolder('', 'generic'), '서양'); // 판단이 안 되면 서양
+  assert.equal(countryFolder('12345', 'generic'), '서양');
+  assert.equal(countryFolder('', 'douyin'), '중국'); // 사이트로 아는 나라는 그대로
+  // 파일 이름 앞 나라 표시는 자세한 나라 그대로
+  assert.equal(countryName('Sunset at the beach', 'generic'), '미국');
+  assert.equal(countryName('', 'generic'), '');
 });
 
 test('나라 판단은 원문 언어로(일본어는 한자가 많아도 일본)', () => {
   assert.equal(countryFolder('今日は猫と遊びました', 'x'), '일본');
   assert.equal(countryFolder('東京駅で写真を撮った #旅行 https://t.co/abc', 'x'), '일본');
   assert.equal(countryFolder('장어 덮밥 먹고 힘내요', 'x'), '한국');
-  assert.equal(countryFolder('Had a great day at the beach @friend', 'x'), '미국');
+  assert.equal(countryName('Had a great day at the beach @friend', 'x'), '미국');
   assert.equal(countryFolder('今天吃了火锅', 'x'), '중국');
 });
 
-test('모든 나라: 원문 언어별 폴더', () => {
+test('모든 나라: 원문 언어별 나라 판단(파일 이름 표시)', () => {
   const cases = [
     ['Hoje foi um dia muito bom, obrigado a todos', '브라질'],
     ['Hoy fue un día muy bueno, gracias a todos', '스페인'],
@@ -261,5 +269,5 @@ test('모든 나라: 원문 언어별 폴더', () => {
     ['Σήμερα ήταν υπέροχη μέρα', '그리스'],
     ['Today was a great day with my friends', '미국'],
   ];
-  for (const [t, want] of cases) assert.equal(countryFolder(t, 'x'), want, t);
+  for (const [t, want] of cases) assert.equal(countryName(t, 'x'), want, t);
 });
