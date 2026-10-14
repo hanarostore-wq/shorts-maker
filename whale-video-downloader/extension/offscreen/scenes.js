@@ -2,7 +2,7 @@
 //  1) 찾기: 프레임을 64x64 로 줄여 색 분포·픽셀을 앞 프레임과 비교(해독만 하고 인코딩은 없음)
 //  2) 자르기: 정확하게 = 장면 첫 프레임부터 다시 인코딩 / 빠르게 = 다시 인코딩 없이 복사(바로 앞 키프레임부터 담고 그 부분은 '재생 안 함'으로 표시 — 파일이 커지고, 이 표시를 무시하는 플레이어는 앞 1~2초를 보여 줌)
 import * as MB from '../vendor/mediabunny.min.mjs';
-import { histogram, sceneScore, pickCuts, sceneRanges } from '../shared/scenes.js';
+import { histogram, sceneScore, pickCuts, sceneRanges, SCENE_THRESHOLD } from '../shared/scenes.js';
 
 const stepError = (step, message) => Object.assign(new Error(message), { step });
 
@@ -32,7 +32,18 @@ export async function findScenes(file, { minSec } = {}, onProgress) {
     }
     if (!frames) throw stepError('장면 찾기', '영상 프레임을 하나도 읽지 못했습니다');
     const cuts = pickCuts(cands, { start, end, minSec });
-    return { start, end, frames, cuts, ranges: sceneRanges(cuts, start, end) };
+    // 장면이 하나뿐일 때 이유를 알려 주려고: 기준을 넘은 전환 수(0.2초 안에 붙은 것은 하나로), 가장 큰 변화 점수
+    let strong = 0;
+    let lastT = -1;
+    let maxScore = 0;
+    for (const c of cands) {
+      maxScore = Math.max(maxScore, c.d);
+      if (c.d >= SCENE_THRESHOLD && c.t - lastT > 0.2) {
+        strong++;
+        lastT = c.t;
+      }
+    }
+    return { start, end, frames, cuts, ranges: sceneRanges(cuts, start, end), strong, maxScore };
   } finally {
     try { input.dispose(); } catch {}
   }

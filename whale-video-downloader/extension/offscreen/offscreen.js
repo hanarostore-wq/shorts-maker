@@ -28,6 +28,15 @@ async function overlayFor(cap, summary, warns) {
 }
 
 
+// 장면이 하나뿐일 때: 왜 못 나눴는지와 할 일
+function noScenesReason({ start = 0, end = 0, strong = 0, maxScore = 0 }, minSec) {
+  const len = Math.max(0, end - start);
+  const head = '장면 파일은 만들지 않고 전체 영상을 저장했습니다 — ';
+  if (len < minSec * 2) return `${head}영상 길이 ${len.toFixed(1)}초가 장면 최소 길이 ${minSec}초의 두 배보다 짧아 나눌 수 없습니다. 조치: 저장 설정 탭에서 장면 최소 길이를 줄이세요.`;
+  if (strong > 0) return `${head}장면 전환 ${strong}곳을 찾았지만, 나누면 최소 길이 ${minSec}초보다 짧은 장면이 생겨 모두 합쳤습니다. 조치: 저장 설정 탭에서 장면 최소 길이를 줄이세요(예: 2초).`;
+  return `${head}뚜렷한 장면 전환을 찾지 못했습니다(가장 큰 화면 변화 점수 ${maxScore.toFixed(2)}, 기준 0.45 · 최소 길이 ${minSec}초). 장면이 서서히 바뀌는(디졸브·페이드) 영상이나 한 장면으로 찍은 영상은 나누지 못합니다.`;
+}
+
 const running = new Map(); // jobId -> { ac, target }
 const finished = new Map(); // jobId -> { url, cleanup }
 const reserved = new Set();
@@ -312,7 +321,7 @@ async function run({ jobId, desc, filename, mode, prefer }) {
         const found = await findScenes(outFile, { minSec }, (f) => onProgress({ phase: 'scene', percent: Math.round(f * 30) }));
         const n = found.ranges.length;
         if (n < 2) {
-          warns.push(`장면 전환을 찾지 못해 장면 파일은 만들지 않았습니다(최소 길이 ${minSec}초 기준, 전체 영상만 저장).`);
+          warns.push(noScenesReason(found, minSec));
         } else {
           let codec = null;
           if (desc.scenes.precise) {

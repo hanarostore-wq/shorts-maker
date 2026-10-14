@@ -2141,7 +2141,7 @@ if (!only || only === 'caption' || '요약'.includes(only)) {
     try {
       // 최소 5초면 9.6초 영상에서 두 장면 모두 5초를 넘을 수 없어 → 장면 파일 없음 + 안내
       const { added, warn } = await grab('https://www.example-videos.com/scenes', 1, 4000);
-      record('[장면] 나눌 장면이 없으면 전체 영상만 + 이유 안내', added.length === 1 && /장면 전환을 찾지 못해.*최소 길이 5초/.test(warn), { note: `${added.length}개 · 안내: ${warn.slice(0, 90)}` });
+      record('[장면] 나눌 장면이 없으면 전체 영상만 + 이유 안내', added.length === 1 && /장면 파일은 만들지 않고 전체 영상을 저장했습니다.*최소 길이 5초.*조치/.test(warn), { note: `${added.length}개 · 안내: ${warn.slice(0, 90)}` });
     } catch (err) {
       record('[장면] 장면 없음 안내', false, { note: err.message.split('\n')[0] });
     }
