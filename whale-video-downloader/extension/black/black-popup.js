@@ -274,7 +274,7 @@
           const r = document.createElement('label');
           r.style.cssText = 'display:flex;align-items:center;gap:10px';
           const sel = document.createElement('select');
-          sel.style.cssText = 'flex:1;min-width:0;height:28px';
+          sel.style.cssText = 'flex:1;min-width:0;width:auto';
           for (const [v, name] of Object.entries(core.ACTIONS)) sel.add(new Option(name, v));
           sel.value = map[k];
           sel.addEventListener('change', async () => {
