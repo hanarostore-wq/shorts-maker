@@ -3,6 +3,7 @@
 // 서비스워커로 넘긴다. 화질 선택과 실제 다운로드 방식 결정은 서비스워커(builders.js)가 한다.
 (() => {
   'use strict';
+  if (globalThis.__SMD_OFF) return; // 이 사이트 제외(content/off.js)
   if (globalThis.__SMD_SITES) return;
 
   // ───────────────────────────── 공용 도구 ─────────────────────────────

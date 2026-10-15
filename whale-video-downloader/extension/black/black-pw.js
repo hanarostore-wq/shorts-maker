@@ -4,6 +4,7 @@
 //  - 비밀번호는 페이지 기록(console)·화면 글자에 남기지 않는다
 (() => {
   'use strict';
+  if (globalThis.__SMD_OFF) return; // 이 사이트 제외(content/off.js)
   if (globalThis.__SMD_BLACK_PW || window.top !== window || location.protocol === 'chrome-extension:') return;
   globalThis.__SMD_BLACK_PW = true;
   const alive = () => {

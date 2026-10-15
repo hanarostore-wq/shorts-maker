@@ -42,7 +42,7 @@
       if (!ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.code !== 'KeyW' || ev.repeat) return;
       const dead = !alive();
       if (dead && document.documentElement.getAttribute('data-smd-black') !== ME) return; // 새 스크립트가 처리
-      if (!dead && !on) return;
+      if (!dead && (!on || globalThis.__SMD_OFF)) return; // __SMD_OFF: 이 사이트 제외
       ev.preventDefault();
       ev.stopImmediatePropagation();
       if (dead) {

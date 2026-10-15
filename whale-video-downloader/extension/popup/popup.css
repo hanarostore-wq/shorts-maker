@@ -113,6 +113,10 @@ input[type="checkbox"]:checked + .sw { background: linear-gradient(135deg, var(-
 input[type="checkbox"]:checked + .sw i { transform: translateX(18px); }
 input[type="checkbox"]:focus-visible + .sw { outline: 2px solid var(--b2); outline-offset: 2px; }
 .master { position: relative; z-index: 1; }
+.excl { position: absolute; right: 14px; bottom: 9px; z-index: 1; display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 11px; border-radius: 99px; background: rgba(0, 0, 0, 0.24); font-size: 11.5px; font-weight: 750; cursor: pointer; }
+.excl .sw { transform: scale(0.82); transform-origin: right center; background: rgba(255, 255, 255, 0.3); }
+.excl input:checked + .sw { background: #ff5d73; }
+.excl.off { opacity: 0.55; cursor: not-allowed; }
 .master .sw { background: rgba(255, 255, 255, 0.3); }
 .master input:checked + .sw { background: rgba(255, 255, 255, 0.95); }
 .master input:checked + .sw i { background: var(--b2); box-shadow: none; }

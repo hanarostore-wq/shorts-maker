@@ -2,6 +2,7 @@
 //  - 홈·탐색 피드 게시물 오른쪽 위에 팔로우 / 팔로잉 버튼 (눌러서 팔로우·언팔로우)
 (() => {
   'use strict';
+  if (globalThis.__SMD_OFF) return; // 이 사이트 제외(content/off.js)
   if (globalThis.__SMD_BSKYTOOLS || !/(^|\.)bsky\.app$/.test(location.hostname) || window.top !== window) return;
   globalThis.__SMD_BSKYTOOLS = true;
 

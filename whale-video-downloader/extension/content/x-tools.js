@@ -3,6 +3,7 @@
 //  2) (마우스 올리면 재생은 hover-play.js)
 (() => {
   'use strict';
+  if (globalThis.__SMD_OFF) return; // 이 사이트 제외(content/off.js)
   if (globalThis.__SMD_XTOOLS || !/(^|\.)(x|twitter)\.com$/.test(location.hostname) || window.top !== window) return;
   globalThis.__SMD_XTOOLS = true;
   const SITES = globalThis.__SMD_SITES;

@@ -1,5 +1,6 @@
 import { getSettings, saveSettings, SITE_LIST, SITE_FEATURES, effectiveSettings } from '../shared/settings.js';
 import { buildFilename, sanitizeFolder } from '../shared/filename.js';
+import { hostOfUrl, isExcluded } from '../shared/exclude.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -98,6 +99,43 @@ const activeTab = async () => {
   const forced = Number(new URLSearchParams(location.search).get('tabId'));
   return forced ? chrome.tabs.get(forced) : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
 };
+// 이 사이트 제외: 지금 보고 있는 사이트에서는 모든 기능을 끈다(서비스워커가 제외 표시를 넣고 이 탭을 새로고침)
+{
+  const box = $('#exclSite');
+  const wrap = $('#exclWrap');
+  const msg = $('#exclMsg');
+  const say = (t, err = false) => {
+    msg.hidden = !t;
+    msg.textContent = t;
+    msg.style.color = err ? '#ff6b81' : '';
+  };
+  (async () => {
+    const tab = await activeTab().catch(() => null);
+    const host = hostOfUrl(tab?.url);
+    if (!host) {
+      box.disabled = true;
+      wrap.classList.add('off');
+      wrap.title = '웹 페이지(http·https) 탭에서만 쓸 수 있어요. 새 탭·설정·확장 프로그램 페이지는 확장프로그램이 원래 동작하지 않습니다';
+      return;
+    }
+    box.checked = isExcluded(settings.excludedSites, host);
+    $('#exclText').textContent = box.checked ? '이 사이트 제외됨' : '이 사이트 제외';
+    wrap.title = `${host} 에서 확장프로그램의 모든 기능을 ${box.checked ? '꺼 둔 상태입니다 (끄면 다시 켜짐)' : '끕니다 (이 탭은 새로고침됩니다)'}`;
+    box.addEventListener('change', async () => {
+      const on = box.checked;
+      try {
+        const r = await chrome.runtime.sendMessage({ type: 'smd:exclude-site', host, on, tabId: tab.id });
+        if (r?.error) throw Object.assign(new Error(r.error.reason), r.error);
+        settings.excludedSites = r.list;
+        $('#exclText').textContent = on ? '이 사이트 제외됨' : '이 사이트 제외';
+        say(`${host}: ${on ? '모든 기능을 껐습니다. 이 탭을 새로고침했어요. 같은 사이트의 다른 탭은 새로고침(F5)하면 적용됩니다.' : '다시 켰습니다. 이 탭을 새로고침했어요.'}`);
+      } catch (err) {
+        box.checked = !on;
+        say(`이 사이트 제외 실패\n단계: ${err.step || '요청'}\n원인: ${err.message || err}\n조치: ${err.action || '팝업을 닫았다 다시 열어 보세요.'}`, true);
+      }
+    });
+  })();
+}
 $('#placeButton').addEventListener('click', async () => {
   const tab = await activeTab();
   const r = tab && (await chrome.tabs.sendMessage(tab.id, { type: 'smd:edit-placement' }, { frameId: 0 }).catch(() => null));
@@ -423,13 +461,6 @@ const SITE_HOSTS = [
   [/(^|\.)bilibili\.com$/, 'bilibili'], [/(^|\.)weibo\.(com|cn)$/, 'weibo'], [/(^|\.)snapchat\.com$/, 'snapchat'],
   [/(^|\.)pinterest\./, 'pinterest'], [/(^|\.)naver\.com$/, 'naver'], [/(^|\.)vimeo\.com$/, 'vimeo'], [/(^|\.)dailymotion\.com$/, 'dailymotion'],
 ];
-const fmtDur = (s) => {
-  if (!(s > 0) || !Number.isFinite(s)) return '';
-  const m = Math.floor(s / 60);
-  const ss = String(Math.floor(s % 60)).padStart(2, '0');
-  return m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
-};
-const PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>';
 
 let currentTabId = null;
 // 성능 진단 결과를 읽기 쉬운 글로(실패하면 단계·원인·조치)
@@ -454,17 +485,14 @@ async function perfText(tabId) {
   return lines.join('\n');
 }
 
+// 지금 보고 있는 탭의 사이트를 알아내 '이 사이트' 탭의 기능 목록·저장 위치를 채운다
+//  (예전의 '현재 탭 영상 목록·사진 모두 저장' 카드는 뺐다 — 저장은 영상 위 버튼으로만)
 async function renderPage() {
   const forced = Number(new URLSearchParams(location.search).get('tabId'));
   const [tab] = forced ? [await chrome.tabs.get(forced)] : await chrome.tabs.query({ active: true, currentWindow: true });
-  const hint = $('#pageHint');
-  const list = $('#videoList');
-  list.innerHTML = '';
   if (!tab || !/^https?:/.test(tab.url || '')) {
     renderSitePanel('generic');
     renderSiteSave('generic');
-    $('#pageSite').textContent = '이 페이지에서는 사용할 수 없어요';
-    hint.textContent = '웹사이트 탭에서 확장프로그램 아이콘을 눌러 주세요';
     return;
   }
   currentTabId = tab.id;
@@ -472,60 +500,6 @@ async function renderPage() {
   const siteId = SITE_HOSTS.find(([re]) => re.test(host))?.[1] || 'generic';
   renderSitePanel(siteId);
   renderSiteSave(siteId);
-  const meta = siteMeta[siteId];
-  $('#pageSite').textContent = siteId === 'generic' ? host : meta.name;
-  $('#pageDot').style.background = meta.color;
-  const { frames } = await chrome.runtime.sendMessage({ type: 'smd:tab-frames', tabId: tab.id }).catch(() => ({ frames: [] }));
-  const ids = new Set([0, ...(frames || []).filter((f) => f.count > 0).map((f) => f.frameId)]);
-  const videos = [];
-  let connected = false;
-  for (const frameId of ids) {
-    const r = await chrome.tabs.sendMessage(tab.id, { type: 'smd:list' }, { frameId }).catch(() => null);
-    if (r) connected = true;
-    for (const v of r || []) videos.push({ ...v, frameId });
-  }
-  const info = connected ? await chrome.tabs.sendMessage(tab.id, { type: 'smd:images-info' }, { frameId: 0 }).catch(() => null) : null;
-  if (info?.count) {
-    const b = $('#saveAllImages');
-    b.style.display = '';
-    b.textContent = `이 페이지 사진 ${info.count}장 모두 저장`;
-    b.onclick = async () => {
-      b.disabled = true;
-      b.textContent = '저장 요청 중…';
-      const r = await chrome.tabs.sendMessage(tab.id, { type: 'smd:save-all-images' }, { frameId: 0 }).catch(() => null);
-      b.textContent = r?.started ? `${r.started}장 저장 시작 — 아래 최근 다운로드에서 확인` : '사진을 저장하지 못했어요. 페이지를 새로고침한 뒤 다시 시도하세요.';
-    };
-  }
-  if (!connected) {
-    hint.textContent = '이 탭에는 아직 확장프로그램이 연결되지 않았어요. 페이지를 새로고침(F5)하면 영상 아래에 버튼이 나타나요.';
-    return;
-  }
-  videos.sort((a, b) => Number(b.visible) - Number(a.visible));
-  if (!videos.length) {
-    hint.textContent = '이 화면에서 영상을 찾지 못했어요. 영상을 재생하면 나타납니다.';
-    return;
-  }
-  hint.textContent = `영상 ${videos.length}개 감지됨${videos.some((v) => v.visible) ? ' · 화면에 보이는 영상이 위에 있어요' : ''}`;
-  videos.slice(0, 8).forEach((v, i) => {
-    const li = document.createElement('li');
-    li.className = 'vitem';
-    const res = v.width && v.height ? `재생 중 ${Math.min(v.width, v.height)}p` : '해상도 확인 전';
-    li.innerHTML = `<div class="thumb">${PLAY}</div><div class="vmeta"><b>영상 ${i + 1}${v.visible ? ' · 화면에 보임' : ''}</b><small>${escapeHtml([fmtDur(v.duration), res].filter(Boolean).join(' · '))} · 원본 최고화질로 저장</small></div><button class="btn sm">다운로드</button>`;
-    if (v.poster && /^https:/.test(v.poster)) {
-      li.querySelector('.thumb').style.backgroundImage = `url("${v.poster.replace(/"/g, '%22')}"), var(--grad)`;
-    }
-    li.querySelector('button').addEventListener('click', async (e) => {
-      const b = e.currentTarget;
-      b.disabled = true;
-      b.textContent = '요청됨';
-      const r = await chrome.tabs.sendMessage(tab.id, { type: 'smd:start', key: v.key }, { frameId: v.frameId }).catch(() => null);
-      if (!r?.ok) {
-        b.textContent = '실패';
-        hint.textContent = '페이지 연결이 끊겼어요. 페이지를 새로고침(F5)한 뒤 다시 시도하세요.';
-      }
-    });
-    list.appendChild(li);
-  });
 }
 renderPage();
 

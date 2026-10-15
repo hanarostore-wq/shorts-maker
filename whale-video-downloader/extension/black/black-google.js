@@ -27,7 +27,7 @@
     return true;
   }
   const mark = (ev) => {
-    if (!on || ev.button > 1) return;
+    if (!on || globalThis.__SMD_OFF || ev.button > 1) return; // __SMD_OFF: 이 사이트 제외
     const a = ev.target?.closest?.('a[href]');
     if (!target(a)) return;
     a.target = '_blank';

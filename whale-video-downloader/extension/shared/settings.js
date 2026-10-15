@@ -46,6 +46,7 @@ export const DEFAULT_SETTINGS = {
   imagePlacements: {}, // 사이트별로 직접 배치한 사진 버튼 위치
   genericButtons: true, // 지원 목록 밖 사이트에서도 버튼 표시
   disabledSites: [],
+  excludedSites: [], // '이 사이트 제외': 이 호스트에서는 확장프로그램의 모든 기능을 끔
 };
 
 export async function getSettings() {

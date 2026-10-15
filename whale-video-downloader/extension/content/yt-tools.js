@@ -1,6 +1,7 @@
 // 유튜브 쇼츠: 재생 중인 쇼츠 오른쪽 위에 조회수·구독자 수를 띄운다.
 //   유튜브 페이지와 같은 출처로 /youtubei/v1/next 를 불러 화면에 쓰인 글자(예: 조회수 12만회, 구독자 3.4만명)를 그대로 보여 준다.
 (() => {
+  if (globalThis.__SMD_OFF) return; // 이 사이트 제외(content/off.js)
   if (window.top !== window || window.__smdYtTools) return;
   window.__smdYtTools = true;
 

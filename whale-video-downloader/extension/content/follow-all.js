@@ -7,6 +7,7 @@
 //    (블루스카이 약 1.2초, X 3~5초 간격 · X 는 하루 400명 제한이 있어 그 전에 멈춤)
 (() => {
   'use strict';
+  if (globalThis.__SMD_OFF) return; // 이 사이트 제외(content/off.js)
   if (globalThis.__SMD_FOLLOWALL || window.top !== window) return;
   globalThis.__SMD_FOLLOWALL = true;
   const H = location.hostname;

@@ -367,6 +367,10 @@ const handlers = {
     if (u.pathname === '/scenes') {
       return html(res, page('장면 나누기 시험 영상', `<div class="card"><video src="https://cdn.example-videos.com/scenes.webm" muted style="width:640px;height:360px;background:#000"></video></div>`));
     }
+    if (u.pathname === '/manyframes') {
+      // 광고·임베드가 많은 페이지 모양(같은 사이트의 작은 프레임 20개) — 프레임마다 확장 스크립트가 들어가는 비용 측정용
+      return html(res, page('프레임 많은 페이지', Array.from({ length: 20 }, (_, i) => `<iframe src="/watch?f=${i}" style="width:300px;height:200px;border:0"></iframe>`).join('')));
+    }
     if (u.pathname === '/watch-vp9') {
       return html(res, page('VP9 영상 게시물 오늘 공원에서 강아지와 산책했어요', `<div class="card"><video src="https://cdn.example-videos.com/preview.webm" muted style="width:640px;height:360px;background:#000"></video></div>`));
     }

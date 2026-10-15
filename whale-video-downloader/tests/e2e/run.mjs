@@ -708,29 +708,6 @@ if (!only || only === 'image' || '사진'.includes(only)) {
     const out = saved ? execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', saved]).toString().trim() : '';
     record('[사진] X 사진(투명 img 겹침) 버튼 표시 + 원본 저장', out === '2000,1500', { note: saved ? `${path.relative(DL, saved)} · ${out}` : '파일 없음', ms: Date.now() - t0 });
 
-    // 팝업 → 이 페이지 사진 모두 저장
-    const pp = await extPage();
-    const tabId = await pp.evaluate(async () => (await chrome.tabs.query({ url: 'https://x.com/tester/status/1790000000000000003' }))[0]?.id);
-    await pp.setViewportSize({ width: 392, height: 600 });
-    await pp.goto(`chrome-extension://${extId}/popup/popup.html?tabId=${tabId}`);
-    const all = pp.locator('#saveAllImages');
-    await all.waitFor({ state: 'visible', timeout: 8000 });
-    const label = await all.innerText();
-    const before2 = new Set(listFiles(DL));
-    await all.click();
-    const t1 = Date.now();
-    let added = [];
-    while (Date.now() - t1 < 30000) {
-      added = listFiles(DL).filter((f) => !before2.has(f) && !/\.crdownload$/.test(f));
-      if (added.length >= 2) break;
-      await new Promise((r) => setTimeout(r, 300));
-    }
-    await pp.waitForTimeout(500);
-    await pp.screenshot({ path: path.join(SHOTS, 'popup-save-all.png') });
-    record('[사진] 팝업 → 이 페이지 사진 모두 저장', added.length === 2 && /2장/.test(label), { note: `${label} → ${added.map((f) => path.basename(f)).join(', ')}` });
-    await pp.close();
-  } catch (err) {
-    record('[사진] X 사진 / 모두 저장', false, { note: err.message.split('\n')[0] });
   } finally {
     await page.close();
   }
@@ -2387,10 +2364,9 @@ if (!only || only === 'scroll' || '스크롤'.includes(only)) {
   }
 }
 
-// ── 팝업: 현재 탭 영상 목록에서 다운로드 ──
+// ── 팝업: 현재 탭 영상 목록 카드는 없음(저장은 영상 위 버튼으로만), '이 사이트' 탭은 그 사이트로 채워짐 ──
 if (!only || '팝업'.includes(only) || only === 'popup') {
   const page = await ctx.newPage();
-  const t0 = Date.now();
   try {
     await page.goto('https://x.com/tester/status/1790000000000000001', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1500);
@@ -2398,19 +2374,12 @@ if (!only || '팝업'.includes(only) || only === 'popup') {
     const tabId = await pp.evaluate(async () => (await chrome.tabs.query({ url: 'https://x.com/*' }))[0]?.id);
     await pp.setViewportSize({ width: 392, height: 600 });
     await pp.goto(`chrome-extension://${extId}/popup/popup.html?tabId=${tabId}`);
-    await pp.locator('.vitem .btn').first().waitFor({ timeout: 10000 });
-    await pp.screenshot({ path: path.join(SHOTS, 'popup-current-tab.png') });
-    const before = new Set(listFiles(DL));
-    await pp.locator('.vitem .btn').first().click();
-    const saved = await waitFile(before);
     await pp.waitForTimeout(800);
-    await pp.screenshot({ path: path.join(SHOTS, 'popup-after-download.png') });
-    const info = saved && probe(saved);
-    const listText = (await pp.locator('#jobList').innerText()).replace(/\s+/g, ' ');
-    record('[팝업] 현재 탭 영상 목록 → 다운로드', !!info && info.height === 1920 && !!info.acodec && listText.includes('저장 완료'), { note: saved ? `${path.relative(DL, saved)} · ${info.width}x${info.height} · 최근 목록: ${listText.slice(0, 60)}` : '파일 없음', ms: Date.now() - t0 });
+    const r = await pp.evaluate(() => ({ card: !!document.getElementById('pageCard'), vitem: document.querySelectorAll('.vitem').length, title: document.getElementById('spTitle')?.textContent || '', site: document.getElementById('spSelect')?.value, rows: document.querySelectorAll('#spList .row-toggle').length }));
+    record('[팝업] 현재 탭 영상 목록 카드 없음 + 이 사이트 탭은 그 사이트(X)로 채워짐', !r.card && r.vitem === 0 && r.site === 'x' && r.rows > 3, { note: `카드=${r.card} 영상줄=${r.vitem} 사이트=${r.site} 기능줄=${r.rows}` });
     await pp.close();
   } catch (err) {
-    record('[팝업] 현재 탭 영상 목록 → 다운로드', false, { note: err.message.split('\n')[0] });
+    record('[팝업] 현재 탭 카드 제거', false, { note: err.message.split('\n')[0] });
   } finally {
     await page.close();
   }
@@ -2475,6 +2444,122 @@ if (!only || '팝업'.includes(only) || only === 'popup') {
   } finally {
     await pp?.close().catch(() => {});
     await setSettings({ blackAltW: true });
+  }
+}
+
+// ── 저장 엔진(offscreen) 문서는 한참 놀면 닫혀 램을 돌려줌 (다운로드·저장 중이 아닐 때 45초 뒤, 다음 다운로드 때 다시 만듦) ──
+if (!only || only === 'engine-idle' || '엔진'.includes(only)) {
+  try {
+    // 서비스워커는 놀면 꺼져 있을 수 있어서, 확장 페이지에서 센다
+    const xp = await extPage();
+    const count = () => xp.evaluate(async () => (await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length);
+    // 한 번은 만들어 둔다: 일반 사이트 영상 하나를 받는다
+    await setSettings({ captionOnMedia: false, preventDuplicates: false });
+    const pg = await ctx.newPage();
+    await pg.goto('https://www.example-videos.com/watch', { waitUntil: 'domcontentloaded' });
+    await pg.waitForTimeout(1500);
+    await pg.bringToFront();
+    await pg.locator('smd-anchor .btn.show').first().click();
+    const t0 = Date.now();
+    while (Date.now() - t0 < 60000 && (await count()) === 0) await new Promise((r) => setTimeout(r, 500));
+    const created = await count();
+    await pg.close().catch(() => {});
+    const t1 = Date.now();
+    let closedAt = 0;
+    while (Date.now() - t1 < 110000) {
+      if ((await count()) === 0) { closedAt = Date.now() - t1; break; }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    record('[엔진] 저장 엔진 문서는 다운로드가 끝나고 한참 놀면 닫힘(램 반환)', created === 1 && closedAt > 0, { note: `만들어짐=${created} · 닫히기까지 ${Math.round(closedAt / 1000)}초` });
+    // 닫힌 뒤 다시 받으면 새로 만들어져 정상 동작
+    await setSettings({ preventDuplicates: false });
+    const pg2 = await ctx.newPage();
+    await pg2.goto('https://www.example-videos.com/watch', { waitUntil: 'domcontentloaded' });
+    await pg2.waitForTimeout(1500);
+    await pg2.bringToFront();
+    const before = new Set(listFiles(DL));
+    await pg2.locator('smd-anchor .btn.show').first().click();
+    let added = [];
+    const t2 = Date.now();
+    while (Date.now() - t2 < 60000 && !added.length) {
+      added = listFiles(DL).filter((f) => !before.has(f) && !/\.crdownload$/.test(f));
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    record('[엔진] 닫힌 뒤 다시 받으면 저장 엔진이 새로 만들어져 정상 저장', added.length >= 1 && (await count()) <= 1, { note: `${added.map((f) => path.basename(f)).join(', ') || '파일 없음'}` });
+    await pg2.close().catch(() => {});
+    await xp.close().catch(() => {});
+  } catch (err) {
+    record('[엔진] 닫힘', false, { note: err.message.split('\n')[0] });
+  }
+}
+
+// ── 이 사이트 제외: 그 사이트에서는 모든 기능 끄기 ──
+if (!only || only === 'exclude' || '제외'.includes(only)) {
+  const A = 'https://www.example-videos.com/watch';
+  const B = 'https://www.youtube.com/watch?v=YTwatch0001';
+  let pp = null;
+  try {
+    await setSettings({ excludedSites: [], blackGesture: true, blackGestureMap: undefined, showButtons: true });
+    const sw = ctx.serviceWorkers().find((w) => /service-worker\.js/.test(w.url())) || (await ctx.waitForEvent('serviceworker'));
+    const tabIdOf = async (u) => sw.evaluate(async (u) => (await chrome.tabs.query({})).find((t) => t.url === u)?.id, u);
+    const probe = (pg) => pg.evaluate(() => ({ off: document.documentElement.hasAttribute('data-smd-off'), btn: !!document.querySelector('smd-anchor') }));
+    const pa = await ctx.newPage();
+    await pa.goto(A, { waitUntil: 'domcontentloaded' });
+    await pa.waitForTimeout(1500);
+    const before = await probe(pa);
+    // 팝업 '이 사이트 제외' 켜기 → 이 탭이 새로고침되고 모든 기능이 꺼짐
+    pp = await extPage(`popup/popup.html?tabId=${await tabIdOf(A)}`);
+    await pp.waitForTimeout(500);
+    const label0 = await pp.textContent('#exclText');
+    const reloaded = pa.waitForEvent('load', { timeout: 8000 }).then(() => true, () => false);
+    await pp.click('#exclWrap');
+    const rl = await reloaded;
+    await pa.waitForTimeout(1500);
+    const afterOn = await probe(pa);
+    const saved = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.excludedSites);
+    const label1 = await pp.textContent('#exclText');
+    record('[사이트 제외] 팝업에서 켜면 이 탭 새로고침 + 저장 버튼 사라지고 제외 표시', before.btn && !before.off && rl && afterOn.off && !afterOn.btn && saved.join() === 'www.example-videos.com'.replace(/^www\./, '') && label0 === '이 사이트 제외' && label1 === '이 사이트 제외됨', { note: `처음 버튼=${before.btn} · 새로고침=${rl} · 뒤 제외표시=${afterOn.off} 버튼=${afterOn.btn} · 저장=${saved} · "${label0}"→"${label1}"` });
+    // 같은 탭에서 제스처(↓ 탭 닫기)도 안 먹음
+    await pa.bringToFront();
+    await pa.mouse.move(400, 300);
+    await pa.mouse.down({ button: 'right' });
+    await pa.mouse.move(400, 400, { steps: 6 });
+    await pa.mouse.up({ button: 'right' });
+    await pa.waitForTimeout(1200);
+    record('[사이트 제외] 제외한 사이트에서는 제스처도 안 먹음', !pa.isClosed(), { note: pa.isClosed() ? '닫힘' : '그대로' });
+    // 다른 사이트는 그대로 동작
+    const pb = await ctx.newPage();
+    await pb.goto(B, { waitUntil: 'domcontentloaded' });
+    await pb.waitForTimeout(1500);
+    const other = await probe(pb);
+    record('[사이트 제외] 다른 사이트는 그대로 저장 버튼 표시', other.btn && !other.off, { note: `버튼=${other.btn} 제외표시=${other.off}` });
+    await pb.close().catch(() => {});
+    // 끄기: 다시 눌러 제외 해제 → 기능 돌아옴
+    const reloaded2 = pa.waitForEvent('load', { timeout: 8000 }).then(() => true, () => false);
+    await pp.click('#exclWrap');
+    await reloaded2;
+    await pa.waitForTimeout(1500);
+    const afterOff = await probe(pa);
+    const saved2 = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.excludedSites);
+    record('[사이트 제외] 다시 누르면 해제되어 기능이 돌아옴', !afterOff.off && afterOff.btn && saved2.length === 0, { note: `제외표시=${afterOff.off} 버튼=${afterOff.btn} 저장=${JSON.stringify(saved2)}` });
+    // 오류 경로: 웹 페이지가 아닌 탭(확장 페이지)에서는 눌러지지 않고 이유를 알려 줌
+    const px = await extPage('popup/popup.html');
+    await px.waitForTimeout(500);
+    const dis = await px.evaluate(() => ({ disabled: document.getElementById('exclSite').disabled, title: document.getElementById('exclWrap').title }));
+    record('[사이트 제외] (오류 경로) 웹 페이지가 아닌 탭에서는 비활성 + 이유 안내', dis.disabled && /웹 페이지/.test(dis.title), { note: `비활성=${dis.disabled} · ${dis.title.slice(0, 50)}` });
+    await px.close().catch(() => {});
+    // 서비스워커 오류 경로: 사이트를 못 알아내면 단계·원인·조치
+    const er = await pp.evaluate(() => chrome.runtime.sendMessage({ type: 'smd:exclude-site', host: '', on: true }));
+    record('[사이트 제외] (오류 경로) 사이트를 모르면 단계·원인·조치 안내', er?.error?.step === '사이트 확인' && !!er.error.reason && !!er.error.action, { note: JSON.stringify(er?.error || er).slice(0, 120) });
+    await pa.close().catch(() => {});
+  } catch (err) {
+    record('[사이트 제외]', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await pp?.close().catch(() => {});
+    await setSettings({ excludedSites: [] });
+    const px2 = await extPage();
+    await px2.evaluate(() => chrome.runtime.sendMessage({ type: 'smd:exclude-site', host: 'www.example-videos.com', on: false })).catch(() => {});
+    await px2.close();
   }
 }
 

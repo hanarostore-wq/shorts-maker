@@ -4,6 +4,7 @@
 //  - 팝업 '이 사이트'의 '떠 있는 버튼 위치 처음으로'로 되돌리기
 (() => {
   'use strict';
+  if (globalThis.__SMD_OFF) return; // 이 사이트 제외(content/off.js)
   if (globalThis.__SMD_DRAG) return;
   const site = () => globalThis.__SMD_SITE_ID || globalThis.__SMD_SITES?.pick?.(location.hostname)?.id || 'generic';
   let saved = {}; // { [site]: { [name]: { r, b } } }

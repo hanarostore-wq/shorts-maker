@@ -13,6 +13,7 @@
   // 확장 설정을 읽기 전에는 X·블루스카이만 켠 것으로 본다(사이트별 기본값). 다른 사이트는 설정이 켜졌을 때만.
   const early = /(^|\.)(x|twitter)\.com$|(^|\.)bsky\.app$/.test(location.hostname);
   const enabled = () => {
+    if (document.documentElement?.hasAttribute('data-smd-off')) return false; // 이 사이트 제외
     const v = document.documentElement?.dataset.smdNoautoplay;
     return v === '1' || (v === undefined && early);
   };
@@ -26,7 +27,7 @@
   for (const t of ['pointerdown', 'pointerup', 'click', 'keydown', 'touchend']) addEventListener(t, onGesture, true);
   const allowed = new WeakSet();
   // 팟플레이어로 재생(설정 <html data-smd-potplayer="1">): 사용자가 직접 튼 영상은 브라우저 대신 팟플레이어로 넘긴다
-  const potOn = () => document.documentElement?.dataset.smdPotplayer === '1';
+  const potOn = () => !document.documentElement?.hasAttribute('data-smd-off') && document.documentElement?.dataset.smdPotplayer === '1';
   let potSeq = 0;
   let lastPot = 0;
   MP.play = function () {

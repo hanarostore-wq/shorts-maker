@@ -1,6 +1,7 @@
 // 화면의 모든 <video> 하단에 다운로드 버튼을 띄우고, 클릭 시 서비스워커에 다운로드를 요청한다.
 (() => {
   'use strict';
+  if (globalThis.__SMD_OFF) return; // 이 사이트 제외(content/off.js)
   if (globalThis.__SMD_CORE) return;
   globalThis.__SMD_CORE = true;
   const SITES = globalThis.__SMD_SITES;
@@ -108,12 +109,14 @@
   };
   runInit();
   let lastHref = location.href;
+  // 주소 바뀜 확인: 맨 위 페이지는 0.7초, 안쪽 프레임(광고·임베드)은 3초마다(프레임이 많은 페이지에서 깨우는 횟수를 줄임)
   setInterval(() => {
+    if (document.hidden) return;
     if (location.href !== lastHref) {
       lastHref = location.href;
       setTimeout(runInit, 600);
     }
-  }, 700);
+  }, window.top === window ? 700 : 3000);
 
   // ───────────── 오버레이 UI ─────────────
   const ICON_DL =
@@ -1544,6 +1547,7 @@
     if (kind === 'video') entry.ident = keyFor(entry);
     setLook(entry, 'idle'); // 이미 받은 적 있으면 초록 체크로
     tracked.set(el, entry);
+    globalThis.__SMD_ARM?.(); // 위치 맞추기 반복 시작(쉬고 있었다면)
   }
 
   // 같은 영상 요소가 다음 영상으로 바뀐 경우(유튜브 쇼츠·시청 화면 등): 버튼을 새 영상 기준으로 되돌린다.
@@ -1646,7 +1650,24 @@
       sniffCount = r?.count || 0;
     } catch {}
   }
-  setInterval(refreshSniff, 3000);
+  // 서비스워커 호출은 보이는 탭에서만, 처음엔 3초마다 하다가 값이 안 바뀌면 점점 드물게(최대 20초).
+  //  이 호출이 계속 잦으면 서비스워커가 잠들지 못해 램을 계속 쓴다. 값이 바뀌면 다시 3초로
+  let sniffDelay = 3000;
+  let sniffSame = 0;
+  const sniffTick = async () => {
+    if (!document.hidden) {
+      const before = sniffCount;
+      await refreshSniff();
+      if (sniffCount === before) {
+        if (++sniffSame >= 3) sniffDelay = Math.min(20000, sniffDelay * 2);
+      } else {
+        sniffSame = 0;
+        sniffDelay = 3000;
+      }
+    }
+    setTimeout(sniffTick, sniffDelay);
+  };
+  setTimeout(sniffTick, sniffDelay);
 
   function offsetFor(video) {
     const o = typeof adapter.offset === 'function' ? adapter.offset(video) : adapter.offset;
@@ -1802,15 +1823,28 @@
       return false;
     }
   };
+  // 위치 맞추기 반복은 저장 버튼이 붙은 영상이 있고 탭이 보일 때만 돈다(쉬는 동안 매 프레임 깨우면 프레임이 많은 페이지에서 CPU·배터리를 계속 씀)
+  //  → 버튼이 붙으면(tracked.set 뒤)·탭이 다시 보이면 armLoop() 으로 다시 시작
+  let armed = false;
+  const armLoop = globalThis.__SMD_ARM = () => {
+    if (armed) return;
+    armed = true;
+    raf = requestAnimationFrame(loop);
+  };
   const loop = (t) => {
+    armed = false;
     if (!alive()) {
       // 확장프로그램이 업데이트/재시작되어 이 스크립트는 더 이상 쓸 수 없다 → 화면에서 치운다.
       for (const e of tracked.values()) e.host.remove();
       return;
     }
-    raf = requestAnimationFrame(loop);
     if (!tracked.size || document.hidden) return;
-    if (t - lastPlace < 50) return;
+    // 위치는 50ms 마다만 맞추므로, 다음 프레임 요청도 50ms 뒤에(매 프레임 깨우지 않음 — 프레임이 많은 페이지에서 CPU 를 크게 줄임)
+    armed = true; // 기다리는 동안은 다시 시작하지 않음
+    setTimeout(() => {
+      armed = false;
+      armLoop();
+    }, 50);
     lastPlace = t;
     const PERF = globalThis.__SMD_PERF;
     PERF ? PERF.time('다운로드 버튼 위치 맞추기', place) : place();
@@ -1838,9 +1872,13 @@
       setTimeout(() => idle(runScan), Math.max(0, 700 - (performance.now() - lastScan)));
     };
     new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
-    setInterval(schedule, 1500);
-    document.addEventListener('visibilitychange', () => !document.hidden && schedule());
-    raf = requestAnimationFrame(loop);
+    setInterval(() => !document.hidden && schedule(), window.top === window ? 1500 : 4000); // 안쪽 프레임은 덜 자주
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) return;
+      schedule();
+      armLoop();
+    });
+    armLoop();
   };
   if (document.documentElement) boot();
   else document.addEventListener('DOMContentLoaded', boot, { once: true });

@@ -5,6 +5,7 @@
 //  - 팝업 '이 사이트'에서 켜고 끄기(seekBar, 기본 켬)
 (() => {
   'use strict';
+  if (globalThis.__SMD_OFF) return; // 이 사이트 제외(content/off.js)
   if (globalThis.__SMD_SEEKBAR || window.top !== window) return;
   const site = globalThis.__SMD_SITE_ID || globalThis.__SMD_SITES?.pick?.(location.hostname)?.id || 'generic';
   globalThis.__SMD_SEEKBAR = true;

@@ -19,7 +19,13 @@
       <input type="checkbox" id="showButtons" />
       <span class="sw"><i></i></span>
     </label>
+    <label class="excl" id="exclWrap" title="켜면 지금 보고 있는 사이트에서는 이 확장프로그램의 모든 기능(저장 버튼·재생바·자동재생 끄기 등)이 꺼집니다">
+      <span id="exclText">이 사이트 제외</span>
+      <input type="checkbox" id="exclSite" />
+      <span class="sw"><i></i></span>
+    </label>
   </header>
+  <p class="note" id="exclMsg" style="margin:8px 16px 0;white-space:pre-line" hidden></p>
 
   <nav class="tabs" role="tablist">
     <button class="tab on" data-tab="home" role="tab">다운로드</button>
@@ -36,18 +42,6 @@
   <main>
     <!-- 다운로드 -->
     <section class="pane on" data-pane="home">
-      <div class="card" id="pageCard">
-        <div class="card-head">
-          <span class="dot" id="pageDot"></span>
-          <div class="grow">
-            <strong id="pageSite">현재 탭</strong>
-            <small id="pageHint">확인 중…</small>
-          </div>
-        </div>
-        <ul class="vlist" id="videoList"></ul>
-        <button class="btn" id="saveAllImages" style="display:none;width:100%;margin-top:10px">이 페이지 사진 모두 저장</button>
-      </div>
-
       <div class="card">
         <div class="card-head">
           <div class="grow"><strong>최근 다운로드</strong></div>

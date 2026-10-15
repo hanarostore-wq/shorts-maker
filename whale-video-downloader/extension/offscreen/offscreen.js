@@ -406,4 +406,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
+// 한참(45초) 놀면 서비스워커에 닫아 달라고 알린다 — 다운로드·저장 중인 것(running)이나 저장을 기다리는 결과(finished)가 있으면 닫지 않음
+let lastBusy = Date.now();
+setInterval(() => {
+  if (running.size || finished.size || reserved.size) lastBusy = Date.now();
+  else if (Date.now() - lastBusy > 45000) send({ type: 'smd:offscreen-idle' });
+}, 15000);
+
 send({ type: 'smd:offscreen-ready' });

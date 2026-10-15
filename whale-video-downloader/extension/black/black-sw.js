@@ -1,5 +1,23 @@
 // 블랙전용(개인용 기능) — 서비스워커 쪽. 유료판에서는 tools/make-paid.mjs 가 이 파일과 import 줄을 뺀다.
 //  - 'smd:black-close-tab': Alt+W 를 누른 그 탭을 닫는다
+import { hostOfUrl, isExcluded } from '../shared/exclude.js';
+
+// 확장을 설치·업데이트하면 이미 열려 있던 탭에는 스크립트가 없어(새로고침 전까지) 제스처가 안 먹는다 → 열린 탭에 바로 넣는다.
+//  제외한 사이트와 브라우저 기본 페이지(새 탭·설정·웹스토어 등 확장이 못 들어가는 곳)는 건너뜀
+chrome.runtime.onInstalled.addListener(async () => {
+  try {
+    const { settings } = await chrome.storage.local.get('settings');
+    const tabs = await chrome.tabs.query({});
+    await Promise.all(
+      tabs.map((t) => {
+        const host = hostOfUrl(t.url);
+        if (!host || isExcluded(settings?.excludedSites, host)) return null;
+        return chrome.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: ['black/black-gesture-core.js', 'black/black-gesture.js'] }).catch(() => null);
+      }),
+    );
+  } catch {}
+});
+
 chrome.runtime.onMessage.addListener((msg, sender, send) => {
   if (msg?.type !== 'smd:black-close-tab') return;
   const id = sender.tab?.id;

@@ -3,6 +3,7 @@ import { getSettings, DEFAULT_SETTINGS, effectiveSettings } from '../shared/sett
 import { buildFilename, sanitizeFolder, countryFolder, strictName } from '../shared/filename.js';
 import { buildFromInfo } from './builders.js';
 import { clampMinSec } from '../shared/scenes.js';
+import './exclude.js';
 import { resolveBg } from './resolvers.js';
 import '../black/black-sw.js'; // 블랙전용 (유료판에서 빠짐)
 import '../black/black-bookmarks.js'; // 블랙전용 (유료판에서 빠짐)
@@ -867,6 +868,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       m.set(sender.frameId ?? 0, { count: msg.count, site: msg.site });
       tabVideos.set(sender.tab.id, m);
       return;
+    }
+    case 'smd:offscreen-idle': {
+      // 저장 엔진 문서가 한참 놀고 있으면 닫아 램을 돌려준다(영상 변환 코드·WebAssembly 가 계속 올라가 있지 않게). 다음 다운로드 때 다시 만든다
+      if (active > 0 || waiting.length) return sendResponse({ ok: false, busy: true });
+      chrome.offscreen.closeDocument().then(
+        () => {
+          offscreenReady = null;
+          sendResponse({ ok: true });
+        },
+        (err) => sendResponse({ ok: false, error: String(err?.message || err) }),
+      );
+      return true;
     }
     case 'smd:sniff-count': {
       sendResponse({ count: (sniffs.get(sender.tab?.id) || []).length });

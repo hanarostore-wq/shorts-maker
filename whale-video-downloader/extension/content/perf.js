@@ -6,6 +6,7 @@
 //     팝업 '이 사이트' → '성능 진단'에 보여 준다
 (() => {
   'use strict';
+  if (globalThis.__SMD_OFF) return; // 이 사이트 제외(content/off.js)
   if (globalThis.__SMD_PERF) return;
 
   // ── 1) 화면에 보이는 사진·영상 ──
@@ -29,7 +30,7 @@
     for (const el of visible) if (!el.isConnected) visible.delete(el);
   }
   observeNew();
-  setInterval(observeNew, 500);
+  setInterval(() => !document.hidden && observeNew(), window.top === window ? 500 : 2000); // 숨은 탭·안쪽 프레임은 덜 자주
 
   // ── 2) 사이트 화면 이동 중 ──
   let navUntil = 0;

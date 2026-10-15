@@ -156,7 +156,7 @@
   addEventListener(
     'mousedown',
     (e) => {
-      if (e.button !== 2 || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || !on || tiny()) return;
+      if (e.button !== 2 || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || !on || globalThis.__SMD_OFF || tiny()) return; // __SMD_OFF: 이 사이트 제외
       if (!alive() && !newest()) return;
       down = true;
       swallow = false;
