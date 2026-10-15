@@ -38,7 +38,7 @@ const problems = [];
       fs.writeFileSync(full, text);
     }
     text.split('\n').forEach((l, i) => {
-      if (/black\/|블랙전용|smd:black|blackAltW|blackBm|blackGoogle|blackPw|smd:pw-|"bookmarks"/.test(l)) problems.push(`${path.relative(out, full)}:${i + 1}: ${l.trim().slice(0, 120)}`);
+      if (/black\/|블랙전용|smd:black|blackAltW|blackBm|blackGoogle|blackGesture|__SMD_GESTURE|blackPw|smd:pw-|"bookmarks"/.test(l)) problems.push(`${path.relative(out, full)}:${i + 1}: ${l.trim().slice(0, 120)}`);
     });
   }
 })(out);

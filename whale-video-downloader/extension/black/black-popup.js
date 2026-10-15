@@ -40,6 +40,16 @@
       <p class="note" id="blackBmMsg" style="white-space:pre-line" hidden></p>
     </div>
     <div class="card">
+      <div class="card-head"><div class="grow"><strong>마우스 제스처</strong><small>마우스 오른쪽 버튼을 누른 채 끌면 동작합니다. 끄는 동안 선과 동작 이름이 보이고, 버튼을 떼면 바로 실행됩니다. 가만히 누르면 원래 오른쪽 클릭 메뉴, Shift·Ctrl·Alt 를 누른 채면 제스처 없이 원래대로 동작합니다</small></div></div>
+      <label class="row-toggle">
+        <div><b>마우스 제스처 사용</b><small>켜면 모든 사이트에서 오른쪽 드래그로 동작합니다 (열려 있던 탭은 새로고침(F5) 한 번 뒤부터)</small></div>
+        <input type="checkbox" id="blackGesture" /><span class="sw"><i></i></span>
+      </label>
+      <div id="gestRows" style="display:grid;gap:6px;margin:8px 0"></div>
+      <div class="btns" style="display:flex;gap:8px"><button class="btn ghost" type="button" id="gestReset">기본값으로</button></div>
+      <p class="note" id="gestMsg" style="white-space:pre-line" hidden></p>
+    </div>
+    <div class="card">
       <div class="card-head"><div class="grow"><strong>비밀번호 관리</strong><small>크롬처럼 로그인하면 아이디·비밀번호를 저장하고, 다음에 그 사이트에서 자동으로 채웁니다. 이 PC 에만 보관합니다(동기화·설정 내보내기에 들어가지 않음, 잠금 없음)</small></div></div>
       <label class="row-toggle">
         <div><b>비밀번호 자동 입력</b><small>저장된 계정이 하나면 바로 채우고, 여러 개면 칸을 누를 때 고릅니다</small></div>
@@ -242,4 +252,81 @@
       say(`저장 실패 — 단계: 설정 저장 / 원인: ${err?.message || err} / 조치: 팝업을 닫았다 다시 여세요.`);
     }
   });
+  // 마우스 제스처
+  {
+    const core = globalThis.__SMD_GESTURE_CORE;
+    const on = pane.querySelector('#blackGesture');
+    const rows = pane.querySelector('#gestRows');
+    const gMsg = pane.querySelector('#gestMsg');
+    const gSay = (t, err = false) => {
+      gMsg.hidden = !t;
+      gMsg.textContent = t;
+      gMsg.style.color = err ? '#ff6b81' : '';
+    };
+    const gErr = (what, err) => `${what} 실패\n단계: 설정 저장\n원인: ${err?.message || err}\n조치: 팝업을 닫았다 다시 여세요.`;
+    if (!core) {
+      gSay('제스처 계산 파일을 읽지 못했습니다\n단계: 팝업 열기\n원인: black-gesture-core.js 가 없습니다\n조치: 확장프로그램을 다시 설치(업데이트 bat 실행)하세요.', true);
+    } else {
+      let map = core.sanitizeMap(null);
+      const draw = () => {
+        rows.innerHTML = '';
+        for (const k of Object.keys(core.DEFAULT_MAP)) {
+          const r = document.createElement('label');
+          r.style.cssText = 'display:flex;align-items:center;gap:10px';
+          const sel = document.createElement('select');
+          sel.style.cssText = 'flex:1;min-width:0;height:28px';
+          for (const [v, name] of Object.entries(core.ACTIONS)) sel.add(new Option(name, v));
+          sel.value = map[k];
+          sel.addEventListener('change', async () => {
+            const prev = map[k];
+            try {
+              map = { ...map, [k]: sel.value };
+              const { settings } = await chrome.storage.local.get('settings');
+              await chrome.storage.local.set({ settings: { ...(settings || {}), blackGestureMap: map } });
+              gSay(`${core.arrows(k)} → ${core.ACTIONS[sel.value]} (열려 있는 탭에도 바로 적용)`);
+            } catch (err) {
+              map[k] = sel.value = prev;
+              gSay(gErr('제스처 동작 저장', err), true);
+            }
+          });
+          const lab = document.createElement('span');
+          lab.textContent = core.arrows(k);
+          lab.style.cssText = 'width:44px;font-weight:800;font-size:15px;text-align:center';
+          r.append(lab, sel);
+          rows.appendChild(r);
+        }
+      };
+      chrome.storage.local.get('settings').then(
+        (r) => {
+          on.checked = r.settings?.blackGesture !== false;
+          map = core.sanitizeMap(r.settings?.blackGestureMap);
+          draw();
+        },
+        (err) => gSay(`설정 읽기 실패\n단계: 설정 불러오기\n원인: ${err?.message || err}\n조치: 팝업을 닫았다 다시 여세요.`, true),
+      );
+      on.addEventListener('change', async () => {
+        try {
+          const { settings } = await chrome.storage.local.get('settings');
+          await chrome.storage.local.set({ settings: { ...(settings || {}), blackGesture: on.checked } });
+          gSay(on.checked ? '제스처를 켰습니다.' : '제스처를 껐습니다.');
+        } catch (err) {
+          on.checked = !on.checked;
+          gSay(gErr('제스처 켜고 끄기 저장', err), true);
+        }
+      });
+      pane.querySelector('#gestReset').addEventListener('click', async () => {
+        try {
+          const { settings } = await chrome.storage.local.get('settings');
+          const next = { ...(settings || {}) };
+          delete next.blackGestureMap;
+          await chrome.storage.local.set({ settings: next });
+          map = core.sanitizeMap(null);
+          draw();
+          gSay('제스처 동작을 기본값으로 되돌렸습니다.');
+        } catch (err) {
+          gSay(gErr('기본값 되돌리기', err), true);
+        }
+      });
+    }
+  }
 })();

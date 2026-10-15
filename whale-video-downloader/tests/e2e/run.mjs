@@ -2478,6 +2478,150 @@ if (!only || '팝업'.includes(only) || only === 'popup') {
   }
 }
 
+// ── 블랙전용: 마우스 오른쪽 드래그 제스처 ──
+{
+  const URLS = { a: 'https://www.example-videos.com/float', b: 'https://www.example-videos.com/ai', c: 'https://www.example-videos.com/long' };
+  // 오른쪽 버튼을 누른 채 점들을 따라 끈다(점 사이는 steps 번 나눠 움직여 실제 마우스처럼)
+  const rdrag = async (pg, from, deltas, { release = true, steps = 6 } = {}) => {
+    let [x, y] = from;
+    await pg.mouse.move(x, y);
+    await pg.mouse.down({ button: 'right' });
+    for (const [dx, dy] of deltas) {
+      await pg.mouse.move(x + dx, y + dy, { steps });
+      x += dx;
+      y += dy;
+    }
+    if (release) await pg.mouse.up({ button: 'right' });
+    return [x, y];
+  };
+  const open = async (url) => {
+    const pg = await ctx.newPage();
+    await pg.goto(url, { waitUntil: 'domcontentloaded' });
+    await pg.waitForTimeout(900);
+    await pg.bringToFront();
+    return pg;
+  };
+  let pp = null;
+  try {
+    await setSettings({ blackGesture: true, blackGestureMap: undefined });
+    // ← 뒤로
+    {
+      const pg = await open(URLS.a);
+      await pg.goto(URLS.b, { waitUntil: 'domcontentloaded' });
+      await pg.waitForTimeout(900);
+      await rdrag(pg, [400, 300], [[-120, 0]]);
+      const back = await pg.waitForURL(URLS.a, { timeout: 4000 }).then(() => true, () => false);
+      record('[제스처] ← (오른쪽 드래그 왼쪽) 뒤로 가기', back, { note: pg.url() });
+      await pg.close().catch(() => {});
+    }
+    // ↑ 맨 위로 스크롤
+    {
+      const pg = await open(URLS.a);
+      await pg.evaluate(() => { document.body.style.minHeight = '6000px'; window.scrollTo(0, 2500); });
+      await pg.waitForTimeout(200);
+      await rdrag(pg, [400, 400], [[0, -100]]);
+      const top = await pg.waitForFunction(() => window.scrollY === 0, null, { timeout: 3000 }).then(() => true, () => false);
+      record('[제스처] ↑ 맨 위로 스크롤', top, { note: `scrollY=${await pg.evaluate(() => window.scrollY)}` });
+      // DL(아래로 갔다 왼쪽) = 맨 아래로 스크롤
+      await rdrag(pg, [400, 300], [[0, 100], [-100, 0]]);
+      const bottom = await pg.waitForFunction(() => window.scrollY > 3000, null, { timeout: 3000 }).then(() => true, () => false);
+      record('[제스처] ↓← (꺾기) 맨 아래로 스크롤', bottom, { note: `scrollY=${await pg.evaluate(() => window.scrollY)}` });
+      await pg.close().catch(() => {});
+    }
+    // 끄는 동안 선과 동작 이름이 보이고, 놓으면 사라짐
+    {
+      const pg = await open(URLS.a);
+      await rdrag(pg, [500, 300], [[-90, 0]], { release: false });
+      const during = await pg.evaluate(() => ({ canvas: !!document.querySelector('canvas[data-smd-gesture]'), label: document.querySelector('div[data-smd-gesture]')?.textContent || '' }));
+      await pg.mouse.up({ button: 'right' });
+      await pg.waitForTimeout(300);
+      const after = await pg.evaluate(() => document.querySelectorAll('[data-smd-gesture]').length);
+      record('[제스처] 끄는 동안 선·동작 이름(← 뒤로) 표시, 놓으면 사라짐', during.canvas && /←\s+뒤로/.test(during.label) && after === 0, { note: `끄는 중 선=${during.canvas} 이름="${during.label}" · 놓은 뒤 ${after}개` });
+      await pg.close().catch(() => {});
+    }
+    // ↓ 탭 닫기 + 걸린 시간
+    {
+      const pg = await open(URLS.a);
+      const closed = pg.waitForEvent('close', { timeout: 5000 }).then(() => true, () => false);
+      await rdrag(pg, [400, 300], [[0, 100]], { release: false });
+      const t0 = Date.now();
+      await pg.mouse.up({ button: 'right' });
+      const c = await closed;
+      const ms = Date.now() - t0;
+      record('[제스처] ↓ 탭 닫기, 버튼을 뗀 뒤 바로(1초 안)', c && ms < 1000, { note: `${c ? '닫힘' : '안 닫힘'} · ${ms}ms` });
+      if (!c) await pg.close().catch(() => {});
+    }
+    // 떨림(8px 이하)은 그냥 오른쪽 클릭: 동작 없음 + 메뉴 막지 않음
+    {
+      const pg = await open(URLS.a);
+      await rdrag(pg, [400, 300], [[3, 2], [-2, 3]]);
+      await pg.waitForTimeout(400);
+      const menuBlocked = await pg.evaluate(() => !document.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+      record('[제스처] 살짝 떨린 오른쪽 클릭은 동작 없이 메뉴 그대로(탭 안 닫힘)', !pg.isClosed() && !menuBlocked, { note: `탭 ${pg.isClosed() ? '닫힘' : '그대로'} · 메뉴 막힘=${menuBlocked}` });
+      // 끌고 난 뒤에는 따라오는 메뉴를 막는다(동작 없는 제스처도): → 를 '동작 없음'으로 바꿔 시험
+      await setSettings({ blackGestureMap: { R: 'none' } });
+      await pg.waitForTimeout(300);
+      await rdrag(pg, [300, 300], [[80, 0]]);
+      const blocked = await pg.evaluate(() => !document.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+      const again = await pg.evaluate(() => { document.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })); return !document.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })); });
+      record('[제스처] 끌고 난 뒤 따라오는 메뉴만 한 번 막음(동작 없는 제스처도)', blocked && !again, { note: `첫 메뉴 막힘=${blocked} · 그 다음 막힘=${again}` });
+      await setSettings({ blackGestureMap: undefined });
+      await pg.close().catch(() => {});
+    }
+    // 이전/다음 탭 (UL, UR)
+    {
+      const p1 = await open(URLS.a);
+      const p2 = await open(URLS.b);
+      const p3 = await open(URLS.c);
+      // 헤드리스 크로미움은 가려진 탭도 visible 로 알려 주므로, 서비스워커에서 '지금 활성 탭' 주소를 직접 읽는다
+      const sw = ctx.serviceWorkers().find((w) => /service-worker\.js/.test(w.url())) || (await ctx.waitForEvent('serviceworker'));
+      const activeUrl = () => sw.evaluate(async () => (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0]?.url || '');
+      await p3.bringToFront();
+      const start = await activeUrl();
+      await rdrag(p3, [400, 400], [[0, -60], [-60, 0]]); // UL = 이전 탭
+      await p3.waitForTimeout(500);
+      const afterPrev = await activeUrl();
+      record('[제스처] ↑← 이전 탭으로 이동', start === URLS.c && afterPrev === URLS.b, { note: `${start.split('/').pop()} → ${afterPrev.split('/').pop()}` });
+      await rdrag(p2, [400, 400], [[0, -60], [60, 0]]); // UR = 다음 탭
+      await p2.waitForTimeout(500);
+      const afterNext = await activeUrl();
+      record('[제스처] ↑→ 다음 탭으로 이동', afterNext === URLS.c, { note: `${afterPrev.split('/').pop()} → ${afterNext.split('/').pop()}` });
+      for (const pg of [p1, p2, p3]) await pg.close().catch(() => {});
+    }
+    // 끄면 동작 안 함
+    {
+      await setSettings({ blackGesture: false });
+      const pg = await open(URLS.a);
+      await pg.waitForTimeout(300);
+      await rdrag(pg, [400, 300], [[0, 100]]);
+      await pg.waitForTimeout(1200);
+      record('[제스처] 끄면 오른쪽 드래그해도 아무 일 없음', !pg.isClosed(), { note: pg.isClosed() ? '닫힘' : '그대로' });
+      await pg.close().catch(() => {});
+      await setSettings({ blackGesture: true });
+    }
+    // 팝업 '블랙전용' 탭: 켜고 끄기 + 동작 바꾸기 + 기본값으로
+    pp = await extPage();
+    await pp.click('.tab[data-tab="black"]');
+    await pp.waitForTimeout(300);
+    const ui = await pp.evaluate(() => ({ on: document.getElementById('blackGesture')?.checked, rows: document.querySelectorAll('#gestRows select').length, first: document.querySelector('#gestRows select')?.value }));
+    await pp.selectOption('#gestRows label:nth-child(1) select', 'forward'); // ← (L)
+    await pp.waitForTimeout(400);
+    const saved = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.blackGestureMap?.L);
+    await pp.click('#gestReset');
+    await pp.waitForTimeout(400);
+    const reset = await pp.evaluate(async () => ({ map: (await chrome.storage.local.get('settings')).settings.blackGestureMap, sel: document.querySelector('#gestRows select')?.value }));
+    await pp.click('label:has(#blackGesture)');
+    await pp.waitForTimeout(400);
+    const off = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.blackGesture);
+    record('[제스처] 팝업 블랙전용 탭: 제스처 8개 동작 고르기·기본값으로·켜고 끄기', ui.on === true && ui.rows === 8 && ui.first === 'back' && saved === 'forward' && reset.map === undefined && reset.sel === 'back' && off === false, { note: `켜짐=${ui.on} · 줄 ${ui.rows} · 처음 ${ui.first} · 바꾼 뒤 ${saved} · 기본값 뒤 ${reset.sel} · 끈 뒤 ${off}` });
+  } catch (err) {
+    record('[제스처]', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await pp?.close().catch(() => {});
+    await setSettings({ blackGesture: true, blackGestureMap: undefined });
+  }
+}
+
 // ── 블랙전용: 구글 검색 결과는 새 탭으로 ──
 {
   const page = await ctx.newPage();
