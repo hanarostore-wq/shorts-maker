@@ -74,6 +74,7 @@ if defined OLDVER (
   echo 크롬 주소창에 chrome://extensions 입력[웨일은 whale://extensions] - 개발자 모드 켜기 - [압축해제된 확장 프로그램을 로드합니다] - %EXT% 폴더 선택
 )
 echo.
+call :potreg
 goto :finish
 
 :already
@@ -81,6 +82,7 @@ rd /s /q "%WORK%" 2>nul
 echo.
 echo 이미 최신 버전입니다: v%OLDVER%
 echo.
+call :potreg
 goto :finish
 
 :finish
@@ -91,6 +93,40 @@ rem 한 덩어리로 읽힌 뒤 실행되므로 이 안에서 bat 자신을 덮�
   if exist "%NEWBAT%" del "%NEWBAT%" >nul 2>nul
   exit /b 0
 )
+
+:potreg
+rem 팟플레이어 연결(potplayer://) 자동 확인·등록: 이미 연결돼 있으면 아무것도 안 함. 없으면 설치된 PotPlayer64.exe 를 찾아 현재 사용자(HKCU)에만 등록한다(관리자 불필요).
+reg query "HKCR\potplayer\shell\open\command" /ve >nul 2>nul
+if not errorlevel 1 (
+  echo 팟플레이어 연결: 이미 등록돼 있어 그대로 둡니다.
+  exit /b 0
+)
+set "PEXE="
+for %%P in (
+  "%ProgramFiles%\DAUM\PotPlayer\PotPlayer64.exe"
+  "%ProgramFiles%\PotPlayer\PotPlayer64.exe"
+  "%ProgramFiles(x86)%\DAUM\PotPlayer\PotPlayer.exe"
+  "%ProgramFiles(x86)%\PotPlayer\PotPlayer.exe"
+  "%ProgramFiles%\DAUM\PotPlayer\PotPlayer.exe"
+  "%LOCALAPPDATA%\Programs\PotPlayer\PotPlayer64.exe"
+  "C:\PotPlayer\PotPlayer64.exe"
+  "%ProgramFiles%\DAUM\PotPlayer\PotPlayerMini64.exe"
+  "%ProgramFiles%\PotPlayer\PotPlayerMini64.exe"
+) do if not defined PEXE if exist %%P set "PEXE=%%~P"
+if not defined PEXE (
+  echo 팟플레이어 연결: 연결이 없고 팟플레이어도 못 찾았습니다. 팟플레이어를 설치한 뒤 이 파일을 다시 실행하세요.
+  exit /b 0
+)
+reg add "HKCU\Software\Classes\potplayer" /ve /d "URL:PotPlayer Protocol" /f >nul 2>nul
+reg add "HKCU\Software\Classes\potplayer" /v "URL Protocol" /d "" /f >nul 2>nul
+reg add "HKCU\Software\Classes\potplayer\shell\open\command" /ve /d "\"%PEXE%\" \"%%1\"" /f >nul 2>nul
+if errorlevel 1 (
+  echo [실패] 단계: 팟플레이어 연결 등록 / 원인: 현재 사용자 레지스트리에 쓰지 못했습니다 / 해결: 보안 프로그램을 확인하거나 팟플레이어-연결-등록.bat 을 따로 실행하세요.
+  exit /b 0
+)
+echo 팟플레이어 연결: 등록했습니다 - %PEXE%
+echo 크롬을 완전히 껐다 켜면 적용됩니다.
+exit /b 0
 
 :readver
 set "VER="
