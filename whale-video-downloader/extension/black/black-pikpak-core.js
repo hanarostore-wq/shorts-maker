@@ -67,31 +67,49 @@
         if (p) return { file: p.file, openFile: p.openFile };
       }
     }
-    // 2) 앱 객체에서 내려가기
+    // 2) 앱 객체에서 내려가기: 누른 요소의 조상·#app·body 자식 등에서 __vue_app__ 을 모은다(앱을 붙인 요소 id 가 달라도 찾도록)
     const apps = [];
-    for (const el of [doc?.querySelector?.('#app'), doc?.body, doc?.documentElement]) if (el?.__vue_app__) apps.push(el.__vue_app__);
-    for (const el of doc?.querySelectorAll?.('[data-v-app]') || []) if (el.__vue_app__) apps.push(el.__vue_app__);
+    const roots = [];
+    const addApp = (el) => {
+      if (el?._vnode) roots.push(el);
+      const ap = el?.__vue_app__;
+      if (ap && !apps.includes(ap)) apps.push(ap);
+    };
+    for (let el = button; el; el = el.parentElement) addApp(el);
+    for (const el of [doc?.querySelector?.('#app'), doc?.body, doc?.documentElement]) addApp(el);
+    for (const el of doc?.querySelectorAll?.('[data-v-app]') || []) addApp(el);
+    for (const el of doc?.body?.children || []) addApp(el);
     let best = null;
     let visited = 0;
     const seen = new Set();
-    const walk = (vn, depth) => {
+    // owner = 지금까지 내려온 길에서 가장 안쪽의 '파일 카드' 컴포넌트. 누른 요소 자체(vn.el === button)를 만나면 그 owner 가 답(조각 루트여도 정확)
+    const walk = (vn, depth, owner) => {
       if (!vn || typeof vn !== 'object' || depth > 400 || visited > 200000 || seen.has(vn)) return;
       seen.add(vn);
       visited++;
+      if (vn.el === button && owner) best = owner;
       const inst = vn.component;
+      let own = owner;
       if (inst) {
         const p = ok(inst);
-        if (p && hasEl(inst)) best = { file: p.file, openFile: p.openFile }; // 더 안쪽에서 또 찾으면 덮어쓴다
-        walk(inst.subTree, depth + 1);
+        if (p) {
+          own = { file: p.file, openFile: p.openFile };
+          if (hasEl(inst)) best = own; // 더 안쪽에서 또 찾으면 덮어쓴다
+        }
+        walk(inst.subTree, depth + 1, own);
       }
-      if (vn.suspense?.activeBranch) walk(vn.suspense.activeBranch, depth + 1);
+      if (vn.suspense?.activeBranch) walk(vn.suspense.activeBranch, depth + 1, own);
       const ch = vn.children;
-      if (Array.isArray(ch)) for (const c of ch) walk(c, depth + 1);
-      else if (ch && typeof ch === 'object' && !Array.isArray(ch)) walk(ch, depth + 1);
+      if (Array.isArray(ch)) for (const c of ch) walk(c, depth + 1, own);
+      else if (ch && typeof ch === 'object') walk(ch, depth + 1, own);
     };
-    for (const app of apps) walk(app._instance?.vnode || app._instance?.subTree, 0);
+    // 운영 빌드에는 app._instance 가 없다(실제 사이트에서 확인) → 앱을 붙인 요소의 _vnode(루트 가상 노드)에서 내려간다
+    for (const app of apps) walk(app._instance?.vnode || app._container?._vnode || app._instance?.subTree, 0, null);
+    for (const el of roots) walk(el._vnode, 0, null);
     if (best) return best;
-    throw E('FILE_COMPONENT_UNAVAILABLE', '카드 파일 찾기', '누른 카드에 해당하는 파일을 사이트 화면 구조에서 찾지 못했습니다(사이트가 바뀌었을 수 있음)', '기본 동작으로 넘겼습니다. 계속 그러면 확장 업데이트를 기다려 주세요.');
+    const err = E('FILE_COMPONENT_UNAVAILABLE', '카드 파일 찾기', `누른 카드에 해당하는 파일을 사이트 화면 구조에서 찾지 못했습니다(사이트가 바뀌었을 수 있음) [앱 ${apps.length}개, 검사 ${visited}칸]`, '기본 동작으로 넘겼습니다. 이 안내를 개발자에게 알려 주세요.');
+    err.diag = { apps: apps.length, visited };
+    throw err;
   }
 
   // 사이트의 webpack 실행 환경 얻기(참고 방법: 가짜 chunk 를 하나 밀어 넣어 require 를 받는다). 실패하면 닫는다

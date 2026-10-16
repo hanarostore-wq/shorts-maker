@@ -2582,13 +2582,13 @@ if (!only || only === 'pikpak' || '픽팍'.includes(only)) {
     await pg.click('#play-F1');
     await pg.waitForFunction(() => window.__launched.length > 0, null, { timeout: 4000 }).catch(() => {});
     let r = await st(pg);
-    record('[픽팍] ▶ 클릭 → 원본(is_origin) 주소를 팟플레이어로(첫 항목·이름 짐작 없음), 기본 플레이어 안 열림', r.uv.join() === 'F1:PLAY' && r.bb.join() === 'https://cdn.pikpak.test/orig1?sig=a%2Bb&e=1' && r.launched.join() === 'potplayer:///clipboard|_blank' && r.def.length === 0, { note: `상세=${r.uv} · 넘긴 주소 끝=${(r.bb[0] || '').split('/').pop()} · 연결=${r.launched} · 기본 플레이어=${r.def.length}번` });
+    record('[픽팍] ▶ 클릭 → 원본(is_origin) 주소를 팟플레이어로(첫 항목·이름 짐작 없음), 기본 플레이어 안 열림', r.uv.join() === 'F1:undefined' && r.bb.join() === 'https://cdn.pikpak.test/orig1?sig=a%2Bb&e=1' && r.launched.join() === 'potplayer:///clipboard|_blank' && r.def.length === 0, { note: `상세=${r.uv} · 넘긴 주소 끝=${(r.bb[0] || '').split('/').pop()} · 연결=${r.launched} · 기본 플레이어=${r.def.length}번` });
     // 2) 다른 카드(F2): 원본이 첫 항목이고 이름이 '원본' — 카드마다 정확한 파일
     await pg.waitForTimeout(500);
     await pg.click('#play-F2');
     await pg.waitForFunction(() => window.__launched.length > 1, null, { timeout: 4000 }).catch(() => {});
     r = await st(pg);
-    record('[픽팍] 다른 카드는 그 카드 파일의 원본(카드마다 정확히 대응)', r.uv.join() === 'F1:PLAY,F2:PLAY' && r.bb[1] === 'https://cdn.pikpak.test/orig2?k=%2F%3D' && r.def.length === 0, { note: `상세=${r.uv} · 두 번째 주소 끝=${(r.bb[1] || '').split('/').pop()}` });
+    record('[픽팍] 다른 카드는 그 카드 파일의 원본(카드마다 정확히 대응)', r.uv.join() === 'F1:undefined,F2:undefined' && r.bb[1] === 'https://cdn.pikpak.test/orig2?k=%2F%3D' && r.def.length === 0, { note: `상세=${r.uv} · 두 번째 주소 끝=${(r.bb[1] || '').split('/').pop()}` });
     // 3) 빠른 연속 클릭은 한 번만
     await pg.waitForTimeout(600);
     const n0 = (await st(pg)).launched.length;

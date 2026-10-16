@@ -14,6 +14,9 @@
   const root = () => document.documentElement;
   const enabled = () => !root()?.hasAttribute('data-smd-off') && root()?.dataset.smdPikpak !== '0';
 
+  try {
+    console.info('[웨일영상다운로더] 픽팍 팟플레이어 연결 준비됨');
+  } catch {}
   let busy = false;
   let toastBox = null;
   let toastTimer = 0;
@@ -48,7 +51,7 @@
     if (!UV || !bb) throw new PikpakError('API_INCOMPATIBLE', '사이트 코드 연결', '픽팍 사이트의 파일 조회·팟플레이어 기능을 찾지 못했습니다(사이트가 바뀌었을 수 있음)', '[기본 플레이어로 재생]을 누르세요.');
     let res;
     try {
-      res = await UV(file.id, { usage: 'PLAY' });
+      res = await UV(file.id, {}); // 사이트의 '외부 플레이어로 열기'와 같은 호출(UV(id,{}))
     } catch {
       throw new PikpakError('DETAIL_REQUEST_FAILED', '파일 정보 조회', '픽팍 서버에 연결하지 못했습니다', '인터넷 연결을 확인하거나 페이지를 새로고침한 뒤 다시 누르세요.');
     }
@@ -79,8 +82,11 @@
       let found;
       try {
         found = core.findFileComponent(btn);
-      } catch {
-        return; // 카드와 파일을 못 이으면 막지 않는다 → 픽팍 원래 동작
+      } catch (err) {
+        // 카드와 파일을 못 이으면 막지 않는다(픽팍 원래 동작). 대신 왜 안 됐는지 화면에 알린다
+        const e = err instanceof PikpakError ? err : new PikpakError('UNKNOWN', '카드 파일 찾기', '예상하지 못한 오류가 났습니다', '이 안내를 개발자에게 알려 주세요.');
+        toast(`팟플레이어로 보내지 못해 픽팍 기본 동작으로 넘겼습니다\n단계: ${e.step}\n원인: ${e.reason}\n조치: ${e.action}`, { ms: 12000 });
+        return;
       }
       ev.preventDefault();
       ev.stopImmediatePropagation();

@@ -139,3 +139,24 @@ test('webpack 실행 환경: 가짜 chunk 를 밀어 넣어 require 를 받고, 
   assert.equal(code(() => core.captureRequire({})), 'RUNTIME_UNAVAILABLE');
   assert.equal(code(() => core.captureRequire({ webpackChunkpikpak_web: [] })), 'RUNTIME_INCOMPATIBLE');
 });
+
+test('카드 찾기: 카드 루트가 조각(el 이 ▶ 를 못 품음)이어도 vnode.el === 누른 요소 로 정확히 고름, 앱이 #app 이 아닌 곳에 붙어도 찾음', () => {
+  const btn = fakeEl();
+  const frag = { contains: () => false };
+  const inst = { props: { file: { id: 'FG' }, openFile: () => 1 }, subTree: { el: frag, children: [{ el: btn, children: null }] } };
+  const host = fakeEl();
+  host.__vue_app__ = { _instance: { vnode: { component: inst } } };
+  const doc = { querySelector: () => null, querySelectorAll: () => [], body: { children: [host] } };
+  assert.equal(core.findFileComponent(btn, doc).file.id, 'FG');
+});
+
+test('카드 찾기: 운영 빌드처럼 app._instance 가 없어도 앱 요소의 _container._vnode 에서 내려가 찾음(실제 픽팍에서 확인된 구조)', () => {
+  const btn = fakeEl();
+  const card = fakeEl([btn]);
+  const inst = { props: { file: { id: 'PR' }, openFile: () => 1 }, subTree: { el: card, children: [] } };
+  const host = fakeEl();
+  const vnode = { component: { props: {}, subTree: { el: host, children: [{ component: inst }] } } };
+  host.__vue_app__ = { _container: { _vnode: vnode } };
+  const doc = { querySelector: () => host, querySelectorAll: () => [], body: {} };
+  assert.equal(core.findFileComponent(btn, doc).file.id, 'PR');
+});
