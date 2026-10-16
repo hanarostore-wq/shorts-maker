@@ -156,8 +156,34 @@
     return null;
   }
   const findUV = (req) => findExport(req, 18839, ['/files/', 'unzip_password']);
-  // 같은 모듈의 p() 도 'potplayer:///clipboard' 글자를 품고 있어(플레이어 목록을 돌려줌) 이름 bb 를 먼저 보고, 목록 함수(label:)는 거른다
-  const findBB = (req) => findExport(req, 75152, ['potplayer:///clipboard'], { prefer: 'bb', deny: ['label:'] });
+  // bb 는 async 래퍼라서 함수 원문에 'potplayer:///clipboard' 글자가 없다(실제 사이트에서 확인: 글자는 같은 모듈의 목록 함수 p 에만 있음).
+  //  그래서 원문 표지로는 못 찾고, 모듈(factory) 원문에 표지가 있는 모듈의 내보내기 중 이름이 bb 인 함수를 쓴다. 목록 함수(label: 을 품음)는 거른다
+  function findBB(req) {
+    const good = (fn) => typeof fn === 'function' && !SRC.call(fn).includes('label:');
+    const fromMod = (mid) => {
+      try {
+        const ex = req(mid);
+        if (good(ex?.bb)) return ex.bb;
+      } catch {}
+      return null;
+    };
+    const direct = fromMod(75152);
+    if (direct) return direct;
+    const factories = req.m || {};
+    for (const mid of Object.keys(factories)) {
+      if (String(mid) === '75152') continue;
+      let src = '';
+      try {
+        src = SRC.call(factories[mid]);
+      } catch {
+        continue;
+      }
+      if (!src.includes('potplayer:///clipboard') || !/\bbb:\s*function/.test(src)) continue;
+      const f = fromMod(mid);
+      if (f) return f;
+    }
+    return null;
+  }
 
   globalThis.__SMD_PIKPAK_CORE = Object.freeze({ PikpakError, pathAllowed, validateMediaUrl, pickOriginal, findFileComponent, captureRequire, findUV, findBB });
   try {

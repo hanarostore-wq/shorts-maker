@@ -116,14 +116,16 @@ test('카드 찾기: 못 찾으면 오류 코드 FILE_COMPONENT_UNAVAILABLE(막�
 // ── 사이트 모듈 찾기 ──
 test('모듈 찾기: 알려진 번호의 내보내기를 모양(원문 표지 글자)으로 확인, 번호가 바뀌어도 원문으로 찾음', () => {
   function UV(id, o) { return `${'/files/'}${id}${o.unzip_password}`; }
-  async function bb(u) { void u; return 'potplayer:///clipboard'; }
+  // 실제 bb 는 async 래퍼라 함수 원문에 'potplayer:///clipboard' 글자가 없다
+  const inner = async (u) => { void u; return 'potplayer:///clipboard'; };
+  const bb = function (e) { return inner.apply(this, arguments); };
   const mods = { 18839: { UV }, 75152: { bb, Hy: {} } };
   const req = Object.assign((id) => mods[id], { m: { 18839: () => 0, 75152: () => 0 } });
   assert.equal(core.findUV(req), UV);
   assert.equal(core.findBB(req), bb);
   // 번호가 바뀐 경우: 다른 번호의 모듈 원문에 표지 글자가 있으면 그것을 씀
-  const moved = { 999: { zz: UV }, 888: { qq: bb } };
-  const req2 = Object.assign((id) => { if (!moved[id]) throw new Error('no module'); return moved[id]; }, { m: { 999: function f() { return '/files/ unzip_password'; }, 888: function g() { return 'potplayer:///clipboard'; } } });
+  const moved = { 999: { zz: UV }, 888: { bb } };
+  const req2 = Object.assign((id) => { if (!moved[id]) throw new Error('no module'); return moved[id]; }, { m: { 999: function f() { return '/files/ unzip_password'; }, 888: function g() { return { bb: function () {}, x: 'potplayer:///clipboard' }; } } });
   assert.equal(core.findUV(req2), UV);
   assert.equal(core.findBB(req2), bb);
   // 아무데도 없으면 null (호출한 쪽이 '사이트 코드 연결' 오류로 닫음)
@@ -161,11 +163,12 @@ test('카드 찾기: 운영 빌드처럼 app._instance 가 없어도 앱 요소�
   assert.equal(core.findFileComponent(btn, doc).file.id, 'PR');
 });
 
-test('모듈 찾기: 같은 모듈의 플레이어 목록 함수(p, 같은 글자를 품음)가 bb 보다 앞에 있어도 bb 를 고름(실제 픽팍에서 나온 오류)', () => {
+test('모듈 찾기: 목록 함수(p, 같은 글자·label: 을 품음)가 bb 보다 앞에 있어도 bb 를 고름(실제 픽팍에서 나온 오류), bb 가 없으면 null', () => {
   const p = function p() { return { win2: [{ label: 'PotPlayer', value: 'potplayer:///clipboard' }] }; };
-  const bb = async function (u) { void u; return 'potplayer:///clipboard'; };
+  const inner = async () => 'potplayer:///clipboard';
+  const bb = function (e) { return inner.apply(this, arguments); };
   const req = Object.assign((id) => (id === 75152 ? { L5: p, bb } : {}), { m: {} });
   assert.equal(core.findBB(req), bb);
-  const req2 = Object.assign((id) => (id === 75152 ? { L5: p, zz: bb } : {}), { m: {} });
-  assert.equal(core.findBB(req2), bb);
+  const noBb = Object.assign((id) => (id === 75152 ? { L5: p } : {}), { m: {} });
+  assert.equal(core.findBB(noBb), null);
 });
