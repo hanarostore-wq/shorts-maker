@@ -2647,6 +2647,25 @@ if (!only || only === 'pikpak' || '픽팍'.includes(only)) {
     r = await stS(pg);
     record('[픽팍] (오류 경로) 공유 링크 상태가 정상이 아니면(만료 등) 단계·원인 안내', /단계: 공유 상태 확인/.test(r.toast) && /EXPIRED/.test(r.toast) && r.launched.length === 1, { note: r.toast.replace(/\s+/g, ' ').slice(0, 90) });
     await pg.close().catch(() => {});
+    // 6c) 폴더에 들어갔다가 뒤로가기 → 스크롤 위치 복원(목록이 맨 위로 가던 것), 폴더로 들어갈 때는 맨 위, 복원 뒤 목록이 다시 보임
+    pg = await open('https://mypikpak.com/drive/scroll/A');
+    await pg.evaluate(() => { document.getElementById('wrap').scrollTop = 1500; });
+    await pg.waitForTimeout(300);
+    await pg.evaluate(() => window.__go('/drive/scroll/B'));
+    await pg.waitForTimeout(300);
+    const inB = await pg.evaluate(() => document.getElementById('wrap').scrollTop);
+    await pg.evaluate(() => history.back());
+    await pg.waitForTimeout(1500);
+    let sr = await pg.evaluate(() => ({ top: document.getElementById('wrap').scrollTop, vis: document.getElementById('wrap').style.visibility, path: location.pathname }));
+    record('[픽팍] 폴더 갔다가 뒤로가기 → 스크롤 위치 복원(1500), 폴더로 들어갈 땐 맨 위, 복원 뒤 목록 보임', sr.path === '/drive/scroll/A' && Math.abs(sr.top - 1500) < 3 && inB === 0 && sr.vis === '', { note: `들어간 폴더 위치=${inB} · 돌아온 위치=${sr.top} · 숨김=${JSON.stringify(sr.vis)}` });
+    // 사용자가 직접 스크롤하면 복원을 멈추고 목록을 바로 보여 줌, 기록 없는 폴더는 건드리지 않음
+    await pg.evaluate(() => window.__go('/drive/scroll/C'));
+    await pg.waitForTimeout(300);
+    await pg.evaluate(() => history.back());
+    await pg.waitForTimeout(1500);
+    sr = await pg.evaluate(() => ({ top: document.getElementById('wrap').scrollTop, vis: document.getElementById('wrap').style.visibility }));
+    record('[픽팍] 두 번째 뒤로가기도 위치 복원(1500), 목록이 숨은 채 남지 않음', Math.abs(sr.top - 1500) < 3 && sr.vis === '', { note: `위치=${sr.top} · 숨김=${JSON.stringify(sr.vis)}` });
+    await pg.close().catch(() => {});
     // 7) 사이트 구조가 달라 카드-파일 연결을 못 하면 막지 않고 사이트 기본 동작
     pg = await open(`${A}?novue=1`);
     await pg.click('#play-F2');

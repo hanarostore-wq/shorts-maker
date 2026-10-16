@@ -64,9 +64,9 @@ test('영상 주소 검사: https 만, 아이디·비밀번호·다른 스킴·�
   for (const u of ['http://a.example/x', 'ftp://a.example/x', 'https://u:p@a.example/x', 'javascript:alert(1)', 'potplayer:///clipboard', 'not a url', '', undefined]) assert.equal(code(() => core.validateMediaUrl(u)), 'URL_REJECTED');
 });
 
-test('범위: 내 드라이브 모든 파일(폴더 안 포함)만', () => {
-  for (const p of ['/drive/all', '/drive/all/', '/drive/all/VNabc123']) assert.equal(core.pathAllowed(p), true);
-  for (const p of ['/drive/share/abc', '/drive/trash', '/drive/recent', '/drive/allx', '/', '', undefined]) assert.equal(core.pathAllowed(p), false);
+test('범위: 내 드라이브 모든 파일(폴더 안 포함)·최근 파일만', () => {
+  for (const p of ['/drive/all', '/drive/all/', '/drive/all/VNabc123', '/drive/recent']) assert.equal(core.pathAllowed(p), true);
+  for (const p of ['/drive/share/abc', '/drive/trash', '/drive/recentx', '/drive/allx', '/', '', undefined]) assert.equal(core.pathAllowed(p), false);
 });
 
 // ── 카드 ↔ 파일 연결 ──

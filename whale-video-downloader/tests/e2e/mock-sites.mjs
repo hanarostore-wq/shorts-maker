@@ -745,6 +745,15 @@ export const other = () => 'nothing';`);
   const realClick = HTMLAnchorElement.prototype.click;
   HTMLAnchorElement.prototype.click = function () { if ((this.getAttribute('href') || '').startsWith('potplayer:')) { window.__launched.push(this.getAttribute('href') + '|' + this.target); return; } return realClick.apply(this, arguments); };
 </script></body></html>`);
+    // 스크롤 복원 시험: 폴더 A(긴 목록) → B(짧은 목록) → 뒤로가기하면 사이트가 0.3초 뒤 A 를 맨 위로 다시 그림
+    if (u.pathname.startsWith('/drive/scroll')) return html(res, `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>모의 픽팍 스크롤</title><style>body{margin:0}.file-explorer{height:400px}.el-scrollbar__wrap{height:400px;overflow:auto}.it{height:50px}</style></head><body>
+<div class="file-explorer"><div class="el-scrollbar__wrap" id="wrap"><div id="inner"></div></div></div>
+<script>
+  const render = () => { const f = location.pathname.endsWith('/B') ? 3 : 100; document.getElementById('inner').innerHTML = Array.from({ length: f }, (_, i) => '<div class="it" id="i' + i + '">' + i + '</div>').join(''); document.getElementById('wrap').scrollTop = 0; };
+  render();
+  window.__go = (p) => { history.pushState({}, '', p); render(); };
+  window.addEventListener('popstate', () => setTimeout(render, 300));
+</script></body></html>`);
     if (!/^\/drive\//.test(u.pathname)) return html(res, '<p>pikpak</p>');
     return html(res, `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>모의 픽팍</title></head><body>
 <div id="app"><div class="file-explorer" id="list">

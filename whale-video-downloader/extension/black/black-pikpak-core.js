@@ -19,8 +19,8 @@
   }
   const E = (code, step, reason, action) => new PikpakError(code, step, reason, action);
 
-  // 본인 드라이브 '모든 파일'(폴더 안 포함)만 — 공유·휴지통·압축 내부·기록은 다른 방식이라 범위 밖
-  const pathAllowed = (pathname) => /^\/drive\/all(?:\/|$)/.test(String(pathname || ''));
+  // 본인 드라이브 '모든 파일'(폴더 안 포함)과 '최근 파일'만(같은 카드 컴포넌트 FileItem) — 휴지통·압축 내부·기록 등은 범위 밖
+  const pathAllowed = (pathname) => /^\/drive\/(?:all|recent)(?:\/|$)/.test(String(pathname || ''));
 
   // 공유 링크 화면(/s/<공유ID>/...): 앱 구조가 다르다(Nuxt/Vite). 공유 ID 는 /s/ 다음 첫 조각
   const sharePathId = (pathname) => (String(pathname || '').match(/^\/s\/([^/]+)(?:\/|$)/) || [])[1] || '';
