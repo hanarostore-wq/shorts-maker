@@ -103,12 +103,7 @@
       const btn = ev.target?.closest?.(SEL);
       if (!btn) return;
       const isShare = !!core.sharePathId(location.pathname);
-      if (!isShare && !core.pathAllowed(location.pathname)) {
-        // 범위 밖 화면(공유·휴지통·압축 내부 등): 건드리지 않지만 왜 팟플레이어로 안 갔는지 알린다
-        const where = String(location.pathname).slice(0, 24);
-        toast(`이 화면(${where})은 팟플레이어 연결 범위 밖이라 픽팍 기본 동작으로 열었습니다\n단계: 화면 확인\n원인: 지원하는 화면은 내 드라이브 '모든 파일'(/drive/all)·'최근 파일'(/drive/recent)과 공유 링크(/s/…)입니다\n조치: 내 드라이브 모든 파일 화면에서 눌러 보세요.`, { ms: 6000 });
-        return;
-      }
+      if (!isShare && !core.pathAllowed(location.pathname)) return;
       let found;
       try {
         found = core.findFileComponent(btn, document, { share: isShare });

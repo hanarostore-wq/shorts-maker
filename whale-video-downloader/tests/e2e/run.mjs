@@ -2616,12 +2616,12 @@ if (!only || only === 'pikpak' || '픽팍'.includes(only)) {
     r = await st(pg);
     record('[픽팍] Shift 누른 클릭은 건드리지 않음', r.launched.length === l1, { note: `새 연결 ${r.launched.length - l1}개` });
     await pg.close().catch(() => {});
-    // 6) 범위 밖 화면(공유 등)은 건드리지 않음
+    // 6) 화면 주소로 막지 않음(/drive/share/abc 도 같은 방식)
     pg = await open('https://mypikpak.com/drive/share/abc');
     await pg.click('#play-F1');
-    await pg.waitForTimeout(700);
+    await pg.waitForFunction(() => window.__launched.length > 0, null, { timeout: 4000 }).catch(() => {});
     r = await st(pg);
-    record('[픽팍] 내 파일이 아닌 화면(/drive/share)은 건드리지 않음 → 사이트 기본 동작', r.def.join() === 'F1' && r.launched.length === 0 && r.uv.length === 0, { note: `기본=${r.def} 연결=${r.launched.length}` });
+    record('[픽팍] 화면 주소로 막지 않음: /drive/share/abc 에서도 같은 방식으로 팟플레이어 연결', r.launched.length === 1 && r.def.length === 0, { note: `연결=${r.launched.length} 기본=${r.def.length}` });
     await pg.close().catch(() => {});
     // 6b) 공유 링크(/s/…): 사이트의 share/file_info 함수·접근 토큰으로 원본 조회 → 팟플레이어
     const stS = (g) => g.evaluate(() => ({ calls: window.__shareCalls || [], clip: window.__clip, launched: window.__launched, def: window.__defaultOpen, toast: document.querySelector('[data-smd-pikpak-toast]')?.textContent || '' }));

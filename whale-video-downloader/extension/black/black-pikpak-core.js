@@ -19,8 +19,8 @@
   }
   const E = (code, step, reason, action) => new PikpakError(code, step, reason, action);
 
-  // 본인 드라이브 '모든 파일'(폴더 안 포함)과 '최근 파일'만(같은 카드 컴포넌트 FileItem) — 휴지통·압축 내부·기록 등은 범위 밖
-  const pathAllowed = (pathname) => /^\/drive\/(?:all|recent)(?:\/|$)/.test(String(pathname || ''));
+  // 픽팍 사이트 전체(공유 링크 /s/ 는 별도 방식). 화면별로 막지 않고, 안 되는 화면(휴지통·압축 내부 등)은 실패 안내로 알린다
+  const pathAllowed = (pathname) => typeof pathname === 'string' && pathname.startsWith('/'); // 범위를 주소로 제한하지 않는다: 어느 화면이든 시도하고, 카드 연결·파일 조회가 안 되면 단계·원인 안내 + [기본 플레이어로 재생]
 
   // 공유 링크 화면(/s/<공유ID>/...): 앱 구조가 다르다(Nuxt/Vite). 공유 ID 는 /s/ 다음 첫 조각
   const sharePathId = (pathname) => (String(pathname || '').match(/^\/s\/([^/]+)(?:\/|$)/) || [])[1] || '';
