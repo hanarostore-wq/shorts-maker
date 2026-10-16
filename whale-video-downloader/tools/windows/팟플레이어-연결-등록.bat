@@ -17,18 +17,22 @@ echo.
 echo ==== 2) 팟플레이어 찾기 ====
 set "EXE="
 for %%P in (
+  "%ProgramFiles%\DAUM\PotPlayer\PotPlayer64.exe"
+  "%ProgramFiles%\PotPlayer\PotPlayer64.exe"
+  "%ProgramFiles(x86)%\DAUM\PotPlayer\PotPlayer.exe"
+  "%ProgramFiles(x86)%\PotPlayer\PotPlayer.exe"
+  "%ProgramFiles%\DAUM\PotPlayer\PotPlayer.exe"
+  "%LOCALAPPDATA%\Programs\PotPlayer\PotPlayer64.exe"
+  "C:\PotPlayer\PotPlayer64.exe"
   "%ProgramFiles%\DAUM\PotPlayer\PotPlayerMini64.exe"
   "%ProgramFiles%\PotPlayer\PotPlayerMini64.exe"
   "%ProgramFiles(x86)%\DAUM\PotPlayer\PotPlayerMini.exe"
-  "%ProgramFiles(x86)%\PotPlayer\PotPlayerMini.exe"
-  "%ProgramFiles%\DAUM\PotPlayer\PotPlayerMini.exe"
-  "%LOCALAPPDATA%\Programs\PotPlayer\PotPlayerMini64.exe"
-  "C:\PotPlayer\PotPlayerMini64.exe"
 ) do if not defined EXE if exist %%P set "EXE=%%~P"
 if not defined EXE (
   echo 자동으로 못 찾았습니다. 팟플레이어 실행 파일 전체 경로를 붙여 넣고 엔터를 누르세요.
-  echo 예: C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe
+  echo 예: C:\Program Files\DAUM\PotPlayer\PotPlayer64.exe
   set /p "EXE=경로: "
+set "EXE=!EXE:"=!"
 )
 if not exist "%EXE%" (
   echo [실패] 단계: 팟플레이어 찾기 / 원인: "%EXE%" 파일이 없습니다 / 조치: 팟플레이어가 설치된 폴더를 확인한 뒤 다시 실행하세요.
