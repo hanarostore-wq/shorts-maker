@@ -128,11 +128,12 @@
 
   // 사이트 모듈 찾기: 알려진 번호(18839 = 파일 상세 UV, 75152 = 팟플레이어 bb)를 먼저 보고, 모양이 안 맞으면 모듈 원문의 표지 글자로 찾는다
   const SRC = Function.prototype.toString;
-  function findExport(req, id, marks) {
-    const fits = (fn) => typeof fn === 'function' && marks.every((m) => SRC.call(fn).includes(m));
+  function findExport(req, id, marks, { prefer = '', deny = [] } = {}) {
+    const fits = (fn) => typeof fn === 'function' && marks.every((m) => SRC.call(fn).includes(m)) && !deny.some((m) => SRC.call(fn).includes(m));
     const tryMod = (mid) => {
       try {
         const ex = req(mid);
+        if (prefer && fits(ex?.[prefer])) return ex[prefer];
         for (const k of Object.keys(ex || {})) if (fits(ex[k])) return ex[k];
       } catch {}
       return null;
@@ -155,7 +156,8 @@
     return null;
   }
   const findUV = (req) => findExport(req, 18839, ['/files/', 'unzip_password']);
-  const findBB = (req) => findExport(req, 75152, ['potplayer:///clipboard']);
+  // 같은 모듈의 p() 도 'potplayer:///clipboard' 글자를 품고 있어(플레이어 목록을 돌려줌) 이름 bb 를 먼저 보고, 목록 함수(label:)는 거른다
+  const findBB = (req) => findExport(req, 75152, ['potplayer:///clipboard'], { prefer: 'bb', deny: ['label:'] });
 
   globalThis.__SMD_PIKPAK_CORE = Object.freeze({ PikpakError, pathAllowed, validateMediaUrl, pickOriginal, findFileComponent, captureRequire, findUV, findBB });
   try {

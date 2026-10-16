@@ -160,3 +160,12 @@ test('카드 찾기: 운영 빌드처럼 app._instance 가 없어도 앱 요소�
   const doc = { querySelector: () => host, querySelectorAll: () => [], body: {} };
   assert.equal(core.findFileComponent(btn, doc).file.id, 'PR');
 });
+
+test('모듈 찾기: 같은 모듈의 플레이어 목록 함수(p, 같은 글자를 품음)가 bb 보다 앞에 있어도 bb 를 고름(실제 픽팍에서 나온 오류)', () => {
+  const p = function p() { return { win2: [{ label: 'PotPlayer', value: 'potplayer:///clipboard' }] }; };
+  const bb = async function (u) { void u; return 'potplayer:///clipboard'; };
+  const req = Object.assign((id) => (id === 75152 ? { L5: p, bb } : {}), { m: {} });
+  assert.equal(core.findBB(req), bb);
+  const req2 = Object.assign((id) => (id === 75152 ? { L5: p, zz: bb } : {}), { m: {} });
+  assert.equal(core.findBB(req2), bb);
+});
