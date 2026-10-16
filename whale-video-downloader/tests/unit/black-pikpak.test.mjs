@@ -172,3 +172,50 @@ test('모듈 찾기: 목록 함수(p, 같은 글자·label: 을 품음)가 bb �
   const noBb = Object.assign((id) => (id === 75152 ? { L5: p } : {}), { m: {} });
   assert.equal(core.findBB(noBb), null);
 });
+
+// ── 공유 링크 ──
+test('공유 링크: 주소 첫 조각이 공유 번호(뒤 조각을 파일 번호로 보지 않음), 내 드라이브 주소는 해당 없음', () => {
+  assert.equal(core.sharePathId('/s/VOy2/AAD/AAB'), 'VOy2');
+  assert.equal(core.sharePathId('/s/VOy2'), 'VOy2');
+  assert.equal(core.sharePathId('/drive/all'), '');
+  assert.equal(core.sharePathId('/share/x'), '');
+});
+
+test('공유 링크: 응답에서 원본 고르기 — 오류·상태·파일 불일치는 단계·원인과 함께 거부, 원본은 is_origin 만', () => {
+  const m = (o) => Object.assign({ is_visible: true, is_origin: false, link: { url: 'https://c.test/x' } }, o);
+  const ok = { data: { value: { share_status: 'OK', file_info: { id: 'A', medias: [m({}), m({ is_origin: true, link: { url: 'https://c.test/o?s=a%2Bb' } })] } } }, error: { value: null } };
+  assert.equal(core.pickShareOriginal(ok, 'A').url, 'https://c.test/o?s=a%2Bb');
+  assert.equal(code(() => core.pickShareOriginal({ error: { value: { m: 1 } } }, 'A')), 'DETAIL_REQUEST_FAILED');
+  assert.equal(code(() => core.pickShareOriginal({ data: { value: null }, error: { value: null } }, 'A')), 'DETAIL_UNAVAILABLE');
+  assert.equal(code(() => core.pickShareOriginal({ data: { value: { share_status: 'EXPIRED', file_info: null } }, error: { value: null } }, 'A')), 'SHARE_NOT_OK');
+  assert.equal(code(() => core.pickShareOriginal(ok, 'B')), 'DETAIL_UNAVAILABLE');
+  const none = { data: { value: { share_status: 'OK', file_info: { id: 'A', medias: [m({})] } } }, error: { value: null } };
+  assert.equal(code(() => core.pickShareOriginal(none, 'A')), 'NO_ORIGIN');
+});
+
+test('공유 링크: 접근 토큰은 사이트의 $getPasscodeToken() 값, 없으면 SHARE_TOKEN_MISSING, 공유 번호 없으면 SHARE_ID_MISSING', () => {
+  const root = { __vue_app__: { config: { globalProperties: { $getPasscodeToken: () => ({ value: 'T0K' }) } } } };
+  const doc = { querySelector: (q) => (q === '#__pikcloud' ? root : null), body: { children: [] } };
+  const c = core.shareContext(doc, '/s/SID/xx');
+  assert.equal(c.shareId, 'SID');
+  assert.equal(c.token, 'T0K');
+  const none = { querySelector: () => null, body: { children: [] } };
+  assert.equal(code(() => core.shareContext(none, '/s/SID')), 'SHARE_TOKEN_MISSING');
+  assert.equal(code(() => core.shareContext(doc, '/drive/all')), 'SHARE_ID_MISSING');
+});
+
+test('공유 카드 찾기: props.file + viewType 이 있고 emit 이 있는 카드(openFile 함수 없음) — 열기는 emit(openFile, file)', () => {
+  const btn = fakeEl();
+  const card = fakeEl([btn]);
+  const emitted = [];
+  const inst = { props: { file: { id: 'SF' }, viewType: 'grid' }, emit: (...a) => emitted.push(a), subTree: { el: card, children: [] } };
+  const host = fakeEl();
+  host.__vue_app__ = { _container: { _vnode: { component: { props: {}, subTree: { el: host, children: [{ component: inst }] } } } } };
+  const doc = { querySelector: () => host, querySelectorAll: () => [], body: {} };
+  const f = core.findFileComponent(btn, doc, { share: true });
+  assert.equal(f.file.id, 'SF');
+  f.openFile();
+  assert.equal(emitted[0][0], 'openFile');
+  // 내 드라이브 방식(share:false)으로는 openFile 함수가 없어 못 찾음
+  assert.equal(code(() => core.findFileComponent(btn, doc)), 'FILE_COMPONENT_UNAVAILABLE');
+});

@@ -2600,7 +2600,7 @@ if (!only || only === 'pikpak' || '픽팍'.includes(only)) {
     await pg.waitForTimeout(600);
     const l0 = (await st(pg)).launched.length;
     await pg.click('#play-F3');
-    await pg.waitForFunction(() => document.querySelector('[data-smd-pikpak-toast] button'), null, { timeout: 4000 }).catch(() => {});
+    await pg.waitForFunction(() => /단계:/.test(document.querySelector('[data-smd-pikpak-toast]')?.textContent || ''), null, { timeout: 4000 }).catch(() => {});
     r = await st(pg);
     const beforeBtn = r.def.length;
     record('[픽팍] (오류 경로) 원본이 없으면 단계·원인·조치 안내, 몰래 기본 플레이어를 열지 않음, 팟플레이어도 안 열림', /단계: 원본 화질 찾기/.test(r.toast) && /원인:/.test(r.toast) && /조치:/.test(r.toast) && beforeBtn === 0 && r.launched.length === l0 && !/cdn\.pikpak\.test/.test(r.toast), { note: r.toast.replace(/\s+/g, ' ').slice(0, 90) });
@@ -2622,6 +2622,30 @@ if (!only || only === 'pikpak' || '픽팍'.includes(only)) {
     await pg.waitForTimeout(700);
     r = await st(pg);
     record('[픽팍] 내 파일이 아닌 화면(/drive/share)은 건드리지 않음 → 사이트 기본 동작', r.def.join() === 'F1' && r.launched.length === 0 && r.uv.length === 0, { note: `기본=${r.def} 연결=${r.launched.length}` });
+    await pg.close().catch(() => {});
+    // 6b) 공유 링크(/s/…): 사이트의 share/file_info 함수·접근 토큰으로 원본 조회 → 팟플레이어
+    const stS = (g) => g.evaluate(() => ({ calls: window.__shareCalls || [], clip: window.__clip, launched: window.__launched, def: window.__defaultOpen, toast: document.querySelector('[data-smd-pikpak-toast]')?.textContent || '' }));
+    pg = await open('https://mypikpak.com/s/sh1/abc/def');
+    await pg.click('#splay-S1');
+    await pg.waitForFunction(() => window.__launched.length > 0, null, { timeout: 5000 }).catch(() => {});
+    r = await stS(pg);
+    record('[픽팍] 공유 링크 ▶ → 공유 파일 조회(공유 번호·접근 토큰·파일 번호) → 원본 주소가 클립보드로, 팟플레이어 연결, 기본 플레이어 안 열림',
+      r.calls.length === 1 && /share_id=sh1/.test(r.calls[0]) && /file_id=S1/.test(r.calls[0]) && /pass_code_token=TOKEN/.test(r.calls[0]) && r.clip.join() === 'https://cdn.pikpak.test/sorig1?sig=a%2Bb' && r.launched.join() === 'potplayer:///clipboard|_blank' && r.def.length === 0,
+      { note: `조회=${r.calls.length}번 · 클립보드 끝=${(r.clip[0] || '').split('/').pop()} · 연결=${r.launched} · 기본 플레이어=${r.def.length}번` });
+    await pg.waitForTimeout(700);
+    await pg.click('#splay-S2');
+    await pg.waitForFunction(() => /단계:/.test(document.querySelector('[data-smd-pikpak-toast]')?.textContent || ''), null, { timeout: 4000 }).catch(() => {});
+    r = await stS(pg);
+    record('[픽팍] (오류 경로) 공유 파일에 원본이 없으면 단계·원인·조치 안내, 몰래 열지 않음', /단계: 원본 화질 찾기/.test(r.toast) && r.def.length === 0 && r.launched.length === 1, { note: r.toast.replace(/\s+/g, ' ').slice(0, 90) });
+    await pg.click('[data-smd-pikpak-toast] button');
+    await pg.waitForTimeout(300);
+    r = await stS(pg);
+    record('[픽팍] 공유 링크 [기본 플레이어로 재생]은 눌러야만 그 카드의 기본 동작(emit)', r.def.join() === 'S2', { note: `기본=${r.def}` });
+    await pg.waitForTimeout(700);
+    await pg.click('#splay-S3');
+    await pg.waitForFunction(() => /공유 상태/.test(document.querySelector('[data-smd-pikpak-toast]')?.textContent || ''), null, { timeout: 4000 }).catch(() => {});
+    r = await stS(pg);
+    record('[픽팍] (오류 경로) 공유 링크 상태가 정상이 아니면(만료 등) 단계·원인 안내', /단계: 공유 상태 확인/.test(r.toast) && /EXPIRED/.test(r.toast) && r.launched.length === 1, { note: r.toast.replace(/\s+/g, ' ').slice(0, 90) });
     await pg.close().catch(() => {});
     // 7) 사이트 구조가 달라 카드-파일 연결을 못 하면 막지 않고 사이트 기본 동작
     pg = await open(`${A}?novue=1`);

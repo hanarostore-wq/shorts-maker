@@ -22,6 +22,9 @@
   // 본인 드라이브 '모든 파일'(폴더 안 포함)만 — 공유·휴지통·압축 내부·기록은 다른 방식이라 범위 밖
   const pathAllowed = (pathname) => /^\/drive\/all(?:\/|$)/.test(String(pathname || ''));
 
+  // 공유 링크 화면(/s/<공유ID>/...): 앱 구조가 다르다(Nuxt/Vite). 공유 ID 는 /s/ 다음 첫 조각
+  const sharePathId = (pathname) => (String(pathname || '').match(/^\/s\/([^/]+)(?:\/|$)/) || [])[1] || '';
+
   // 영상 주소: https 만, 아이디·비밀번호 없는 것만. 검사 뒤에도 원형 그대로(href 문자열) 돌려준다(이중 인코딩 없음)
   function validateMediaUrl(raw) {
     let u;
@@ -51,10 +54,14 @@
 
   // 누른 ▶ 에 해당하는 카드의 파일: Vue 앱 트리를 걸어 props.file 과 props.openFile 이 있고, 그 카드의 화면 요소가 누른 자리를 품은 가장 안쪽 컴포넌트.
   //  (운영 빌드에서는 요소의 __vueParentComponent 가 없을 수 있어, 앱 객체(__vue_app__)에서 내려가며 찾는 방법을 먼저 쓴다)
-  function findFileComponent(button, doc = globalThis.document) {
+  function findFileComponent(button, doc = globalThis.document, { share = false } = {}) {
+    // 내 드라이브 카드: props.file + props.openFile(함수). 공유 카드(ShareFileItem): props.file + viewType 만 있고 열기는 emit('openFile', file) 로 한다
     const ok = (inst) => {
       const p = inst?.props;
-      return p && p.file && typeof p.file.id === 'string' && p.file.id && typeof p.openFile === 'function' ? p : null;
+      if (!p || !p.file || typeof p.file.id !== 'string' || !p.file.id) return null;
+      if (!share) return typeof p.openFile === 'function' ? { file: p.file, openFile: p.openFile } : null;
+      if ('viewType' in p && typeof inst.emit === 'function') return { file: p.file, openFile: () => inst.emit('openFile', p.file) };
+      return null;
     };
     const hasEl = (inst) => {
       const el = inst?.subTree?.el;
@@ -64,7 +71,7 @@
     for (let el = button; el; el = el.parentElement) {
       for (let vm = el.__vueParentComponent; vm; vm = vm.parent) {
         const p = ok(vm);
-        if (p) return { file: p.file, openFile: p.openFile };
+        if (p) return p;
       }
     }
     // 2) 앱 객체에서 내려가기: 누른 요소의 조상·#app·body 자식 등에서 __vue_app__ 을 모은다(앱을 붙인 요소 id 가 달라도 찾도록)
@@ -93,7 +100,7 @@
       if (inst) {
         const p = ok(inst);
         if (p) {
-          own = { file: p.file, openFile: p.openFile };
+          own = p;
           if (hasEl(inst)) best = own; // 더 안쪽에서 또 찾으면 덮어쓴다
         }
         walk(inst.subTree, depth + 1, own);
@@ -110,6 +117,69 @@
     const err = E('FILE_COMPONENT_UNAVAILABLE', '카드 파일 찾기', `누른 카드에 해당하는 파일을 사이트 화면 구조에서 찾지 못했습니다(사이트가 바뀌었을 수 있음) [앱 ${apps.length}개, 검사 ${visited}칸]`, '기본 동작으로 넘겼습니다. 이 안내를 개발자에게 알려 주세요.');
     err.diag = { apps: apps.length, visited };
     throw err;
+  }
+
+  // ── 공유 링크 화면 ──
+  // 파일 조회 함수: 공유 앱은 Vite ESM 이라 webpack 이 없다. 이미 불러온 같은 출처 .js 모듈들(같은 주소는 브라우저가 한 번만 실행)을 import 해서
+  //  원문에 '/share/file_info' 와 'x-global-file-token' 이 있는 내보내기 함수를 쓴다(파일 이름·내보내기 이름은 배포마다 바뀜: 실제 사이트에서 확인)
+  let shareFnCache = null;
+  async function findShareFileInfo(win = globalThis) {
+    if (shareFnCache) return shareFnCache;
+    let urls = [];
+    try {
+      urls = [...new Set(win.performance.getEntriesByType('resource').map((e) => e.name))].filter((u) => {
+        try {
+          const x = new URL(u);
+          return x.origin === win.location.origin && /\.m?js$/.test(x.pathname);
+        } catch {
+          return false;
+        }
+      });
+    } catch {}
+    for (const u of urls) {
+      let mod;
+      try {
+        mod = await import(/* webpackIgnore: true */ u);
+      } catch {
+        continue;
+      }
+      for (const k of Object.keys(mod || {})) {
+        const f = mod[k];
+        if (typeof f !== 'function') continue;
+        let src = '';
+        try {
+          src = SRC.call(f);
+        } catch {
+          continue;
+        }
+        if (src.includes('/share/file_info') && src.includes('x-global-file-token')) return (shareFnCache = f);
+      }
+    }
+    throw E('API_INCOMPATIBLE', '사이트 코드 연결', '픽팍 공유 화면의 파일 조회 기능을 찾지 못했습니다(사이트가 바뀌었을 수 있음)', '[기본 플레이어로 재생]을 누르세요.');
+  }
+  // 공유 접근 토큰: 사이트가 제공하는 $getPasscodeToken() (값은 메모리에서만 쓰고 어디에도 남기지 않는다)
+  function shareContext(doc = globalThis.document, pathname = globalThis.location?.pathname) {
+    const shareId = sharePathId(pathname);
+    if (!shareId) throw E('SHARE_ID_MISSING', '공유 정보 확인', '주소에서 공유 번호를 찾지 못했습니다', '공유 링크 첫 화면에서 다시 눌러 보세요.');
+    let token = '';
+    try {
+      const root = doc.querySelector('#__pikcloud') || doc.querySelector('#__nuxt') || doc.querySelector('#app');
+      const gp = (root?.__vue_app__ || [...(doc.body?.children || [])].map((el) => el.__vue_app__).find(Boolean))?.config?.globalProperties;
+      const t = gp?.$getPasscodeToken?.();
+      token = String(t?.value ?? '');
+    } catch {}
+    if (!token) throw E('SHARE_TOKEN_MISSING', '공유 접근 확인', '공유 접근 토큰을 사이트에서 받지 못했습니다(접근 코드 입력이 필요하거나 아직 불러오는 중일 수 있음)', '공유 화면이 완전히 열린 뒤 다시 누르세요.');
+    return { shareId, token };
+  }
+  // 공유 파일 상세 응답 → 원본. 응답은 사이트의 ref 형태(error.value / data.value)
+  function pickShareOriginal(res, fileId) {
+    if (res?.error?.value) throw E('DETAIL_REQUEST_FAILED', '공유 파일 정보 조회', '픽팍이 공유 파일 정보를 주지 않았습니다(만료·삭제·접근 코드·네트워크 문제일 수 있음)', '공유 화면을 새로고침하고 접근 코드를 확인한 뒤 다시 누르세요.');
+    const d = res?.data?.value;
+    if (!d) throw E('DETAIL_UNAVAILABLE', '공유 파일 정보 조회', '공유 파일 정보가 비어 있습니다', '다시 눌러 보세요.');
+    if (d.share_status !== 'OK') throw E('SHARE_NOT_OK', '공유 상태 확인', `공유 링크 상태가 정상이 아닙니다(${String(d.share_status).slice(0, 40)})`, '링크 만료·삭제·접근 코드를 확인하세요.');
+    const fi = d.file_info;
+    if (!fi || fi.id !== fileId) throw E('DETAIL_UNAVAILABLE', '공유 파일 정보 조회', '받은 파일 정보가 누른 파일과 맞지 않습니다', '다시 눌러 보세요.');
+    return pickOriginal(fi);
   }
 
   // 사이트의 webpack 실행 환경 얻기(참고 방법: 가짜 chunk 를 하나 밀어 넣어 require 를 받는다). 실패하면 닫는다
@@ -185,7 +255,7 @@
     return null;
   }
 
-  globalThis.__SMD_PIKPAK_CORE = Object.freeze({ PikpakError, pathAllowed, validateMediaUrl, pickOriginal, findFileComponent, captureRequire, findUV, findBB });
+  globalThis.__SMD_PIKPAK_CORE = Object.freeze({ PikpakError, pathAllowed, sharePathId, findShareFileInfo, shareContext, pickShareOriginal, validateMediaUrl, pickOriginal, findFileComponent, captureRequire, findUV, findBB });
   try {
     Object.defineProperty(globalThis, '__SMD_PIKPAK_CORE', { enumerable: false });
   } catch {}

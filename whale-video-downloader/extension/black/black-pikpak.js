@@ -1,4 +1,4 @@
-// 블랙전용(개인용 기능) — 픽팍(mypikpak.com/drive/all) 영상 카드의 ▶ 를 누르면 픽팍 기본 플레이어 대신 팟플레이어로 바로 재생. 페이지 쪽(MAIN world). 유료판에서는 black/ 째 빠진다.
+// 블랙전용(개인용 기능) — 픽팍(mypikpak.com/drive/all 와 공유 링크 /s/…) 영상 카드의 ▶ 를 누르면 픽팍 기본 플레이어 대신 팟플레이어로 바로 재생. 페이지 쪽(MAIN world). 유료판에서는 black/ 째 빠진다.
 //  - ▶ 클릭을 문서 맨 앞(capture)에서 가로채 기본 플레이어가 열리지 않게 하고, 사이트가 '외부 플레이어로 열기'에서 쓰는 것과 같은 방법(사이트 모듈 bb: 영상 주소를 클립보드에 쓰고 potplayer:///clipboard 를 연다)을 선택 창 없이 쓴다
 //  - 화질은 '원본'(응답의 is_origin === true 인 항목)만. 정확히 하나가 아니면 짐작하지 않고 실패 안내 + [기본 플레이어로 재생] 선택을 보여 준다(몰래 기본 플레이어를 열지 않음)
 //  - 카드와 파일을 못 이으면(사이트 구조 변경) 막지 않고 원래 동작으로 둔다. Shift·Ctrl·Alt·Win 클릭, 다른 화면(공유·휴지통·압축 내부·기록)은 건드리지 않는다
@@ -43,7 +43,34 @@
     toastTimer = setTimeout(() => box.remove(), ms);
   }
 
-  // 사이트의 파일 상세 → 원본 항목 → 사이트 모듈 bb(클립보드) → potplayer:///clipboard 열기
+  function launch(href) {
+    const a = document.createElement('a');
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.href = href;
+    a.click();
+  }
+
+  // 공유 링크(/s/…): 사이트 공유 화면의 파일 조회(share/file_info) → 원본 → 클립보드 → potplayer:///clipboard
+  async function playShareInPotPlayer(file) {
+    const { shareId, token } = core.shareContext();
+    const fn = await core.findShareFileInfo();
+    let res;
+    try {
+      res = await fn({ share_id: shareId, file_id: file.id, pass_code_token: token });
+    } catch {
+      throw new PikpakError('DETAIL_REQUEST_FAILED', '공유 파일 정보 조회', '픽팍 서버에 연결하지 못했습니다', '인터넷 연결을 확인하거나 페이지를 새로고침한 뒤 다시 누르세요.');
+    }
+    const { url } = core.pickShareOriginal(res, file.id);
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      throw new PikpakError('CLIPBOARD_FAILED', '클립보드에 영상 주소 쓰기', '브라우저가 클립보드 쓰기를 막았습니다(버튼을 누른 뒤 시간이 지났거나 페이지가 비활성)', '다시 한 번 눌러 보세요.');
+    }
+    launch('potplayer:///clipboard');
+  }
+
+  // 내 드라이브: 사이트의 파일 상세 → 원본 항목 → 사이트 모듈 bb(클립보드) → potplayer:///clipboard 열기
   async function playInPotPlayer(file) {
     const req = core.captureRequire();
     const UV = core.findUV(req);
@@ -66,11 +93,7 @@
       throw new PikpakError('CLIPBOARD_FAILED', '클립보드에 영상 주소 쓰기', '브라우저가 클립보드 쓰기를 막았습니다(버튼을 누른 뒤 시간이 지났거나 페이지가 비활성)', '다시 한 번 눌러 보세요.');
     }
     if (href !== 'potplayer:///clipboard') throw new PikpakError('LAUNCH_REJECTED', '팟플레이어 열기', '예상하지 못한 연결 주소라서 열지 않았습니다', '[기본 플레이어로 재생]을 누르세요.');
-    const a = document.createElement('a');
-    a.target = '_blank';
-    a.rel = 'noopener';
-    a.href = href;
-    a.click();
+    launch(href);
   }
 
   document.addEventListener(
@@ -79,15 +102,16 @@
       if (ev.button !== 0 || ev.shiftKey || ev.ctrlKey || ev.altKey || ev.metaKey || !enabled()) return;
       const btn = ev.target?.closest?.(SEL);
       if (!btn) return;
-      if (!core.pathAllowed(location.pathname)) {
+      const isShare = !!core.sharePathId(location.pathname);
+      if (!isShare && !core.pathAllowed(location.pathname)) {
         // 범위 밖 화면(공유·휴지통·압축 내부 등): 건드리지 않지만 왜 팟플레이어로 안 갔는지 알린다
         const where = String(location.pathname).slice(0, 24);
-        toast(`이 화면(${where})은 팟플레이어 연결 범위 밖이라 픽팍 기본 동작으로 열었습니다\n단계: 화면 확인\n원인: 지원하는 화면은 내 드라이브 '모든 파일'(/drive/all)뿐입니다\n조치: 내 드라이브 모든 파일 화면에서 눌러 보세요.`, { ms: 6000 });
+        toast(`이 화면(${where})은 팟플레이어 연결 범위 밖이라 픽팍 기본 동작으로 열었습니다\n단계: 화면 확인\n원인: 지원하는 화면은 내 드라이브 '모든 파일'(/drive/all)과 공유 링크(/s/…)입니다\n조치: 내 드라이브 모든 파일 화면에서 눌러 보세요.`, { ms: 6000 });
         return;
       }
       let found;
       try {
-        found = core.findFileComponent(btn);
+        found = core.findFileComponent(btn, document, { share: isShare });
       } catch (err) {
         // 카드와 파일을 못 이으면 막지 않는다(픽팍 원래 동작). 대신 왜 안 됐는지 화면에 알린다
         const e = err instanceof PikpakError ? err : new PikpakError('UNKNOWN', '카드 파일 찾기', '예상하지 못한 오류가 났습니다', '이 안내를 개발자에게 알려 주세요.');
@@ -99,8 +123,14 @@
       if (busy) return;
       busy = true;
       toast('팟플레이어로 여는 중…', { ms: 2500 });
-      playInPotPlayer(found.file)
-        .then(() => toast('팟플레이어로 보냈습니다(원본 화질).\n크롬이 "외부 프로그램 열기"를 물으면 허용하세요. 클립보드가 영상 주소로 바뀌었습니다.', { ms: 5000 }))
+      (isShare ? playShareInPotPlayer : playInPotPlayer)(found.file)
+        .then(() =>
+          toast('영상 주소(원본 화질)를 클립보드에 넣고 팟플레이어를 열었습니다.\n크롬이 "외부 프로그램 열기"를 물으면 허용하세요.\n팟플레이어가 안 열리면 아래 버튼을 누르세요(주소는 클립보드에 그대로 있습니다).', {
+            actionLabel: '팟플레이어 열기',
+            onAction: () => launch('potplayer:///clipboard'), // 방금 누른 버튼 = 새 사용자 클릭이라 브라우저가 외부 프로그램 열기를 막지 않는다
+            ms: 15000,
+          }),
+        )
         .catch((err) => {
           const e = err instanceof PikpakError ? err : new PikpakError('UNKNOWN', '팟플레이어 열기', '예상하지 못한 오류가 났습니다', '다시 눌러 보세요.');
           toast(`팟플레이어로 열지 못했습니다\n단계: ${e.step}\n원인: ${e.reason}\n조치: ${e.action}`, {

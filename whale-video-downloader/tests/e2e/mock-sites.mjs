@@ -714,6 +714,37 @@ const handlers = {
   // ── X ──
   // ── 픽팍 모의 사이트(블랙전용 '재생 버튼 → 팟플레이어' 시험): 사이트의 webpack·Vue 구조와 ▶ 카드를 흉내 낸다 ──
   'mypikpak.com': (req, res, u) => {
+    // 공유 링크 모의: Vite ESM 모듈(파일 조회 내보내기 a4)·Pinia 대신 $getPasscodeToken·ShareFileItem(emit 방식) 흉내
+    if (u.pathname === '/s/pikcloud/api.js') {
+      res.writeHead(200, { 'content-type': 'text/javascript' });
+      return res.end(`const xr = (url) => { (window.__shareCalls ||= []).push(url); const id = new URL(url, 'http://x').searchParams.get('file_id'); return new Promise((r) => setTimeout(() => r({ data: { value: window.__SHDETAILS[id] }, error: { value: null } }), 60)); };
+export const a4 = ({ global_file_token: e = '', ...t }) => xr(\`/drive/v1/share/file_info?\${new URLSearchParams(t)}\`, { headers: { 'x-global-file-token': e } });
+export const other = () => 'nothing';`);
+    }
+    if (/^\/s\/[^/]+/.test(u.pathname) && u.pathname !== '/s/pikcloud/api.js') return html(res, `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>모의 픽팍 공유</title></head><body>
+<div id="__pikcloud"><div class="file-explorer" id="slist">
+  ${['S1', 'S2', 'S3'].map((id) => `<div class="file-item grid" id="scard-${id}"><a class="play-icon" id="splay-${id}" style="display:inline-block;width:40px;height:40px;background:#36c"></a></div>`).join('\n  ')}
+</div></div>
+<script type="module" src="/s/pikcloud/api.js"></script>
+<script>
+  window.__launched = []; window.__defaultOpen = []; window.__clip = [];
+  const mk = (name, extra) => Object.assign({ is_visible: true, is_origin: false, media_name: name, link: { url: 'https://cdn.pikpak.test/' + name } }, extra);
+  window.__SHDETAILS = {
+    S1: { share_status: 'OK', file_info: { id: 'S1', medias: [mk('1080P'), mk('Original', { is_origin: true, link: { url: 'https://cdn.pikpak.test/sorig1?sig=a%2Bb' } })] } },
+    S2: { share_status: 'OK', file_info: { id: 'S2', medias: [mk('원본', { is_origin: false })] } },
+    S3: { share_status: 'EXPIRED', file_info: null },
+  };
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText: (t) => { window.__clip.push(t); return Promise.resolve(); } } });
+  const insts = [];
+  for (const id of ['S1', 'S2', 'S3']) {
+    // 사이트는 emit('openFile') 로 연다: 확장이 먼저 가로채면 실행되면 안 된다
+    document.getElementById('splay-' + id).addEventListener('click', (e) => { if (e.shiftKey || e.ctrlKey || e.metaKey) return; e.stopPropagation(); window.__defaultOpen.push(id); });
+    insts.push({ component: { props: { file: { id, kind: 'drive#file' }, viewType: 'grid' }, emit: (ev, f) => { if (ev === 'openFile') window.__defaultOpen.push(f.id); }, subTree: { el: document.getElementById('scard-' + id), children: [] } } });
+  }
+  document.getElementById('__pikcloud').__vue_app__ = { config: { globalProperties: { $getPasscodeToken: () => ({ value: 'TOKEN' }) } }, _container: { _vnode: { component: { props: {}, subTree: { el: document.getElementById('slist'), children: insts } } } } };
+  const realClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () { if ((this.getAttribute('href') || '').startsWith('potplayer:')) { window.__launched.push(this.getAttribute('href') + '|' + this.target); return; } return realClick.apply(this, arguments); };
+</script></body></html>`);
     if (!/^\/drive\//.test(u.pathname)) return html(res, '<p>pikpak</p>');
     return html(res, `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>모의 픽팍</title></head><body>
 <div id="app"><div class="file-explorer" id="list">
