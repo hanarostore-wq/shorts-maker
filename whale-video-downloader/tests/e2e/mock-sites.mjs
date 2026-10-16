@@ -760,6 +760,7 @@ export const other = () => 'nothing';`);
   ${['F1', 'F2', 'F3'].map((id) => `<div class="row grid" id="card-${id}"><span class="name">${id}</span><a class="play-icon" id="play-${id}" style="display:inline-block;width:40px;height:40px;background:#c33"></a></div>`).join('\n  ')}
 </div></div>
 <script>
+  window.__trash = [];
   window.__uv = []; window.__bb = []; window.__launched = []; window.__defaultOpen = [];
   const NO = ${u.searchParams.get('novue') ? 'true' : 'false'};
   const mk = (name, extra) => Object.assign({ is_visible: true, is_origin: false, media_name: name, media_id: name, link: { url: 'https://cdn.pikpak.test/' + name } }, extra);
@@ -783,7 +784,8 @@ export const other = () => 'nothing';`);
   // 사이트 webpack: 가짜 chunk 를 밀어 넣으면 require 를 넘겨 준다. 모듈 18839(UV 파일 상세), 75152(bb 클립보드 → potplayer)
   function UV(id, o) { /* /files/ unzip_password */ window.__uv.push(id + ':' + (o && o.usage)); return new Promise((r) => setTimeout(() => r({ data: { value: DETAILS[id] }, error: { value: null } }), 60)); }
   function bb(url) { /* potplayer:///clipboard */ window.__bb.push(url); return Promise.resolve('potplayer:///clipboard'); }
-  const mods = { 18839: { UV }, 75152: { Hy: {}, L5: function p() { return { win2: [{ label: 'PotPlayer', value: 'potplayer:///clipboard' }] }; }, bb } }; // 실제 모듈처럼 플레이어 목록 함수(p)가 bb 보다 앞에 있음
+  function T(ids) { /* files:batchTrash */ window.__trash.push(ids.join()); return Promise.resolve(ids[0] === 'F3' ? { data: { value: null }, error: { value: { message: 'x' } } } : { data: { value: {} }, error: { value: null } }); }
+  const mods = { 18839: { UV, Cw: T }, 75152: { Hy: {}, L5: function p() { return { win2: [{ label: 'PotPlayer', value: 'potplayer:///clipboard' }] }; }, bb } }; // 실제 모듈처럼 플레이어 목록 함수(p)가 bb 보다 앞에 있음
   const rt = Object.assign((id) => { if (!mods[id]) throw new Error('no module'); return mods[id]; }, { m: { 18839: function () {}, 75152: function () {} } });
   window.webpackChunkpikpak_web = []; window.webpackChunkpikpak_web.push = (c) => { if (typeof c[2] === 'function') c[2](rt); return 0; };
   // 팟플레이어 연결 주소로 가는 앵커는 실제로 열지 않고 기록만(시험용)

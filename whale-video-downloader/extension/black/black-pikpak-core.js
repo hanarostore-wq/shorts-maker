@@ -182,6 +182,47 @@
     return pickOriginal(fi);
   }
 
+  // 화면의 모든 파일 카드 한 번에 모으기(한 번 걸으며 요소 → 파일): 공유 카드는 루트 요소(.file-item), 내 드라이브 카드는 조각 루트라 첫 요소 자식을 대표로 둔다
+  function mapCards(doc = globalThis.document, { share = false } = {}) {
+    const out = new Map();
+    const apps = [];
+    const roots = [];
+    const addApp = (el) => {
+      if (el?._vnode) roots.push(el);
+      const ap = el?.__vue_app__;
+      if (ap && !apps.includes(ap)) apps.push(ap);
+    };
+    for (const el of [doc?.querySelector?.('#__pikcloud'), doc?.querySelector?.('#app'), doc?.body, doc?.documentElement]) addApp(el);
+    for (const el of doc?.body?.children || []) addApp(el);
+    const seen = new Set();
+    let visited = 0;
+    const walk = (vn, depth) => {
+      if (!vn || typeof vn !== 'object' || depth > 400 || visited > 300000 || seen.has(vn)) return;
+      seen.add(vn);
+      visited++;
+      const inst = vn.component;
+      if (inst) {
+        const p = inst.props;
+        const isCard = p?.file && typeof p.file.id === 'string' && p.file.id && (share ? 'viewType' in p : typeof p.openFile === 'function');
+        if (isCard) {
+          let el = inst.subTree?.el;
+          if (el && el.nodeType !== 1) el = inst.subTree?.children?.find?.((c) => c?.el?.nodeType === 1)?.el || null;
+          if (el) out.set(el, { file: p.file });
+        }
+        walk(inst.subTree, depth + 1);
+      }
+      if (vn.suspense?.activeBranch) walk(vn.suspense.activeBranch, depth + 1);
+      const ch = vn.children;
+      if (Array.isArray(ch)) for (const c of ch) walk(c, depth + 1);
+      else if (ch && typeof ch === 'object') walk(ch, depth + 1);
+    };
+    for (const app of apps) walk(app._instance?.vnode || app._container?._vnode, 0);
+    for (const el of roots) walk(el._vnode, 0);
+    return out;
+  }
+  // 휴지통으로 보내기 함수: 파일 조회 UV 와 같은 모듈(18839)의 내보내기. 원문에 'files:batchTrash' 가 있다(ids 배열을 받아 POST). 영구 삭제(trash:empty·삭제)는 쓰지 않는다
+  const findTrash = (req) => findExport(req, 18839, ['files:batchTrash'], { deny: ['trash:empty'] });
+
   // 사이트의 webpack 실행 환경 얻기(참고 방법: 가짜 chunk 를 하나 밀어 넣어 require 를 받는다). 실패하면 닫는다
   function captureRequire(win = globalThis) {
     const chunks = win.webpackChunkpikpak_web;
@@ -255,7 +296,7 @@
     return null;
   }
 
-  globalThis.__SMD_PIKPAK_CORE = Object.freeze({ PikpakError, pathAllowed, sharePathId, findShareFileInfo, shareContext, pickShareOriginal, validateMediaUrl, pickOriginal, findFileComponent, captureRequire, findUV, findBB });
+  globalThis.__SMD_PIKPAK_CORE = Object.freeze({ PikpakError, pathAllowed, sharePathId, findShareFileInfo, shareContext, pickShareOriginal, validateMediaUrl, pickOriginal, findFileComponent, mapCards, findTrash, captureRequire, findUV, findBB });
   try {
     Object.defineProperty(globalThis, '__SMD_PIKPAK_CORE', { enumerable: false });
   } catch {}

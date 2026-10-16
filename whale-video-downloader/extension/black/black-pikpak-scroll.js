@@ -1,15 +1,16 @@
 // 블랙전용(개인용 기능) — 픽팍(mypikpak.com): 폴더에 들어갔다가 뒤로가기(·앞으로가기)로 돌아오면 목록이 맨 위로 가 버리는 것을, 떠나기 전 스크롤 위치로 되돌린다. 페이지 쪽(MAIN world). 유료판에서는 black/ 째 빠진다.
 //  - 폴더(주소)마다 스크롤 위치를 기억(이 탭 메모리). 폴더로 '들어갈' 때는 건드리지 않고(맨 위에서 시작), 뒤로·앞으로(popstate)일 때만 복원
 //  - 목록은 스크롤하며 이어서 불러오는 방식이라, 위치까지 내용이 채워질 때까지 기다리며(최대 2.5초) 맞춘다. 그동안 목록을 숨겨 내려가는 모습이 보이지 않게 하고, 끝나거나 시간이 다 되거나 사용자가 조작하면 반드시 다시 보이게 한다
-//  - 켜고 끄기: 팝업 블랙전용 탭의 픽팍 스위치(<html data-smd-pikpak="0|1">) · '이 사이트 제외'(<html data-smd-off>)
+//  - 켜고 끄기: 팝업 블랙전용 탭의 '폴더 뒤로가기 스크롤 복원' 스위치(<html data-smd-pikpak-scroll="0|1">, 기본 켬) · 픽팍 전체 스위치 · '이 사이트 제외'(<html data-smd-off>)
 (() => {
   'use strict';
   if (globalThis.__smdPikpakScroll) return;
   Object.defineProperty(globalThis, '__smdPikpakScroll', { value: true, enumerable: false });
   const root = () => document.documentElement;
-  const enabled = () => !root()?.hasAttribute('data-smd-off') && root()?.dataset.smdPikpak !== '0';
+  const enabled = () => !root()?.hasAttribute('data-smd-off') && root()?.dataset.smdPikpak !== '0' && root()?.dataset.smdPikpakScroll !== '0';
   const SCROLLER = '.file-explorer .el-scrollbar__wrap';
   const MAX_WAIT = 2500;
+  const STABLE = 600;
   const keyOf = () => location.pathname + location.search;
 
   const pos = new Map();
@@ -64,6 +65,7 @@
     const started = Date.now();
     let hidden = null;
     let userStop = false;
+    let stableSince = 0; // 위치가 맞은 채 이 시간만큼 유지돼야 끝낸다(이동 직후엔 이전 목록이 아직 남아 있다가 사이트가 새로 그리며 맨 위로 되감을 수 있음)
     const stop = () => {
       userStop = true;
     };
@@ -89,7 +91,9 @@
       const max = sc.scrollHeight - sc.clientHeight;
       sc.scrollTop = Math.min(want, Math.max(0, max));
       const reached = Math.abs(sc.scrollTop - want) < 2;
-      if (reached || Date.now() - started >= MAX_WAIT) {
+      if (!reached) stableSince = 0;
+      else if (!stableSince) stableSince = Date.now();
+      if ((reached && Date.now() - stableSince >= STABLE) || Date.now() - started >= MAX_WAIT) {
         pos.set(keyOf(), sc.scrollTop);
         return show();
       }

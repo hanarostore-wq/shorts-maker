@@ -219,3 +219,29 @@ test('공유 카드 찾기: props.file + viewType 이 있고 emit 이 있는 카
   // 내 드라이브 방식(share:false)으로는 openFile 함수가 없어 못 찾음
   assert.equal(code(() => core.findFileComponent(btn, doc)), 'FILE_COMPONENT_UNAVAILABLE');
 });
+
+// ── 카드 × (휴지통·모으기) ──
+test('휴지통 함수 찾기: 같은 모듈에서 원문에 files:batchTrash 가 있는 내보내기만(영구 삭제 trash:empty 는 거름), 없으면 null', () => {
+  const trash = function (e) { return req0('/files:batchTrash', e); };
+  const empty = function () { return req0('/files/trash:empty'); };
+  const other = function () { return 1; };
+  const req0 = () => 0;
+  const req = Object.assign((id) => (id === 18839 ? { Z: empty, Cw: trash, o: other } : {}), { m: {} });
+  assert.equal(core.findTrash(req), trash);
+  assert.equal(core.findTrash(Object.assign((id) => (id === 18839 ? { Z: empty } : {}), { m: {} })), null);
+});
+
+test('카드 모으기: 한 번 걸으며 요소 → 파일(공유=viewType 카드, 드라이브=openFile 카드), 조각 루트는 첫 요소 자식을 대표로', () => {
+  const el1 = { nodeType: 1 };
+  const el2 = { nodeType: 1 };
+  const i1 = { props: { file: { id: 'A' }, viewType: 'grid' }, emit() {}, subTree: { el: el1, children: [] } };
+  const i2 = { props: { file: { id: 'B' }, openFile() {} }, subTree: { el: { nodeType: 3 }, children: [{ el: el2 }] } };
+  const host = { __vue_app__: { _container: { _vnode: { component: { props: {}, subTree: { children: [{ component: i1 }, { component: i2 }] } } } } } };
+  const doc = { querySelector: () => host, body: { children: [] }, documentElement: {} };
+  const share = core.mapCards(doc, { share: true });
+  assert.equal(share.get(el1).file.id, 'A');
+  assert.equal(share.has(el2), false);
+  const drive = core.mapCards(doc, { share: false });
+  assert.equal(drive.get(el2).file.id, 'B');
+  assert.equal(drive.has(el1), false);
+});

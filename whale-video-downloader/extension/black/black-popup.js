@@ -34,6 +34,14 @@
         <input type="checkbox" id="blackPikpak" /><span class="sw"><i></i></span>
       </label>
       <label class="row-toggle">
+        <div><b>픽팍 폴더 뒤로가기 → 스크롤 위치 복원</b><small>픽팍에서 폴더에 들어갔다가 뒤로가기를 하면 목록이 맨 위로 가 버리는 것을, 떠나기 전 위치로 되돌립니다. 복원하는 동안 목록을 잠깐(최대 2.5초) 숨겨 내려가는 모습이 보이지 않게 합니다 (바꾼 뒤 픽팍 탭 새로고침)</small></div>
+        <input type="checkbox" id="blackPikpakScroll" /><span class="sw"><i></i></span>
+      </label>
+      <label class="row-toggle">
+        <div><b>픽팍 카드 × 표시 (폴더·영상)</b><small>카드에 마우스를 올리면 오른쪽 위에 × 가 나옵니다. 내 드라이브에서는 누르면 그 파일·폴더를 휴지통으로 보냅니다(확인창 없음 · 휴지통에서 복구 가능 · 영구 삭제 아님). 공유 링크에서는 서버에 아무 일도 없이 내 화면에서만 가려지고(이 브라우저에 기억), 왼쪽 아래 [가린 N개 · 모두 보기]로 되돌립니다 (바꾼 뒤 픽팍 탭 새로고침)</small></div>
+        <input type="checkbox" id="blackPikpakX" /><span class="sw"><i></i></span>
+      </label>
+      <label class="row-toggle">
         <div><b>북마크바 아이콘만</b><small>북마크바에 바로 있는 북마크의 이름을 숨기고 아이콘만 보이게 합니다. 원래 이름은 보관했다가 끄면 그대로 되돌립니다 (처음 켤 때 북마크 권한을 묻습니다 · 동기화 중이면 다른 기기 크롬에도 같이 적용)</small></div>
         <input type="checkbox" id="blackBmIcons" /><span class="sw"><i></i></span>
       </label>
@@ -267,6 +275,38 @@
         say(pk.checked ? '픽팍 팟플레이어 재생: 켜짐 (열려 있는 픽팍 탭에도 바로 적용)' : '픽팍 팟플레이어 재생: 꺼짐');
       } catch (err) {
         pk.checked = !pk.checked;
+        say(`저장 실패 — 단계: 설정 저장 / 원인: ${err?.message || err} / 조치: 팝업을 닫았다 다시 여세요.`);
+      }
+    });
+  }
+
+  // 픽팍 폴더 뒤로가기 스크롤 복원
+  {
+    const ps = pane.querySelector('#blackPikpakScroll');
+    chrome.storage.local.get('settings').then((r) => (ps.checked = r.settings?.blackPikpakScroll !== false), () => {});
+    ps.addEventListener('change', async () => {
+      try {
+        const { settings } = await chrome.storage.local.get('settings');
+        await chrome.storage.local.set({ settings: { ...(settings || {}), blackPikpakScroll: ps.checked } });
+        say(ps.checked ? '픽팍 스크롤 위치 복원: 켜짐 (열려 있는 픽팍 탭에도 바로 적용)' : '픽팍 스크롤 위치 복원: 꺼짐');
+      } catch (err) {
+        ps.checked = !ps.checked;
+        say(`저장 실패 — 단계: 설정 저장 / 원인: ${err?.message || err} / 조치: 팝업을 닫았다 다시 여세요.`);
+      }
+    });
+  }
+
+  // 픽팍 카드 × 표시
+  {
+    const px = pane.querySelector('#blackPikpakX');
+    chrome.storage.local.get('settings').then((r) => (px.checked = r.settings?.blackPikpakX !== false), () => {});
+    px.addEventListener('change', async () => {
+      try {
+        const { settings } = await chrome.storage.local.get('settings');
+        await chrome.storage.local.set({ settings: { ...(settings || {}), blackPikpakX: px.checked } });
+        say(px.checked ? '픽팍 카드 ×: 켜짐 (열려 있는 픽팍 탭에도 바로 적용)' : '픽팍 카드 ×: 꺼짐');
+      } catch (err) {
+        px.checked = !px.checked;
         say(`저장 실패 — 단계: 설정 저장 / 원인: ${err?.message || err} / 조치: 팝업을 닫았다 다시 여세요.`);
       }
     });
