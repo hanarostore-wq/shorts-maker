@@ -723,7 +723,7 @@ export const other = () => 'nothing';`);
     }
     if (/^\/s\/[^/]+/.test(u.pathname) && u.pathname !== '/s/pikcloud/api.js') return html(res, `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>모의 픽팍 공유</title></head><body>
 <div id="__pikcloud"><div class="file-explorer" id="slist">
-  ${['S1', 'S2', 'S3'].map((id) => `<div class="file-item grid" id="scard-${id}"><a class="play-icon" id="splay-${id}" style="display:inline-block;width:40px;height:40px;background:#36c"></a></div>`).join('\n  ')}
+  ${['S1', 'S2', 'S3'].map((id) => `<div class="file-item grid" id="scard-${id}"><div class="thumbnail" id="sth-${id}" style="width:240px;height:140px;background:#dde"><a class="play-icon" id="splay-${id}" style="display:inline-block;width:40px;height:40px;background:#36c"></a></div></div>`).join('\n  ')}
 </div></div>
 <script type="module" src="/s/pikcloud/api.js"></script>
 <script>
@@ -757,7 +757,7 @@ export const other = () => 'nothing';`);
     if (!/^\/drive\//.test(u.pathname)) return html(res, '<p>pikpak</p>');
     return html(res, `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>모의 픽팍</title></head><body>
 <div id="app"><div class="file-explorer" id="list">
-  ${['F1', 'F2', 'F3'].map((id) => `<div class="row grid" id="card-${id}"><span class="name">${id}</span><a class="play-icon" id="play-${id}" style="display:inline-block;width:40px;height:40px;background:#c33"></a></div>`).join('\n  ')}
+  ${['F1', 'F2', 'F3'].map((id) => `<div class="row grid" id="card-${id}"><div class="thumbnail" id="th-${id}" style="width:240px;height:140px;background:#dde"><span class="name">${id}</span><a class="play-icon" id="play-${id}" style="display:inline-block;width:40px;height:40px;background:#c33"></a></div></div>`).join('\n  ')}
 </div></div>
 <script>
   window.__trash = [];

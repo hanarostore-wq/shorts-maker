@@ -2681,26 +2681,25 @@ if (!only || only === 'pikpak' || '픽팍'.includes(only)) {
     await setSettings({ blackPikpakScroll: true });
     // 6e) 카드 × 표시: 내 드라이브 = 휴지통으로 보내기(실패하면 카드 그대로+안내), 공유 링크 = 내 화면에서만 가리기(새로고침해도 유지, 모두 보기로 복구), 끄면 × 없음
     pg = await open();
-    await pg.hover('#card-F1');
-    await pg.waitForSelector('[data-smd-x]', { state: 'visible', timeout: 3000 }).catch(() => {});
-    const xShown = await pg.evaluate(() => getComputedStyle(document.querySelector('[data-smd-x]') || document.body).display);
-    await pg.click('[data-smd-x]');
+    await pg.waitForSelector('#card-F1 [data-smd-x]', { state: 'attached', timeout: 3000 }).catch(() => {});
+    // 마우스를 올리지 않아도 모든 카드에 계속 보이고, 썸네일(회색 칸) 안쪽 오른쪽 가운데에 36px
+    const geo = await pg.evaluate(() => ['F1', 'F2', 'F3'].map((id) => { const th = document.getElementById('th-' + id).getBoundingClientRect(); const bt = document.querySelector('#card-' + id + ' [data-smd-x]'); if (!bt) return null; const b = bt.getBoundingClientRect(); return { w: Math.round(b.width), inside: b.left >= th.left && b.right <= th.right && b.top >= th.top && b.bottom <= th.bottom, midY: Math.abs((b.top + b.bottom) / 2 - (th.top + th.bottom) / 2) < 3, right: th.right - b.right < 20 }; }));
+    record('[픽팍] × 가 마우스를 안 올려도 모든 카드에 계속 보이고, 썸네일 안쪽 오른쪽 가운데(36px, 칸 밖으로 안 나감)', geo.every((g) => g && g.w === 36 && g.inside && g.midY && g.right), { note: JSON.stringify(geo) });
+    const xShown = 'block';
+    await pg.click('#card-F1 [data-smd-x]');
     await pg.waitForFunction(() => window.__trash.length > 0, null, { timeout: 4000 }).catch(() => {});
     await pg.waitForTimeout(300);
     r = await pg.evaluate(() => ({ trash: window.__trash, hid: document.getElementById('card-F1').style.display, other: document.getElementById('card-F2').style.display, played: window.__launched.length + window.__defaultOpen.length }));
-    record('[픽팍] 카드에 마우스를 올리면 ×, 누르면 그 파일만 휴지통으로(사이트의 휴지통 호출) 보내고 카드를 치움, 재생은 안 열림', xShown === 'block' && r.trash.join('|') === 'F1' && r.hid === 'none' && r.other === '' && r.played === 0, { note: `× 표시=${xShown} · 휴지통=${r.trash} · F1=${r.hid} · F2=${JSON.stringify(r.other)} · 재생=${r.played}` });
-    await pg.hover('#card-F3');
-    await pg.waitForSelector('[data-smd-x]', { state: 'visible', timeout: 3000 }).catch(() => {});
-    await pg.click('[data-smd-x]');
+    record('[픽팍] × 를 누르면 그 파일만 휴지통으로(사이트의 휴지통 호출) 보내고 카드를 치움, 재생은 안 열림', xShown === 'block' && r.trash.join('|') === 'F1' && r.hid === 'none' && r.other === '' && r.played === 0, { note: `× 표시=${xShown} · 휴지통=${r.trash} · F1=${r.hid} · F2=${JSON.stringify(r.other)} · 재생=${r.played}` });
+    await pg.click('#card-F3 [data-smd-x]');
     await pg.waitForFunction(() => document.querySelector('[data-smd-x-toast]'), null, { timeout: 4000 }).catch(() => {});
     r = await pg.evaluate(() => ({ toast: document.querySelector('[data-smd-x-toast]')?.textContent || '', hid: document.getElementById('card-F3').style.display }));
     record('[픽팍] (오류 경로) 휴지통 이동이 거절되면 카드는 그대로 두고 단계·원인·조치 안내', /단계: 휴지통으로 보내기/.test(r.toast) && /원인:/.test(r.toast) && r.hid === '', { note: r.toast.replace(/\s+/g, ' ').slice(0, 90) });
     await pg.close().catch(() => {});
     pg = await open('https://mypikpak.com/s/sh1/abc/def');
     await pg.evaluate(() => localStorage.removeItem('smdHiddenShare:sh1'));
-    await pg.hover('#scard-S1');
-    await pg.waitForSelector('[data-smd-x]', { state: 'visible', timeout: 3000 }).catch(() => {});
-    await pg.click('[data-smd-x]');
+    await pg.waitForSelector('#scard-S1 [data-smd-x]', { state: 'attached', timeout: 3000 }).catch(() => {});
+    await pg.click('#scard-S1 [data-smd-x]');
     await pg.waitForTimeout(300);
     r = await pg.evaluate(() => ({ hid: document.getElementById('scard-S1').style.display, other: document.getElementById('scard-S2').style.display, calls: (window.__shareCalls || []).length, saved: localStorage.getItem('smdHiddenShare:sh1'), pill: document.querySelector('[data-smd-x-pill]')?.textContent || '' }));
     record('[픽팍] 공유 링크 ×: 서버 호출 없이 내 화면에서만 가림, 가린 번호를 이 브라우저에 기억, [가린 1개 · 모두 보기]', r.hid === 'none' && r.other === '' && r.calls === 0 && r.saved === '["S1"]' && /가린 1개/.test(r.pill), { note: `S1=${r.hid} S2=${JSON.stringify(r.other)} 서버조회=${r.calls} 저장=${r.saved} 단추=${r.pill}` });
@@ -2715,8 +2714,7 @@ if (!only || only === 'pikpak' || '픽팍'.includes(only)) {
     await pg.close().catch(() => {});
     await setSettings({ blackPikpakX: false });
     pg = await open();
-    await pg.hover('#card-F2');
-    await pg.waitForTimeout(500);
+    await pg.waitForTimeout(800);
     r = await pg.evaluate(() => ({ n: document.querySelectorAll('[data-smd-x]').length, flag: document.documentElement.dataset.smdPikpakX }));
     record('[픽팍] 카드 × 스위치를 끄면 × 가 나오지 않음', r.n === 0 && r.flag === '0', { note: `× 개수=${r.n} 표시=${r.flag}` });
     await pg.close().catch(() => {});

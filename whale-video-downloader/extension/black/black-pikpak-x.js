@@ -1,4 +1,4 @@
-// 블랙전용(개인용 기능) — 픽팍 폴더·영상 카드에 마우스를 올리면 오른쪽 위에 × 표시. 페이지 쪽(MAIN world). 유료판에서는 black/ 째 빠진다.
+// 블랙전용(개인용 기능) — 픽팍 폴더·영상 카드마다 썸네일(회색 칸) 안쪽 오른쪽 가운데에 × 표시(계속 보임, 36px). 페이지 쪽(MAIN world). 유료판에서는 black/ 째 빠진다.
 //  - 내 드라이브: × = 사이트의 '휴지통으로 보내기'(files:batchTrash, 되돌릴 수 있음)를 그 카드 파일 하나에 호출하고, 성공하면 카드를 화면에서 치운다. 영구 삭제는 쓰지 않는다. 휴지통 화면에서는 × 를 보이지 않는다
 //  - 공유 링크(/s/…): × = 서버에는 아무 일도 하지 않고 내 화면에서만 그 카드를 가린다. 가린 파일 번호는 이 브라우저(localStorage)에 공유 링크별로 남아 새로고침해도 계속 가려지고, 왼쪽 아래 [가린 N개 · 모두 보기]로 되돌린다
 //  - 켜고 끄기: 팝업 블랙전용 탭의 '카드 × 표시' 스위치(<html data-smd-pikpak-x="0|1">, 기본 켬) · 픽팍 전체 스위치 · '이 사이트 제외'(<html data-smd-off>)
@@ -54,53 +54,50 @@
     return f.file;
   }
 
-  // ── × 단추(하나만 띄워 두고 카드 위로 옮긴다: 사이트가 다시 그려도 안 지워짐) ──
-  let btn = null;
-  let curCard = null;
-  function ensureBtn() {
-    if (btn) return btn;
-    btn = document.createElement('button');
-    btn.setAttribute('data-smd-x', '');
-    btn.type = 'button';
-    btn.textContent = '×';
-    btn.style.cssText = 'all:initial;position:fixed;z-index:2147483646;display:none;width:24px;height:24px;border-radius:12px;background:rgba(24,20,40,.88);border:1px solid #9b5cff;color:#fff;font:700 16px/22px "Malgun Gothic",system-ui,sans-serif;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4)';
-    btn.addEventListener('click', onX, true);
-    btn.addEventListener('mousedown', (e) => e.stopPropagation(), true);
-    root().appendChild(btn);
-    return btn;
+  // ── × 단추: 카드마다 썸네일(회색 칸) 안쪽 오른쪽 가운데에 계속 띄워 둔다(오른쪽 위 메뉴 단추와 겹치지 않게, 칸 밖으로 안 나가게) ──
+  //  카드 안에 직접 붙이므로 스크롤·크기 변화를 따라간다. 사이트가 카드를 새로 그리면 변화 감시가 다시 붙인다
+  const mkBtn = () => {
+    const b = document.createElement('button');
+    b.setAttribute('data-smd-x', '');
+    b.type = 'button';
+    b.textContent = '×';
+    b.title = isShare() ? '내 화면에서 가리기(서버에는 영향 없음)' : '휴지통으로 보내기';
+    b.style.cssText = 'all:initial;position:absolute;right:10px;top:50%;transform:translateY(-50%);z-index:5;box-sizing:border-box;width:36px;height:36px;border-radius:18px;background:rgba(24,20,40,.9);border:2px solid #9b5cff;color:#fff;font:700 24px/30px "Malgun Gothic",system-ui,sans-serif;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.45)';
+    return b;
+  };
+  function syncButtons() {
+    syncTimer = 0;
+    const on = enabled() && !inTrash();
+    if (!on) {
+      for (const b of document.querySelectorAll('[data-smd-x]')) b.remove();
+      return;
+    }
+    for (const th of document.querySelectorAll(`${CARD_ROOT} .thumbnail`)) {
+      if (th.querySelector(':scope > [data-smd-x]')) continue;
+      if (getComputedStyle(th).position === 'static') th.style.position = 'relative';
+      th.appendChild(mkBtn());
+    }
   }
-  const hideBtn = () => {
-    if (btn) btn.style.display = 'none';
-    curCard = null;
+  let syncTimer = 0;
+  const scheduleSync = () => {
+    if (!syncTimer) syncTimer = setTimeout(syncButtons, 150);
   };
   document.addEventListener(
-    'mouseover',
+    'click',
     (e) => {
-      if (!enabled() || inTrash()) return hideBtn();
-      const t = e.target;
-      if (t === btn) return;
-      const card = cardOf(t);
-      if (!card || card.style.display === 'none') return hideBtn();
-      if (card === curCard) return;
-      curCard = card;
-      const r = card.getBoundingClientRect();
-      const b = ensureBtn();
-      b.style.left = `${Math.max(4, r.right - 30)}px`;
-      b.style.top = `${Math.max(4, r.top + 6)}px`;
-      b.title = isShare() ? '내 화면에서 가리기(서버에는 영향 없음)' : '휴지통으로 보내기';
-      b.style.display = 'block';
+      const b = e.target?.closest?.('[data-smd-x]');
+      if (!b) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      onX(cardOf(b));
     },
     true,
   );
-  window.addEventListener('scroll', hideBtn, true);
-  window.addEventListener('resize', hideBtn);
+  document.addEventListener('mousedown', (e) => e.target?.closest?.('[data-smd-x]') && e.stopPropagation(), true);
 
   // ── 실행 ──
   let busy = false;
-  async function onX(ev) {
-    ev.preventDefault();
-    ev.stopImmediatePropagation();
-    const card = curCard;
+  async function onX(card) {
     if (!card || busy) return;
     let file;
     try {
@@ -115,7 +112,6 @@
       set.add(file.id);
       saveHidden(set);
       card.style.display = 'none';
-      hideBtn();
       updatePill();
       return;
     }
@@ -132,7 +128,6 @@
       }
       if (res?.error?.value) throw new PikpakError('TRASH_REQUEST_FAILED', '휴지통으로 보내기', '픽팍이 휴지통 이동을 받아들이지 않았습니다(로그인 만료·권한 없음일 수 있음)', '페이지를 새로고침하고 로그인 상태를 확인한 뒤 다시 누르세요.');
       card.style.display = 'none'; // 서버에서 휴지통으로 갔으니 화면에서도 치운다(새로고침하면 목록에서 빠짐)
-      hideBtn();
     } catch (err) {
       const e = err instanceof PikpakError ? err : new PikpakError('UNKNOWN', '휴지통으로 보내기', '예상하지 못한 오류가 났습니다', '다시 눌러 보세요.');
       toast(`휴지통으로 보내지 못했습니다(파일은 그대로입니다)\n단계: ${e.step}\n원인: ${e.reason}\n조치: ${e.action}`);
@@ -192,9 +187,11 @@
     updatePill();
   }
   const schedule = () => {
+    scheduleSync();
     if (!scanTimer && isShare()) scanTimer = setTimeout(scan, 250);
   };
   new MutationObserver(schedule).observe(document, { childList: true, subtree: true });
+  new MutationObserver(schedule).observe(document.documentElement || document, { attributes: true, attributeFilter: ['data-smd-pikpak', 'data-smd-pikpak-x', 'data-smd-off'] });
   window.addEventListener('popstate', schedule);
   schedule();
 })();
