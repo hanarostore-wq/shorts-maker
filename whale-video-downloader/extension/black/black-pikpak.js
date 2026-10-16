@@ -124,20 +124,11 @@
       busy = true;
       toast('팟플레이어로 여는 중…', { ms: 2500 });
       (isShare ? playShareInPotPlayer : playInPotPlayer)(found.file)
-        .then(() =>
-          toast('영상 주소(원본 화질)를 클립보드에 넣고 팟플레이어를 열었습니다.\n크롬이 "외부 프로그램 열기"를 물으면 허용하세요.\n팟플레이어가 안 열리면 아래 버튼을 누르세요(주소는 클립보드에 그대로 있습니다).', {
-            actionLabel: '팟플레이어 열기',
-            onAction: () => {
-              // 방금 누른 버튼 = 새 사용자 클릭. 앵커 방식(사이트와 같음)이 안 먹는 환경을 위해 이번에는 현재 창 이동 방식으로 연다(외부 프로그램 연결 주소라 페이지는 그대로 남음)
-              try {
-                location.href = 'potplayer:///clipboard';
-              } catch {
-                launch('potplayer:///clipboard');
-              }
-            },
-            ms: 15000,
-          }),
-        )
+        .then(() => {
+          // 성공하면 안내를 띄우지 않는다(여는 중 안내도 지움). 실패했을 때만 단계·원인·조치를 보여 준다
+          toastBox?.remove();
+          clearTimeout(toastTimer);
+        })
         .catch((err) => {
           const e = err instanceof PikpakError ? err : new PikpakError('UNKNOWN', '팟플레이어 열기', '예상하지 못한 오류가 났습니다', '다시 눌러 보세요.');
           toast(`팟플레이어로 열지 못했습니다\n단계: ${e.step}\n원인: ${e.reason}\n조치: ${e.action}`, {
