@@ -548,3 +548,18 @@
 - **최적화(v1.38.0)**: (1) 저장 엔진(offscreen) 문서: 다운로드·저장 중이 아니고 45초 놀면 스스로 서비스워커에 알려 닫음(영상 변환·WebAssembly 가 계속 올라가 있던 것), 다음 다운로드 때 다시 만듦 (2) core.js 버튼 위치 맞추기 반복(requestAnimationFrame)은 저장 버튼이 붙은 영상이 있고 탭이 보일 때만, 그것도 50ms 마다 한 번만 깨움(전엔 모든 프레임이 매 프레임 깨움) (3) 안쪽 프레임(광고·임베드)·숨은 탭은 타이머를 덜 자주: 주소 바뀜 확인 0.7초→3초, 화면 다시 찾기 1.5초→4초, 사진·영상 목록 0.5초→2초, 숨은 탭은 쉼 (4) 서비스워커 호출(sniff-count)은 3초마다에서 값이 안 바뀌면 최대 20초까지 늘림(호출이 잦으면 서비스워커가 잠들지 못함)
 - 검증: 단위 59/59(제외 4건), E2E 전체 191/192 — 실패 1건은 새 '저장 엔진 닫힘' 시험이 확장 reload 시험 뒤에 있어 팝업이 막힌 것(시험 순서 문제)이라 reload 앞으로 옮기고 다시 확인: 엔진 묶음 117/117(저장 엔진이 다운로드 끝나고 약 40초 뒤 닫힘, 다시 받으면 새로 만들어져 정상 저장). 제외 시험 6건(켜기·제스처도 안 먹음·다른 사이트 그대로·해제·오류 2건) 통과. 주의: E2E 파일을 고칠 때 줄 범위를 잘못 잘라 시험 1600줄이 날아간 일이 있어(고쳐서 복구, 코드 영향 없음) 큰 파일은 git diff --stat 으로 삭제 줄 수를 꼭 확인
 - UNVERIFIED/남은 일: 프레임 20개 페이지의 CPU(2~3초/20초)는 아직 높음 — 프로파일은 자바스크립트 시간이 작아(8초에 약 0.2초) 확장 스크립트가 매 프레임 일으키는 렌더링 작업(place 의 getBoundingClientRect·레이아웃)이 의심되나 원인 미확정. 다음 후보: 맨 위 페이지가 아닌 프레임은 영상이 실제로 있을 때만 core 시작, 저장 버튼 위치는 스크롤·크기 변화 때만, 전체 콘텐츠 스크립트를 한 번에 안 불러오고 필요할 때 불러오기(매니페스트 all_frames 줄이기). 실제 윈도우 크롬의 램은 이 리눅스 헤드리스 Chromium 수치와 다를 수 있음
+
+## 2026-10-16 · WVD-065 · v1.39.0 블랙전용: 픽팍 ▶ → 팟플레이어(원본 화질, 선택 창 없음)
+
+- 사용자: 픽팍(PikPak) 영상 카드 ▶ 클릭을 capture 단계에서 가로채 픽팍 기본 플레이어 진입을 막고, 기존 '외부 플레이어로 열기'(화질 원본 + PotPlayer) 경로를 선택 창 없이 재사용. 원본 미디어를 정확히 식별(medias[0] 가정 금지). 블랙전용. (인계 zip pikpak-potplayer-handoff.zip = Codex 의 REA 분석)
+- 분석(공개 번들 4997.1a2f2e75.js·8247.4ce0cb66.js 를 mypikpak.com 허용 뒤 직접 받아 읽음, sha256 이 인계 manifest 와 일치): 인계 zip 의 증거 3조각에는 '원본' 판별과 외부 플레이어 소비 코드가 없었음 → 번들에서 확인
+  - 원본 = 응답 medias[] 중 `is_origin === true` (사이트도 같은 값으로 'origin' 판단: 모듈 19412, 정렬표 origin:1). 사이트 기본 선택(첫 후보)은 원본이 아님
+  - 외부 재생(플레이어 모듈 K): `d.medias.find(media_name === 고른 이름)` → POTPLAYER 면 `bb(media.link.url)`(모듈 75152: 클립보드에 쓰고 'potplayer:///clipboard' 반환) → `a(target=_blank).href=…; a.click()`. 화질 목록은 `is_visible` 만, `need_more_quota` 면 프리미엄 안내
+  - 파일 상세: 모듈 18839.UV(id,{usage:'PLAY'}) (GET {API}/files/{id}?usage=…, credentials). webpack 전역 `webpackChunkpikpak_web`
+- 구현(블랙전용, 유료판에서 빠짐): black/black-pikpak-core.js(판단 계산·단위 시험 가능), black/black-pikpak.js(MAIN world, mypikpak.com 만, document_start), black/black-pikpak-flag.js(설정 blackPikpak 을 <html data-smd-pikpak> 로 전달), 팝업 블랙전용 탭 스위치(기본 켬), manifest 묶음 2개, make-paid 흔적 검사에 blackPikpak·smd-pikpak·SMD_PIKPAK 추가(유료판 만들기 통과, 결과물에 pikpak 없음)
+- 동작: `.file-explorer .row.grid .play-icon` 클릭(왼쪽 버튼, Shift·Ctrl·Alt·Meta 없음, 경로 /drive/all[/…])을 document capture 에서 잡아 preventDefault+stopImmediatePropagation → UV 로 파일 상세 → `is_origin===true` 가 정확히 하나·is_visible!==false·need_more_quota 없음·link.url 있음·https 만 → 사이트의 bb 로 클립보드+protocol → 앵커 click. 쿼리는 원형 그대로. 빠른 연속 클릭은 한 번만
+- 카드↔파일: Vue 앱 객체(__vue_app__)에서 컴포넌트 트리를 내려가며 props.file(id 문자열)·props.openFile 이 있고 화면 요소가 누른 ▶ 를 품은 가장 안쪽 컴포넌트(운영 빌드는 __vueParentComponent 가 없을 수 있어 앱 객체 방식을 둠; 있으면 그것을 먼저). 못 찾으면 막지 않고 사이트 원래 동작
+- 사이트 모듈 번호/내보내기 이름이 바뀌어도: 알려진 번호(18839·75152)를 먼저 모양(원문 표지 글자 '/files/'+'unzip_password', 'potplayer:///clipboard')으로 확인하고, 안 맞으면 모듈 원문을 훑어 찾음. 그래도 없으면 '사이트 코드 연결' 오류로 닫음
+- 실패 시: 단계·원인·조치 안내 + [기본 플레이어로 재생] 버튼(눌러야만 픽팍 기본 플레이어를 엶, 몰래 열지 않음). 영상 주소는 로그·저장소·오류 안내에 안 남김. '이 사이트 제외'(data-smd-off)·팝업 끄기 존중
+- 검증: 단위 71/71(픽팍 12건: 원본이 가운데·첫 항목·이름 함정·is_origin 'true'/1 거부·숨김/권한/주소없음·주소 검사·경로·카드 대응·모듈 찾기), E2E 픽팍 묶음 126/126(모의 픽팍 사이트: 원본 주소 쿼리 원형·카드별 대응·연속 클릭 1회·원본 없음 안내+버튼·Shift·공유 화면·구조 변경·끄기·사이트 제외·팝업 스위치), E2E 전체 204/204
+- UNVERIFIED(실제 환경에서만 확인 가능): 실제 로그인 계정에서 카드 클릭 시 Vue 트리 연결·UV 응답의 is_origin 값, 크롬 클립보드 쓰기·protocol 열기가 비동기 요청 뒤에도 허용되는지(클릭 후 약 5초 안이면 대체로 허용), 윈도우에 팟플레이어가 potplayer:// 연결을 등록했는지, 사이트 개편 시 동작. 사이트 코드 근거는 2026-10-16 번들(release v2.28.2-3-gd254e901) 기준

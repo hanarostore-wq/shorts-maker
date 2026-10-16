@@ -30,6 +30,10 @@
         <input type="checkbox" id="blackGoogleNewTab" /><span class="sw"><i></i></span>
       </label>
       <label class="row-toggle">
+        <div><b>픽팍 재생 버튼 → 팟플레이어 (원본 화질)</b><small>mypikpak.com 의 내 파일(모든 파일)에서 영상 카드의 ▶ 를 누르면 픽팍 기본 플레이어 대신 팟플레이어로 바로 재생합니다. 화질은 원본만, 선택 창 없음. 원본 항목을 못 찾거나 권한이 없으면 이유를 알려 주고 [기본 플레이어로 재생]을 고를 수 있게 합니다. Shift·Ctrl·Alt 를 누르고 누르면 원래대로 (처음 한 번 크롬이 "외부 프로그램 열기"를 물으면 허용 · 팟플레이어가 설치되어 있어야 하고, 영상 주소를 클립보드에 쓰므로 클립보드가 바뀝니다 · 바꾼 뒤 픽팍 탭 새로고침)</small></div>
+        <input type="checkbox" id="blackPikpak" /><span class="sw"><i></i></span>
+      </label>
+      <label class="row-toggle">
         <div><b>북마크바 아이콘만</b><small>북마크바에 바로 있는 북마크의 이름을 숨기고 아이콘만 보이게 합니다. 원래 이름은 보관했다가 끄면 그대로 되돌립니다 (처음 켤 때 북마크 권한을 묻습니다 · 동기화 중이면 다른 기기 크롬에도 같이 적용)</small></div>
         <input type="checkbox" id="blackBmIcons" /><span class="sw"><i></i></span>
       </label>
@@ -252,6 +256,22 @@
       say(`저장 실패 — 단계: 설정 저장 / 원인: ${err?.message || err} / 조치: 팝업을 닫았다 다시 여세요.`);
     }
   });
+  // 픽팍 팟플레이어 재생
+  {
+    const pk = pane.querySelector('#blackPikpak');
+    chrome.storage.local.get('settings').then((r) => (pk.checked = r.settings?.blackPikpak !== false), () => {});
+    pk.addEventListener('change', async () => {
+      try {
+        const { settings } = await chrome.storage.local.get('settings');
+        await chrome.storage.local.set({ settings: { ...(settings || {}), blackPikpak: pk.checked } });
+        say(pk.checked ? '픽팍 팟플레이어 재생: 켜짐 (열려 있는 픽팍 탭에도 바로 적용)' : '픽팍 팟플레이어 재생: 꺼짐');
+      } catch (err) {
+        pk.checked = !pk.checked;
+        say(`저장 실패 — 단계: 설정 저장 / 원인: ${err?.message || err} / 조치: 팝업을 닫았다 다시 여세요.`);
+      }
+    });
+  }
+
   // 마우스 제스처
   {
     const core = globalThis.__SMD_GESTURE_CORE;

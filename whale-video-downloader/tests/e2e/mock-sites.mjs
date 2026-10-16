@@ -712,6 +712,46 @@ const handlers = {
   },
 
   // ── X ──
+  // ── 픽팍 모의 사이트(블랙전용 '재생 버튼 → 팟플레이어' 시험): 사이트의 webpack·Vue 구조와 ▶ 카드를 흉내 낸다 ──
+  'mypikpak.com': (req, res, u) => {
+    if (!/^\/drive\//.test(u.pathname)) return html(res, '<p>pikpak</p>');
+    return html(res, `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>모의 픽팍</title></head><body>
+<div id="app"><div class="file-explorer" id="list">
+  ${['F1', 'F2', 'F3'].map((id) => `<div class="row grid" id="card-${id}"><span class="name">${id}</span><a class="play-icon" id="play-${id}" style="display:inline-block;width:40px;height:40px;background:#c33"></a></div>`).join('\n  ')}
+</div></div>
+<script>
+  window.__uv = []; window.__bb = []; window.__launched = []; window.__defaultOpen = [];
+  const NO = ${u.searchParams.get('novue') ? 'true' : 'false'};
+  const mk = (name, extra) => Object.assign({ is_visible: true, is_origin: false, media_name: name, media_id: name, link: { url: 'https://cdn.pikpak.test/' + name } }, extra);
+  const DETAILS = {
+    // 원본이 가운데: 첫 항목(1080P)이 아니라 is_origin 인 'Original' 이어야 한다. 주소 쿼리는 인코딩 그대로 전달돼야 한다
+    F1: { id: 'F1', medias: [mk('1080P'), mk('Original', { is_origin: true, link: { url: 'https://cdn.pikpak.test/orig1?sig=a%2Bb&e=1' } }), mk('720P')] },
+    // 원본이 첫 항목, 이름도 다름
+    F2: { id: 'F2', medias: [mk('원본', { is_origin: true, link: { url: 'https://cdn.pikpak.test/orig2?k=%2F%3D' } }), mk('1080P')] },
+    // 원본 없음(이름이 '원본'이어도 is_origin 이 아니면 원본이 아니다)
+    F3: { id: 'F3', medias: [mk('원본', { is_origin: false }), mk('1080P')] },
+  };
+  const play = (file) => window.__defaultOpen.push(file.id);
+  // 사이트 쪽 ▶ 클릭 처리(Shift·Ctrl·Meta 면 열지 않음, 그 외 기본 플레이어 열기) — 확장이 먼저 가로채면 이게 실행되면 안 된다
+  const insts = [];
+  for (const id of ['F1', 'F2', 'F3']) {
+    const card = document.getElementById('card-' + id);
+    document.getElementById('play-' + id).addEventListener('click', (e) => { if (e.shiftKey || e.ctrlKey || e.metaKey) return; e.stopPropagation(); play({ id }); });
+    insts.push({ component: { props: { file: { id, kind: 'drive#file' }, openFile: play }, subTree: { el: card, children: [] } } });
+  }
+  if (!NO) document.getElementById('app').__vue_app__ = { _instance: { vnode: { component: { props: {}, subTree: { el: document.getElementById('list'), children: insts } } } } };
+  // 사이트 webpack: 가짜 chunk 를 밀어 넣으면 require 를 넘겨 준다. 모듈 18839(UV 파일 상세), 75152(bb 클립보드 → potplayer)
+  function UV(id, o) { /* /files/ unzip_password */ window.__uv.push(id + ':' + (o && o.usage)); return new Promise((r) => setTimeout(() => r({ data: { value: DETAILS[id] }, error: { value: null } }), 60)); }
+  function bb(url) { /* potplayer:///clipboard */ window.__bb.push(url); return Promise.resolve('potplayer:///clipboard'); }
+  const mods = { 18839: { UV }, 75152: { bb, Hy: {} } };
+  const rt = Object.assign((id) => { if (!mods[id]) throw new Error('no module'); return mods[id]; }, { m: { 18839: function () {}, 75152: function () {} } });
+  window.webpackChunkpikpak_web = []; window.webpackChunkpikpak_web.push = (c) => { if (typeof c[2] === 'function') c[2](rt); return 0; };
+  // 팟플레이어 연결 주소로 가는 앵커는 실제로 열지 않고 기록만(시험용)
+  // (사이트도 화면에 붙이지 않은 앵커를 click() 하므로 문서 이벤트로는 안 보인다 → click 함수를 감싼다)
+  const realClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () { if ((this.getAttribute('href') || '').startsWith('potplayer:')) { window.__launched.push(this.getAttribute('href') + '|' + this.target); return; } return realClick.apply(this, arguments); };
+</script></body></html>`);
+  },
   'x.com': (req, res, u) => {
     if (u.pathname === '/xtextfeed') {
       // 피드: 글만(t1) · 사진(p1) · 영상(v1) · 처음엔 글만이다가 3초 뒤 사진이 생기는 게시물(late)

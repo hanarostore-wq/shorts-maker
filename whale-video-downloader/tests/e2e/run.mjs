@@ -2563,6 +2563,110 @@ if (!only || only === 'exclude' || '제외'.includes(only)) {
   }
 }
 
+// ── 블랙전용: 픽팍 ▶ → 팟플레이어(원본 화질, 선택 창 없음) ──
+if (!only || only === 'pikpak' || '픽팍'.includes(only)) {
+  const A = 'https://mypikpak.com/drive/all';
+  let pp = null;
+  try {
+    await setSettings({ blackPikpak: true, excludedSites: [] });
+    const open = async (url = A) => {
+      const pg = await ctx.newPage();
+      await pg.goto(url, { waitUntil: 'domcontentloaded' });
+      await pg.waitForTimeout(1000);
+      await pg.bringToFront();
+      return pg;
+    };
+    const st = (pg) => pg.evaluate(() => ({ uv: window.__uv, bb: window.__bb, launched: window.__launched, def: window.__defaultOpen, toast: document.querySelector('[data-smd-pikpak-toast]')?.textContent || '' }));
+    // 1) 원본이 가운데 → 첫 항목(1080P)이 아니라 원본 주소, 쿼리 원형 그대로, 기본 플레이어는 안 열림
+    let pg = await open();
+    await pg.click('#play-F1');
+    await pg.waitForFunction(() => window.__launched.length > 0, null, { timeout: 4000 }).catch(() => {});
+    let r = await st(pg);
+    record('[픽팍] ▶ 클릭 → 원본(is_origin) 주소를 팟플레이어로(첫 항목·이름 짐작 없음), 기본 플레이어 안 열림', r.uv.join() === 'F1:PLAY' && r.bb.join() === 'https://cdn.pikpak.test/orig1?sig=a%2Bb&e=1' && r.launched.join() === 'potplayer:///clipboard|_blank' && r.def.length === 0, { note: `상세=${r.uv} · 넘긴 주소 끝=${(r.bb[0] || '').split('/').pop()} · 연결=${r.launched} · 기본 플레이어=${r.def.length}번` });
+    // 2) 다른 카드(F2): 원본이 첫 항목이고 이름이 '원본' — 카드마다 정확한 파일
+    await pg.waitForTimeout(500);
+    await pg.click('#play-F2');
+    await pg.waitForFunction(() => window.__launched.length > 1, null, { timeout: 4000 }).catch(() => {});
+    r = await st(pg);
+    record('[픽팍] 다른 카드는 그 카드 파일의 원본(카드마다 정확히 대응)', r.uv.join() === 'F1:PLAY,F2:PLAY' && r.bb[1] === 'https://cdn.pikpak.test/orig2?k=%2F%3D' && r.def.length === 0, { note: `상세=${r.uv} · 두 번째 주소 끝=${(r.bb[1] || '').split('/').pop()}` });
+    // 3) 빠른 연속 클릭은 한 번만
+    await pg.waitForTimeout(600);
+    const n0 = (await st(pg)).launched.length;
+    await pg.evaluate(() => { const b = document.getElementById('play-F1'); b.click(); b.click(); b.click(); });
+    await pg.waitForTimeout(900);
+    r = await st(pg);
+    record('[픽팍] 빠른 연속 클릭은 한 번만 실행', r.launched.length - n0 === 1, { note: `${r.launched.length - n0}번` });
+    // 4) 원본이 없으면 짐작하지 않고 실패 안내 + [기본 플레이어로 재생] 선택(눌러야만 기본 플레이어)
+    await pg.waitForTimeout(600);
+    const l0 = (await st(pg)).launched.length;
+    await pg.click('#play-F3');
+    await pg.waitForFunction(() => document.querySelector('[data-smd-pikpak-toast] button'), null, { timeout: 4000 }).catch(() => {});
+    r = await st(pg);
+    const beforeBtn = r.def.length;
+    record('[픽팍] (오류 경로) 원본이 없으면 단계·원인·조치 안내, 몰래 기본 플레이어를 열지 않음, 팟플레이어도 안 열림', /단계: 원본 화질 찾기/.test(r.toast) && /원인:/.test(r.toast) && /조치:/.test(r.toast) && beforeBtn === 0 && r.launched.length === l0 && !/cdn\.pikpak\.test/.test(r.toast), { note: r.toast.replace(/\s+/g, ' ').slice(0, 90) });
+    await pg.click('[data-smd-pikpak-toast] button');
+    await pg.waitForTimeout(300);
+    r = await st(pg);
+    record('[픽팍] [기본 플레이어로 재생]을 눌러야만 그 카드의 기본 플레이어가 열림', r.def.join() === 'F3', { note: `기본 플레이어 열림=${r.def}` });
+    // 5) Shift 를 누른 클릭은 건드리지 않음(사이트 원래 동작)
+    await pg.waitForTimeout(500);
+    const l1 = (await st(pg)).launched.length;
+    await pg.click('#play-F1', { modifiers: ['Shift'] });
+    await pg.waitForTimeout(500);
+    r = await st(pg);
+    record('[픽팍] Shift 누른 클릭은 건드리지 않음', r.launched.length === l1, { note: `새 연결 ${r.launched.length - l1}개` });
+    await pg.close().catch(() => {});
+    // 6) 범위 밖 화면(공유 등)은 건드리지 않음
+    pg = await open('https://mypikpak.com/drive/share/abc');
+    await pg.click('#play-F1');
+    await pg.waitForTimeout(700);
+    r = await st(pg);
+    record('[픽팍] 내 파일이 아닌 화면(/drive/share)은 건드리지 않음 → 사이트 기본 동작', r.def.join() === 'F1' && r.launched.length === 0 && r.uv.length === 0, { note: `기본=${r.def} 연결=${r.launched.length}` });
+    await pg.close().catch(() => {});
+    // 7) 사이트 구조가 달라 카드-파일 연결을 못 하면 막지 않고 사이트 기본 동작
+    pg = await open(`${A}?novue=1`);
+    await pg.click('#play-F2');
+    await pg.waitForTimeout(700);
+    r = await st(pg);
+    record('[픽팍] (오류 경로) 카드와 파일을 못 이으면 막지 않고 사이트 기본 동작', r.def.join() === 'F2' && r.launched.length === 0, { note: `기본=${r.def}` });
+    await pg.close().catch(() => {});
+    // 8) 끄면 / '이 사이트 제외' 면 사이트 기본 동작
+    for (const [name, patch] of [['팝업에서 끔', { blackPikpak: false }], ['이 사이트 제외', { blackPikpak: true }]]) {
+      if (name === '이 사이트 제외') {
+        const x = await extPage();
+        await x.evaluate(() => chrome.runtime.sendMessage({ type: 'smd:exclude-site', host: 'mypikpak.com', on: true }));
+        await x.close();
+      } else await setSettings(patch);
+      pg = await open();
+      await pg.waitForTimeout(500);
+      await pg.click('#play-F1');
+      await pg.waitForTimeout(700);
+      r = await st(pg);
+      record(`[픽팍] ${name} → 사이트 기본 동작`, r.def.join() === 'F1' && r.launched.length === 0, { note: `기본=${r.def} 연결=${r.launched.length}` });
+      await pg.close().catch(() => {});
+      if (name === '이 사이트 제외') {
+        const x = await extPage();
+        await x.evaluate(() => chrome.runtime.sendMessage({ type: 'smd:exclude-site', host: 'mypikpak.com', on: false }));
+        await x.close();
+      }
+    }
+    // 9) 팝업 블랙전용 탭 스위치
+    await setSettings({ blackPikpak: true });
+    pp = await extPage();
+    await pp.click('.tab[data-tab="black"]');
+    const on0 = await pp.evaluate(() => document.getElementById('blackPikpak')?.checked);
+    await pp.click('label:has(#blackPikpak)');
+    await pp.waitForTimeout(400);
+    const off1 = await pp.evaluate(async () => (await chrome.storage.local.get('settings')).settings.blackPikpak);
+    record('[픽팍] 팝업 블랙전용 탭에 켜고 끄는 스위치(기본 켬)', on0 === true && off1 === false, { note: `처음 켜짐=${on0} · 누른 뒤=${off1}` });
+  } catch (err) {
+    record('[픽팍]', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await pp?.close().catch(() => {});
+    await setSettings({ blackPikpak: true });
+  }
+}
+
 // ── 블랙전용: 마우스 오른쪽 드래그 제스처 ──
 {
   const URLS = { a: 'https://www.example-videos.com/float', b: 'https://www.example-videos.com/ai', c: 'https://www.example-videos.com/long' };
