@@ -2719,6 +2719,35 @@ if (!only || only === 'pikpak' || '픽팍'.includes(only)) {
     record('[픽팍] 카드 × 스위치를 끄면 × 가 나오지 않음', r.n === 0 && r.flag === '0', { note: `× 개수=${r.n} 표시=${r.flag}` });
     await pg.close().catch(() => {});
     await setSettings({ blackPikpakX: true });
+    // 6f) 사진 뷰어: 사진을 누르면 확대 대신 닫힘(닫기 단추·Esc 순), 조절 막대 단추는 그대로, 안 닫히면 단계·원인·조치, 끄면 원래대로(확대)
+    for (const [mode, label] of [['btn', '닫기 단추'], ['esc', 'Esc']]) {
+      pg = await open(`https://mypikpak.com/drive/photo?mode=${mode}`);
+      await pg.click('#pic');
+      await pg.waitForTimeout(900);
+      r = await pg.evaluate(() => ({ zoom: window.__zoom, closed: window.__closed }));
+      record(`[픽팍] 사진 뷰어: 사진을 누르면 확대하지 않고 닫음(${label})`, r.zoom === 0 && r.closed === 1, { note: `확대=${r.zoom} 닫힘=${r.closed}` });
+      await pg.close().catch(() => {});
+    }
+    pg = await open('https://mypikpak.com/drive/photo?mode=btn');
+    await pg.click('#ctl');
+    await pg.waitForTimeout(300);
+    r = await pg.evaluate(() => ({ ctl: window.__ctl || 0, closed: window.__closed }));
+    record('[픽팍] 사진 뷰어: 아래 조절 막대의 단추는 건드리지 않음', r.ctl === 1 && r.closed === 0, { note: `단추=${r.ctl} 닫힘=${r.closed}` });
+    await pg.close().catch(() => {});
+    pg = await open('https://mypikpak.com/drive/photo?mode=none');
+    await pg.click('#pic');
+    await pg.waitForFunction(() => /단계: 사진 뷰어 닫기/.test(document.documentElement.innerText), null, { timeout: 4000 }).catch(() => {});
+    r = await pg.evaluate(() => ({ txt: document.documentElement.innerText.replace(/\s+/g, ' '), zoom: window.__zoom }));
+    record('[픽팍] (오류 경로) 사진 뷰어가 안 닫히면 단계·원인·조치 안내', /단계: 사진 뷰어 닫기/.test(r.txt) && /원인:/.test(r.txt) && /조치:/.test(r.txt) && r.zoom === 0, { note: r.txt.slice(-120) });
+    await pg.close().catch(() => {});
+    await setSettings({ blackPikpakPhoto: false });
+    pg = await open('https://mypikpak.com/drive/photo?mode=btn');
+    await pg.click('#pic');
+    await pg.waitForTimeout(600);
+    r = await pg.evaluate(() => ({ zoom: window.__zoom, closed: window.__closed, flag: document.documentElement.dataset.smdPikpakPhoto }));
+    record('[픽팍] 사진 뷰어 닫기 스위치를 끄면 원래대로(확대)', r.zoom === 1 && r.closed === 0 && r.flag === '0', { note: `확대=${r.zoom} 닫힘=${r.closed} 표시=${r.flag}` });
+    await pg.close().catch(() => {});
+    await setSettings({ blackPikpakPhoto: true });
     // 7) 사이트 구조가 달라 카드-파일 연결을 못 하면 막지 않고 사이트 기본 동작
     pg = await open(`${A}?novue=1`);
     await pg.click('#play-F2');

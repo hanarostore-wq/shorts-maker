@@ -745,6 +745,19 @@ export const other = () => 'nothing';`);
   const realClick = HTMLAnchorElement.prototype.click;
   HTMLAnchorElement.prototype.click = function () { if ((this.getAttribute('href') || '').startsWith('potplayer:')) { window.__launched.push(this.getAttribute('href') + '|' + this.target); return; } return realClick.apply(this, arguments); };
 </script></body></html>`);
+    // 사진 뷰어 시험: 사진을 누르면 사이트가 확대(zoom)함. mode=btn 닫기 단추 · esc Esc 로 닫힘 · none 안 닫힘
+    if (u.pathname.startsWith('/drive/photo')) { const mode = u.searchParams.get('mode') || 'btn'; return html(res, `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>모의 픽팍 사진</title></head><body>
+<div class="file-manager-container" style="position:fixed;inset:0;background:#222"><div class="image-viewer-wrapper" id="vw" style="width:100%;height:80%;position:relative"><div class="layout" style="width:100%;height:100%"><img class="img" id="pic" style="width:400px;height:300px;background:#6a6" alt=""></div></div>
+${mode === 'btn' ? '<button class="preview-close-btn" id="cl" style="position:absolute;right:10px;top:10px">닫기</button>' : ''}<div id="manager-preview-bar"><button id="ctl">조절</button></div></div>
+<script>
+  window.__zoom = 0; window.__closed = 0;
+  const vw = document.getElementById('vw');
+  document.getElementById('pic').addEventListener('click', () => { window.__zoom++; });
+  const close = () => { document.querySelector('.file-manager-container').remove(); window.__closed++; };
+  if (${JSON.stringify(mode)} === 'btn') document.getElementById('cl').addEventListener('click', close);
+  if (${JSON.stringify(mode)} === 'esc') document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  document.getElementById('ctl').addEventListener('click', () => { window.__ctl = (window.__ctl || 0) + 1; });
+</script></body></html>`); }
     // 스크롤 복원 시험: 폴더 A(긴 목록) → B(짧은 목록) → 뒤로가기하면 사이트가 0.3초 뒤 A 를 맨 위로 다시 그림
     if (u.pathname.startsWith('/drive/scroll')) return html(res, `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>모의 픽팍 스크롤</title><style>body{margin:0}.file-explorer{height:400px}.el-scrollbar__wrap{height:400px;overflow:auto}.it{height:50px}</style></head><body>
 <div class="file-explorer"><div class="el-scrollbar__wrap" id="wrap"><div id="inner"></div></div></div>

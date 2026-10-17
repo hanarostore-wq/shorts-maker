@@ -626,3 +626,8 @@
 - 사용자 요청(스크린샷): 마우스 오버 때만 말고 계속 떠 있게, 더 크게, 오른쪽 위 ⋮ 단추와 겹치지 않게 회색 칸 안쪽 오른쪽 가운데로.
 - 변경: 카드마다 `.thumbnail` 안에 36px × 를 직접 붙임(right:10px, top:50%). 변화 감시로 새 카드·다시 그린 카드에 다시 붙이고, 끄면/휴지통 화면이면 지움. 클릭은 문서 capture 에서 처리. 목록(리스트) 보기처럼 .thumbnail 이 없는 화면에는 안 붙음.
 - 검증: 단위 80/80, E2E 218/218(× 위치·크기 검사 추가). UNVERIFIED: 실제 픽팍 카드에서 .thumbnail 이 회색 칸인지.
+
+## 2026-10-16 · WVD-078 · v1.41.0 픽팍 사진 뷰어: 사진 누르면 확대 대신 닫기
+- black-pikpak-photo.js(MAIN): 내 드라이브·공유 링크 공통. 사이트 코드에서 확인한 구조(.image-viewer-wrapper > .layout > img.img, 아래 #manager-preview-bar)에서 사진 클릭을 capture 로 가로채 사이트의 확대를 막고 닫음: ① 뷰어 안 닫기 단추 → ② Esc → ③ history.state==='media-preview' 면 뒤로가기. 안 닫히면 단계·원인·조치. 끌기(5px+)·조절 막대·단추·수정키 클릭은 그대로. 스위치 `blackPikpakPhoto`(기본 켬, <html data-smd-pikpak-photo>).
+- E2E: 가짜 뷰어(btn/esc/none) 시험 추가. 오류 경로 시험은 안내 상자가 body 밖(documentElement)에 붙어 body.innerText 로는 못 읽던 시험 버그를 고침.
+- UNVERIFIED: 실제 픽팍 뷰어의 닫기 단추 모양·닫기 방식(사이트 번들만 읽음, 로그인 불가). 안 닫히면 안내 문구로 진단.

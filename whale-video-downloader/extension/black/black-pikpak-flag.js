@@ -7,6 +7,7 @@
       document.documentElement.dataset.smdPikpak = s?.blackPikpak === false ? '0' : '1';
       document.documentElement.dataset.smdPikpakScroll = s?.blackPikpakScroll === false ? '0' : '1';
       document.documentElement.dataset.smdPikpakX = s?.blackPikpakX === false ? '0' : '1';
+      document.documentElement.dataset.smdPikpakPhoto = s?.blackPikpakPhoto === false ? '0' : '1';
     } catch {}
   };
   chrome.storage.local.get('settings').then((r) => set(r.settings), () => {});

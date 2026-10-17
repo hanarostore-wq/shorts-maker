@@ -42,6 +42,10 @@
         <input type="checkbox" id="blackPikpakX" /><span class="sw"><i></i></span>
       </label>
       <label class="row-toggle">
+        <div><b>픽팍 사진 누르면 뷰어 닫기</b><small>픽팍(내 드라이브·공유 링크)의 사진 뷰어에서 사진을 누르면 확대하지 않고 뷰어를 닫습니다. 끌어서 옮기는 동작·아래 조절 막대·단추는 그대로입니다 (바꾼 뒤 픽팍 탭 새로고침)</small></div>
+        <input type="checkbox" id="blackPikpakPhoto" /><span class="sw"><i></i></span>
+      </label>
+      <label class="row-toggle">
         <div><b>북마크바 아이콘만</b><small>북마크바에 바로 있는 북마크의 이름을 숨기고 아이콘만 보이게 합니다. 원래 이름은 보관했다가 끄면 그대로 되돌립니다 (처음 켤 때 북마크 권한을 묻습니다 · 동기화 중이면 다른 기기 크롬에도 같이 적용)</small></div>
         <input type="checkbox" id="blackBmIcons" /><span class="sw"><i></i></span>
       </label>
@@ -307,6 +311,22 @@
         say(px.checked ? '픽팍 카드 ×: 켜짐 (열려 있는 픽팍 탭에도 바로 적용)' : '픽팍 카드 ×: 꺼짐');
       } catch (err) {
         px.checked = !px.checked;
+        say(`저장 실패 — 단계: 설정 저장 / 원인: ${err?.message || err} / 조치: 팝업을 닫았다 다시 여세요.`);
+      }
+    });
+  }
+
+  // 픽팍 사진 누르면 뷰어 닫기
+  {
+    const pp = pane.querySelector('#blackPikpakPhoto');
+    chrome.storage.local.get('settings').then((r) => (pp.checked = r.settings?.blackPikpakPhoto !== false), () => {});
+    pp.addEventListener('change', async () => {
+      try {
+        const { settings } = await chrome.storage.local.get('settings');
+        await chrome.storage.local.set({ settings: { ...(settings || {}), blackPikpakPhoto: pp.checked } });
+        say(pp.checked ? '픽팍 사진 뷰어 닫기: 켜짐 (열려 있는 픽팍 탭에도 바로 적용)' : '픽팍 사진 뷰어 닫기: 꺼짐');
+      } catch (err) {
+        pp.checked = !pp.checked;
         say(`저장 실패 — 단계: 설정 저장 / 원인: ${err?.message || err} / 조치: 팝업을 닫았다 다시 여세요.`);
       }
     });
