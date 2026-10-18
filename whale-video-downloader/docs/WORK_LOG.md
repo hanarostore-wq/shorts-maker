@@ -631,3 +631,8 @@
 - black-pikpak-photo.js(MAIN): 내 드라이브·공유 링크 공통. 사이트 코드에서 확인한 구조(.image-viewer-wrapper > .layout > img.img, 아래 #manager-preview-bar)에서 사진 클릭을 capture 로 가로채 사이트의 확대를 막고 닫음: ① 뷰어 안 닫기 단추 → ② Esc → ③ history.state==='media-preview' 면 뒤로가기. 안 닫히면 단계·원인·조치. 끌기(5px+)·조절 막대·단추·수정키 클릭은 그대로. 스위치 `blackPikpakPhoto`(기본 켬, <html data-smd-pikpak-photo>).
 - E2E: 가짜 뷰어(btn/esc/none) 시험 추가. 오류 경로 시험은 안내 상자가 body 밖(documentElement)에 붙어 body.innerText 로는 못 읽던 시험 버그를 고침.
 - UNVERIFIED: 실제 픽팍 뷰어의 닫기 단추 모양·닫기 방식(사이트 번들만 읽음, 로그인 불가). 안 닫히면 안내 문구로 진단.
+
+## 2026-10-18 · WVD-079 · v1.41.1 돌아갈 페이지가 없으면 뒤로(제스처·마우스 뒤로 버튼) = 탭 닫기
+- 제스처 ← 뒤로: chrome.tabs.goBack 이 "Cannot find a next page in history" 로 실패하면 오류 안내 대신 탭 닫기(black-sw.js). 다른 이유의 실패는 그대로 안내.
+- 마우스 뒤로 버튼(button 3): 최상위 프레임에서 history.length<=1 일 때만 기본 동작을 막고 탭 닫기(black-gesture.js). 이전 페이지가 있으면 브라우저 기본 동작. 제스처 스위치·사이트 제외를 따름.
+- E2E: 링크를 새 탭으로 연 것처럼(window.open, 기록 1칸) 탭에서 시험(처음엔 newPage+goto 로 기록이 2칸이 돼 시험이 틀렸음). 226/226. UNVERIFIED: 실제 마우스 옆 버튼에서 크롬이 기본 뒤로 동작을 막아 주는지.

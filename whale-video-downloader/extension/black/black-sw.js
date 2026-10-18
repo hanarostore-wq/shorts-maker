@@ -50,9 +50,16 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     const id = tab.id;
     switch (msg.action) {
       case 'back':
-        await chrome.tabs.goBack(id).catch((err) => {
-          throw Object.assign(new Error('이 탭에는 돌아갈 이전 페이지가 없습니다'), { step: '뒤로 가기', hint: '이전 페이지가 있는 탭에서 해 보세요.', raw: err?.message });
-        });
+        try {
+          await chrome.tabs.goBack(id);
+        } catch (err) {
+          // 돌아갈 이전 페이지가 없으면(새 탭에서 열린 페이지 등) 오류 대신 탭을 닫는다. 그 밖의 실패는 그대로 안내
+          if (/cannot find a next page|no.*(previous|next) page/i.test(err?.message || '')) {
+            await chrome.tabs.remove(id);
+            break;
+          }
+          throw Object.assign(new Error('뒤로 가지 못했습니다'), { step: '뒤로 가기', hint: '잠시 후 다시 해 보세요.', raw: err?.message });
+        }
         break;
       case 'forward':
         await chrome.tabs.goForward(id).catch((err) => {

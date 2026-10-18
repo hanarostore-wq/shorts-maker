@@ -221,6 +221,20 @@
     true,
   );
 
+  // 마우스 '뒤로' 버튼(옆 버튼): 돌아갈 이전 페이지가 없는 탭(링크를 새 탭으로 연 경우 등)이면 아무 일도 안 하는 대신 탭을 닫는다. 이전 페이지가 있으면 브라우저 기본 동작 그대로
+  //  history.length 가 1 이하 = 이 탭에는 기록이 한 칸뿐. 제스처가 꺼져 있거나 '이 사이트 제외'면 건드리지 않는다
+  addEventListener(
+    'mouseup',
+    (e) => {
+      if (e.button !== 3 || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || !on || globalThis.__SMD_OFF) return;
+      if (window.top !== window || history.length > 1) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      send('close');
+    },
+    true,
+  );
+
   addEventListener('blur', cancel);
   addEventListener(
     'keydown',

@@ -2828,6 +2828,36 @@ if (!only || only === 'pikpak' || '픽팍'.includes(only)) {
       record('[제스처] ← (오른쪽 드래그 왼쪽) 뒤로 가기', back, { note: pg.url() });
       await pg.close().catch(() => {});
     }
+    // 링크를 새 탭으로 연 것처럼(기록이 한 칸뿐인 탭) 만든다: 이미 있는 탭에서 window.open
+    const openLinked = async (opener, url) => {
+      const [np] = await Promise.all([ctx.waitForEvent('page'), opener.evaluate((u) => window.open(u, '_blank'), url)]);
+      await np.waitForLoadState('domcontentloaded').catch(() => {});
+      await np.waitForTimeout(1200);
+      await np.bringToFront();
+      return np;
+    };
+    // 돌아갈 이전 페이지가 없는 탭: 뒤로 제스처(←)·마우스 뒤로 버튼은 오류 대신 탭을 닫음, 이전 페이지가 있으면 마우스 뒤로 버튼은 건드리지 않음
+    {
+      const opener = await open(URLS.a);
+      const pg = await openLinked(opener, URLS.a);
+      await rdrag(pg, [400, 300], [[-120, 0]]);
+      const closed1 = await pg.waitForEvent('close', { timeout: 4000 }).then(() => true, () => pg.isClosed());
+      record('[제스처] 돌아갈 이전 페이지가 없는 탭에서 ← 뒤로 제스처 = 탭 닫기(오류 안내 대신)', closed1, { note: closed1 ? '닫힘' : '안 닫힘' });
+      if (!closed1) await pg.close().catch(() => {});
+      const pg2 = await openLinked(opener, URLS.a);
+      await pg2.evaluate(() => window.dispatchEvent(new MouseEvent('mouseup', { button: 3, bubbles: true, cancelable: true })));
+      const closed2 = await pg2.waitForEvent('close', { timeout: 4000 }).then(() => true, () => pg2.isClosed());
+      record('[제스처] 돌아갈 이전 페이지가 없는 탭에서 마우스 뒤로 버튼 = 탭 닫기', closed2, { note: closed2 ? '닫힘' : '안 닫힘' });
+      if (!closed2) await pg2.close().catch(() => {});
+      const pg3 = await open(URLS.a);
+      await pg3.goto(URLS.b, { waitUntil: 'domcontentloaded' });
+      await pg3.waitForTimeout(700);
+      const prevented = await pg3.evaluate(() => { const ev = new MouseEvent('mouseup', { button: 3, bubbles: true, cancelable: true }); window.dispatchEvent(ev); return ev.defaultPrevented; });
+      await pg3.waitForTimeout(800);
+      record('[제스처] 이전 페이지가 있는 탭에서는 마우스 뒤로 버튼을 건드리지 않음(브라우저 기본 동작)', !pg3.isClosed() && prevented === false, { note: `닫힘=${pg3.isClosed()} 기본동작막음=${prevented}` });
+      await pg3.close().catch(() => {});
+      await opener.close().catch(() => {});
+    }
     // ↑ 맨 위로 스크롤
     {
       const pg = await open(URLS.a);
