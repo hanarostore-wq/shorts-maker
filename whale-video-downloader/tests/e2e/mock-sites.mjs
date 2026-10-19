@@ -819,6 +819,15 @@ ${mode === 'btn' ? '<button class="preview-close-btn" id="cl" style="position:ab
       return html(res, page('X 재생 전', `<article data-testid="tweet" style="width:520px"><a href="/tester/status/1790000000000000009">시간</a>
         <div ${u.searchParams.has('notid') ? 'class="r-1p0dtai"' : 'data-testid="videoPlayer"'} id="vp" style="position:relative;width:480px;height:270px">${u.searchParams.has('notid') ? '<video preload="none" style="display:none"></video>' : ''}<img src="https://cdn.example-videos.com/img/photo.jpg?amplify_video_thumb" style="width:480px;height:270px;object-fit:cover;display:block"><div role="button" aria-label="재생" style="position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px;border-radius:50%;background:#1d9bf0"></div></div></article>`));
     }
+    if (u.pathname === '/keepbar') {
+      // 사이트의 기본 재생바 흉내: 영상 위에서 마우스가 움직이면 보이고 1.2초 가만히 있으면 숨김(자체 재생바 사이트)
+      return html(res, page('X 기본 재생바', `<div id="pl" style="position:relative;width:480px;height:270px"><video id="av" src="https://cdn.example-videos.com/preview.webm" muted loop playsinline style="width:100%;height:100%;background:#000"></video>
+        <div id="ctl" style="position:absolute;left:0;right:0;bottom:0;height:40px;background:#357;opacity:0;color:#fff">기본 재생바</div></div>`,
+        `const pl = document.getElementById('pl'); let tm = 0; window.__moves = 0;
+         const show = () => { window.__moves++; document.getElementById('ctl').style.opacity = '1'; clearTimeout(tm); tm = setTimeout(() => { document.getElementById('ctl').style.opacity = '0'; }, 1200); };
+         pl.addEventListener('mousemove', show); pl.addEventListener('mouseover', show);
+         document.getElementById('av').play().catch(() => {});`));
+    }
     if (u.pathname === '/autoplaytest') {
       // 사이트가 0.6초 뒤 스스로 play() (스크롤 자동재생 흉내), 영상 위 막을 누르면 play()
       return html(res, page('X 자동재생', `<div style="position:relative;width:480px;height:270px"><video id="av" src="https://cdn.example-videos.com/preview.webm" muted loop playsinline style="width:100%;height:100%;background:#000"></video>

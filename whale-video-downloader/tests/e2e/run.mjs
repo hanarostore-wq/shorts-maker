@@ -481,6 +481,29 @@ const toastHist = (page) => page.evaluate(() => document.querySelector('smd-toas
   }
 }
 
+// ── 자체 재생바 사이트: 재생바를 켜면 새 바를 그리지 않고 사이트 기본 재생바가 계속 보이게(마우스 올림 신호), 끄면 평소처럼 사라짐 ──
+{
+  const page = await ctx.newPage();
+  try {
+    await setSettings({ siteSettings: { x: { seekBar: true } } });
+    await page.goto('https://x.com/keepbar', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => { const v = document.getElementById('av'); v.muted = true; return v.play(); }).catch(() => {});
+    await page.waitForTimeout(4500);
+    const on = await page.evaluate(() => ({ op: document.getElementById('ctl').style.opacity, moves: window.__moves, own: document.querySelectorAll('smd-seek').length, paused: document.getElementById('av').paused }));
+    record('[재생바] 자체 재생바 사이트(X)에서 켜면 기본 재생바가 사라지지 않고 계속 보임, 새 재생바는 안 그림', on.op === '1' && on.moves > 2 && on.own === 0 && !on.paused, { note: JSON.stringify(on) });
+    await setSettings({ siteSettings: { x: { seekBar: false } } });
+    await page.waitForTimeout(3500);
+    const off = await page.evaluate(() => document.getElementById('ctl').style.opacity);
+    record('[재생바] 끄면 기본 재생바는 평소처럼 사라짐(신호를 안 보냄)', off === '0', { note: `opacity=${off}` });
+  } catch (err) {
+    record('[재생바] 기본 재생바 유지', false, { note: err.message.split('\n')[0] });
+  } finally {
+    await page.close();
+    await setSettings({ siteSettings: {} });
+  }
+}
+
 // ── 재생바 하나만: 스크롤 상자 밖으로 잘린 위·아래 영상, 뒤에 깔린 배경 영상에는 안 띄움 ──
 {
   const page = await ctx.newPage();

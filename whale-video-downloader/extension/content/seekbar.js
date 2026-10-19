@@ -1,5 +1,6 @@
 // 재생바(모든 사이트): 재생 위치를 옮기는 바가 없는 영상(인스타 등) 아래쪽에 재생바와 시간을 띄운다.
-//  - 브라우저 기본 재생 막대(controls)가 있는 영상은 건너뛴다. 자체 재생바가 있는 사이트(유튜브·X 등)는 처음에 꺼 둠
+//  - 브라우저 기본 재생 막대(controls)가 있는 영상은 건너뛴다. 자체 재생바가 있는 사이트(유튜브·X·블루스카이 등)는 처음에 꺼 둠
+//  - 자체 재생바가 있는 사이트에서 이 사이트의 재생바를 켜면: 새 재생바를 그리지 않고, 그 사이트의 기본 재생바가 사라지지 않게 마우스를 올려 둔 것처럼 신호를 계속 보낸다(아래 keepNative)
 //  - 바를 누르거나 끌면 그 위치로 이동. 마우스를 올리면 바가 두꺼워진다.
 //  - 사이트 화면 밖(페이지 맨 위)에 띄워 사이트의 투명 막·클릭 처리에 가려지지 않게 한다.
 //  - 팝업 '이 사이트'에서 켜고 끄기(seekBar, 기본 켬)
@@ -21,14 +22,20 @@
   };
   // 자체 재생바가 있는 사이트는 이 사이트에서 직접 켰을 때만(사이트 재생 단추를 가리지 않게)
   const NATIVE_BAR = new Set(['youtube', 'x', 'bluesky', 'tiktok', 'douyin', 'facebook', 'bilibili', 'weibo', 'vimeo', 'dailymotion', 'naver']);
-  const want = (s) => (NATIVE_BAR.has(site) ? ((s || {}).siteSettings || {})[site]?.seekBar === true : effOf(s, site).seekBar !== false);
+  const native = NATIVE_BAR.has(site);
+  // 자체 재생바 사이트: 켜면 '기본 재생바 계속 보이게'(새 바는 안 그림). 그 밖의 사이트: 우리 재생바
+  const want = (s) => (native ? false : effOf(s, site).seekBar !== false);
+  const wantKeep = (s) => native && ((s || {}).siteSettings || {})[site]?.seekBar === true;
+  let keep = false;
   chrome.storage.local.get('settings').then((r) => {
     on = want(r.settings);
+    keep = wantKeep(r.settings);
     kick();
   }, () => {});
   chrome.storage.onChanged.addListener((c, area) => {
     if (area === 'local' && c.settings) {
       on = want(c.settings.newValue);
+      keep = wantKeep(c.settings.newValue);
       kick();
     }
   });
@@ -203,6 +210,33 @@
     }
   }
   const kick = () => !running && (running = true) && requestAnimationFrame(tick);
+
+  // ── 자체 재생바 사이트의 기본 재생바를 계속 보이게 ──
+  //  사이트들은 마우스가 영상 위에서 움직이면 재생바를 보여 주고 잠시 가만히 있으면 숨긴다. 보이는 영상 가운데 자리에 '마우스가 올라와 있고 움직인다'는 신호(mouseover·mousemove)를
+  //  1초마다 보내 숨는 타이머가 계속 새로 시작되게 한다. 영상이 화면 밖이거나 탭이 가려져 있으면 보내지 않는다. 우리 화면 요소(smd-*)는 건드리지 않는다
+  const hovered = new WeakSet();
+  function keepNative() {
+    if (!keep || document.hidden) return;
+    for (const v of document.querySelectorAll('video')) {
+      if (v.controls || v.paused || v.ended) continue; // 기본 막대가 있거나 멈춘 영상(멈추면 사이트가 막대를 계속 보여 줌)은 건너뜀
+      const r = v.getBoundingClientRect();
+      const vw = Math.min(r.right, innerWidth) - Math.max(r.left, 0);
+      const vh = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0);
+      if (vw < 120 || vh < 80 || (vw * vh) / (r.width * r.height || 1) < 0.4) continue;
+      const x = Math.round(Math.max(r.left, 0) + vw / 2);
+      const y = Math.round(Math.max(r.top, 0) + vh / 2);
+      const el = document.elementFromPoint(x, y);
+      if (!el || /^SMD-/.test(el.tagName || '') || el.closest?.('smd-float, smd-anchor, smd-seek')) continue;
+      const base = { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, view: window };
+      if (!hovered.has(v)) {
+        hovered.add(v);
+        for (const t of ['pointerover', 'mouseover', 'pointerenter']) el.dispatchEvent(new (t.startsWith('pointer') ? PointerEvent : MouseEvent)(t, { ...base, pointerType: 'mouse' }));
+      }
+      el.dispatchEvent(new PointerEvent('pointermove', { ...base, pointerType: 'mouse' }));
+      el.dispatchEvent(new MouseEvent('mousemove', base));
+    }
+  }
+  setInterval(keepNative, 1000);
   setInterval(kick, 500); // 새 영상·스크롤로 보이게 된 영상 찾기
   addEventListener('scroll', kick, { passive: true, capture: true });
   kick();
