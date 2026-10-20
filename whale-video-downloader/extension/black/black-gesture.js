@@ -23,9 +23,11 @@
   const newest = () => document.documentElement.getAttribute('data-smd-black-g') === ME;
 
   let on = true;
+  let remoteOn = true; // 원격 데스크톱 키 전달(설정 blackRemoteKeys, 기본 켬)
   let map = core.sanitizeMap(null);
   const load = (s) => {
     on = s?.blackGesture !== false;
+    remoteOn = s?.blackRemoteKeys !== false;
     map = core.sanitizeMap(s?.blackGestureMap);
   };
   chrome.storage.local.get('settings').then((r) => load(r.settings), () => {});
@@ -158,7 +160,7 @@
   addEventListener(
     'mousedown',
     (e) => {
-      if (e.button !== 2 || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || !on || globalThis.__SMD_OFF || REMOTE.test(location.hostname) || tiny()) return; // __SMD_OFF: 이 사이트 제외
+      if (e.button !== 2 || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || !on || globalThis.__SMD_OFF || (remoteOn && REMOTE.test(location.hostname)) || tiny()) return; // __SMD_OFF: 이 사이트 제외
       if (!alive() && !newest()) return;
       down = true;
       swallow = false;
@@ -228,7 +230,7 @@
   addEventListener(
     'mouseup',
     (e) => {
-      if (e.button !== 3 || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || !on || globalThis.__SMD_OFF || REMOTE.test(location.hostname)) return;
+      if (e.button !== 3 || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || !on || globalThis.__SMD_OFF || (remoteOn && REMOTE.test(location.hostname))) return;
       if (window.top !== window || history.length > 1) return;
       e.preventDefault();
       e.stopImmediatePropagation();

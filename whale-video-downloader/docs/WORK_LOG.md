@@ -647,3 +647,9 @@
 - 두 컴퓨터에 같은 확장이 있을 때, 원격 화면에서 누른 Alt+W·제스처를 내 쪽 크롬 확장이 먼저 처리해 원격 화면 탭이 닫히던 문제. remotedesktop.google.com 에서는 black-content.js(Alt+W)·black-gesture.js(제스처·마우스 뒤로 버튼)가 아무것도 하지 않음 → 키·마우스가 원격 컴퓨터로 그대로 가고 원격 쪽 확장이 처리. 원격 컴퓨터에도 확장 설치 필요.
 - 가짜 원격 데스크톱 호스트로 E2E 2건 추가, 230/230. 실제 크롬 원격 데스크톱 시험은 못 함.
 - 다른 컴퓨터용 통파일: tools/dist/ 에 extension 폴더 zip 생성.
+
+## 2026-10-20 · WVD-082 · v1.43.0 크롬 원격 데스크톱: 모든 키(시스템 키 포함) 원격 전달 + 켜고 끄기
+- black-remote.js(MAIN)+black-remote-flag.js: remotedesktop.google.com 화면을 누르면 navigator.keyboard.lock()(키 목록 없이 = 모든 키), 포커스를 잃거나(다른 탭·창 클릭) 가려지거나 스위치를 끄면 unlock. 설정 blackRemoteKeys(기본 켬, <html data-smd-remote-keys>). 팝업 블랙전용 탭 스위치 1개가 이 잠금 + 앞서 만든 Alt+W·제스처·마우스 뒤로 버튼 비활성(v1.42.1)까지 켜고 끔(꺼지면 원격 화면에서도 평소처럼 동작).
+- 크롬 규칙상 한계: 키보드 잠금은 전체 화면에서만 실제 적용(시스템 키: Alt+Tab·Windows 키·Esc), 일반 창의 Ctrl+W·Ctrl+T 등 브라우저 예약 키는 확장이 못 막음. 전체 화면에서는 탭이 안 보여 '다른 탭 클릭으로 해제'는 전체 화면을 나온 뒤에 가능.
+- E2E: 가짜 원격 호스트에서 lock/unlock 기록·스위치 끄기 시험 추가. 232/232. UNVERIFIED: 실제 크롬 원격 데스크톱에서의 키 전달·잠금.
+- 두 컴퓨터 모두 v1.43.0 필요(통파일 tools/dist 에 생성).

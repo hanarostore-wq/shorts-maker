@@ -2453,6 +2453,33 @@ if (!only || '팝업'.includes(only) || only === 'popup') {
       record('[블랙전용] 크롬 원격 데스크톱 화면에서는 Alt+W 가 내 탭을 닫지 않고 그대로 전달됨', !pr.isClosed() && kr.includes('KeyW:false'), { note: `닫힘=${pr.isClosed()} 키=${kr}` });
       await pr.close().catch(() => {});
     }
+    // 원격 데스크톱 키 전달: 화면을 누르면 키보드 잠금(모든 키), 다른 탭을 누르면(포커스 잃음) 해제, 스위치를 끄면 잠그지 않고 Alt+W 도 평소처럼 동작
+    {
+      const pk = await ctx.newPage();
+      await pk.goto('https://remotedesktop.google.com/access', { waitUntil: 'domcontentloaded' });
+      await pk.waitForTimeout(1000);
+      await pk.mouse.click(300, 200);
+      await pk.waitForTimeout(500);
+      const a = await pk.evaluate(() => window.__kb.slice());
+      await pk.evaluate(() => window.dispatchEvent(new Event('blur')));
+      await pk.waitForTimeout(300);
+      const b = await pk.evaluate(() => window.__kb.slice());
+      record('[블랙전용] 원격 데스크톱 화면을 누르면 키보드 잠금(모든 키), 다른 탭·창을 누르면 풀림', a.join() === 'lock:all' && b.join() === 'lock:all,unlock', { note: `누른 뒤=${a} · 포커스 잃은 뒤=${b}` });
+      await pk.close().catch(() => {});
+      await setSettings({ blackRemoteKeys: false });
+      const pn = await ctx.newPage();
+      await pn.goto('https://remotedesktop.google.com/access', { waitUntil: 'domcontentloaded' });
+      await pn.waitForTimeout(1000);
+      await pn.mouse.click(300, 200);
+      await pn.waitForTimeout(500);
+      const off = await pn.evaluate(() => ({ kb: window.__kb.slice(), flag: document.documentElement.dataset.smdRemoteKeys }));
+      const closedOff = pn.waitForEvent('close', { timeout: 5000 }).then(() => true, () => false);
+      await pn.keyboard.press('Alt+KeyW');
+      const cOff = await closedOff;
+      record('[블랙전용] 원격 데스크톱 키 전달 스위치를 끄면 잠그지 않고 Alt+W 도 이 브라우저가 처리(탭 닫힘)', off.kb.length === 0 && off.flag === '0' && cOff, { note: `잠금=${off.kb} 표시=${off.flag} 닫힘=${cOff}` });
+      if (!cOff) await pn.close().catch(() => {});
+      await setSettings({ blackRemoteKeys: true });
+    }
     // 끄면 안 닫힘
     await setSettings({ blackAltW: false });
     const p2 = await ctx.newPage();

@@ -46,6 +46,10 @@
         <input type="checkbox" id="blackPikpakPhoto" /><span class="sw"><i></i></span>
       </label>
       <label class="row-toggle">
+        <div><b>크롬 원격 데스크톱: 모든 키·제스처를 원격 컴퓨터로</b><small>remotedesktop.google.com 화면에서는 이 브라우저의 Alt+W·마우스 제스처·마우스 뒤로 버튼을 쓰지 않고 원격 컴퓨터로 그대로 보냅니다. 화면을 누르면 키보드 잠금으로 시스템 키(Alt+Tab·Windows 키·Esc 등)까지 원격으로 보내고, 다른 탭이나 창을 누르면 바로 풀립니다. 크롬 규칙상 시스템 키 전달은 전체 화면(F11·원격 데스크톱의 전체 화면 단추)에서만 되고, 일반 창의 Ctrl+W·Ctrl+T 같은 브라우저 예약 키는 확장이 막을 수 없습니다 (바꾼 뒤 원격 데스크톱 탭 새로고침)</small></div>
+        <input type="checkbox" id="blackRemoteKeys" /><span class="sw"><i></i></span>
+      </label>
+      <label class="row-toggle">
         <div><b>북마크바 아이콘만</b><small>북마크바에 바로 있는 북마크의 이름을 숨기고 아이콘만 보이게 합니다. 원래 이름은 보관했다가 끄면 그대로 되돌립니다 (처음 켤 때 북마크 권한을 묻습니다 · 동기화 중이면 다른 기기 크롬에도 같이 적용)</small></div>
         <input type="checkbox" id="blackBmIcons" /><span class="sw"><i></i></span>
       </label>
@@ -327,6 +331,22 @@
         say(pp.checked ? '픽팍 사진 뷰어 닫기: 켜짐 (열려 있는 픽팍 탭에도 바로 적용)' : '픽팍 사진 뷰어 닫기: 꺼짐');
       } catch (err) {
         pp.checked = !pp.checked;
+        say(`저장 실패 — 단계: 설정 저장 / 원인: ${err?.message || err} / 조치: 팝업을 닫았다 다시 여세요.`);
+      }
+    });
+  }
+
+  // 크롬 원격 데스크톱 키 전달
+  {
+    const pr = pane.querySelector('#blackRemoteKeys');
+    chrome.storage.local.get('settings').then((r) => (pr.checked = r.settings?.blackRemoteKeys !== false), () => {});
+    pr.addEventListener('change', async () => {
+      try {
+        const { settings } = await chrome.storage.local.get('settings');
+        await chrome.storage.local.set({ settings: { ...(settings || {}), blackRemoteKeys: pr.checked } });
+        say(pr.checked ? '원격 데스크톱 키 전달: 켜짐 (열려 있는 원격 탭에도 바로 적용)' : '원격 데스크톱 키 전달: 꺼짐');
+      } catch (err) {
+        pr.checked = !pr.checked;
         say(`저장 실패 — 단계: 설정 저장 / 원인: ${err?.message || err} / 조치: 팝업을 닫았다 다시 여세요.`);
       }
     });

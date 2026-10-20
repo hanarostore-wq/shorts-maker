@@ -715,7 +715,7 @@ const handlers = {
   // ── 픽팍 모의 사이트(블랙전용 '재생 버튼 → 팟플레이어' 시험): 사이트의 webpack·Vue 구조와 ▶ 카드를 흉내 낸다 ──
   // 크롬 원격 데스크톱 웹 클라이언트 흉내: 키·마우스가 원격 컴퓨터로 가므로 내 크롬 확장은 Alt+W·제스처를 가로채면 안 된다
   'remotedesktop.google.com': (req, res, u) => html(res, `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>원격 데스크톱</title></head><body style="margin:0"><canvas id="c" width="800" height="500" style="background:#246"></canvas>
-<script>window.__keys = []; window.__ctx = 0; window.__pd = [];
+<script>window.__keys = []; window.__ctx = 0; window.__pd = []; window.__kb = []; Object.defineProperty(navigator, 'keyboard', { value: { lock: (k) => { window.__kb.push('lock:' + (k === undefined ? 'all' : k.join())); return Promise.resolve(); }, unlock: () => { window.__kb.push('unlock'); } } });
   addEventListener('keydown', (e) => { window.__keys.push(e.code + ':' + e.defaultPrevented); });
   addEventListener('contextmenu', (e) => { window.__ctx++; });
   addEventListener('mouseup', (e) => { if (e.button === 3) window.__pd.push(e.defaultPrevented); });

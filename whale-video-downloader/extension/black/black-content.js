@@ -21,9 +21,13 @@
       return false;
     }
   };
-  chrome.storage.local.get('settings').then((r) => (on = r.settings?.blackAltW !== false), () => {});
+  let remoteOn = true; // 원격 데스크톱 키 전달(설정 blackRemoteKeys, 기본 켬)
+  chrome.storage.local.get('settings').then((r) => ((on = r.settings?.blackAltW !== false), (remoteOn = r.settings?.blackRemoteKeys !== false)), () => {});
   chrome.storage.onChanged.addListener((c, area) => {
-    if (area === 'local' && c.settings) on = c.settings.newValue?.blackAltW !== false;
+    if (area === 'local' && c.settings) {
+      on = c.settings.newValue?.blackAltW !== false;
+      remoteOn = c.settings.newValue?.blackRemoteKeys !== false;
+    }
   });
 
   // 오류 안내(단계·원인·조치) — 화면 아래 가운데, 8초
@@ -42,7 +46,7 @@
     'keydown',
     (ev) => {
       if (!ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.code !== 'KeyW' || ev.repeat) return;
-      if (REMOTE.test(location.hostname)) return; // 크롬 원격 데스크톱 화면: 키를 원격 컴퓨터로 그대로 보낸다(내 탭이 닫히지 않게)
+      if (remoteOn && REMOTE.test(location.hostname)) return; // 크롬 원격 데스크톱 화면: 키를 원격 컴퓨터로 그대로 보낸다(내 탭이 닫히지 않게)
       const dead = !alive();
       if (dead && document.documentElement.getAttribute('data-smd-black') !== ME) return; // 새 스크립트가 처리
       if (!dead && (!on || globalThis.__SMD_OFF)) return; // __SMD_OFF: 이 사이트 제외
