@@ -12,6 +12,8 @@
   try {
     document.documentElement.setAttribute('data-smd-black', ME);
   } catch {}
+  // 원격 데스크톱(웹 클라이언트) 주소: 여기서는 Alt+W·제스처를 내 크롬이 가로채지 않는다
+  const REMOTE = /(^|\.)remotedesktop\.google\.com$/i;
   const alive = () => {
     try {
       return !!chrome.runtime?.id;
@@ -40,6 +42,7 @@
     'keydown',
     (ev) => {
       if (!ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.code !== 'KeyW' || ev.repeat) return;
+      if (REMOTE.test(location.hostname)) return; // 크롬 원격 데스크톱 화면: 키를 원격 컴퓨터로 그대로 보낸다(내 탭이 닫히지 않게)
       const dead = !alive();
       if (dead && document.documentElement.getAttribute('data-smd-black') !== ME) return; // 새 스크립트가 처리
       if (!dead && (!on || globalThis.__SMD_OFF)) return; // __SMD_OFF: 이 사이트 제외

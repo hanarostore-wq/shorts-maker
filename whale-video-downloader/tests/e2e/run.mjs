@@ -2442,6 +2442,17 @@ if (!only || '팝업'.includes(only) || only === 'popup') {
     const c1 = await closed1;
     record('[블랙전용] Alt+W 를 누르면 지금 탭이 닫힘', c1, { note: c1 ? '닫힘' : '안 닫힘' });
     if (!c1) await p1.close().catch(() => {});
+    // 크롬 원격 데스크톱 화면: Alt+W 는 내 탭을 닫지 않고 키가 그대로 원격으로 전달됨(확장이 막지 않음)
+    {
+      const pr = await ctx.newPage();
+      await pr.goto('https://remotedesktop.google.com/access', { waitUntil: 'domcontentloaded' });
+      await pr.waitForTimeout(1200);
+      await pr.keyboard.press('Alt+KeyW');
+      await pr.waitForTimeout(1500);
+      const kr = await pr.evaluate(() => window.__keys.slice());
+      record('[블랙전용] 크롬 원격 데스크톱 화면에서는 Alt+W 가 내 탭을 닫지 않고 그대로 전달됨', !pr.isClosed() && kr.includes('KeyW:false'), { note: `닫힘=${pr.isClosed()} 키=${kr}` });
+      await pr.close().catch(() => {});
+    }
     // 끄면 안 닫힘
     await setSettings({ blackAltW: false });
     const p2 = await ctx.newPage();
@@ -2880,6 +2891,23 @@ if (!only || only === 'pikpak' || '픽팍'.includes(only)) {
       record('[제스처] 이전 페이지가 있는 탭에서는 마우스 뒤로 버튼을 건드리지 않음(브라우저 기본 동작)', !pg3.isClosed() && prevented === false, { note: `닫힘=${pg3.isClosed()} 기본동작막음=${prevented}` });
       await pg3.close().catch(() => {});
       await opener.close().catch(() => {});
+    }
+    // 크롬 원격 데스크톱 화면: 오른쪽 드래그 제스처·마우스 뒤로 버튼을 내 확장이 가로채지 않음(탭이 닫히지 않음)
+    {
+      const opener2 = await open(URLS.a);
+      const pr = await openLinked(opener2, 'https://remotedesktop.google.com/access');
+      await pr.mouse.move(400, 300);
+      await rdrag(pr, [400, 300], [[0, 140]]);
+      await pr.waitForTimeout(1200);
+      const gClosed = pr.isClosed();
+      let bPrevented = null;
+      if (!gClosed) {
+        bPrevented = await pr.evaluate(() => { const ev = new MouseEvent('mouseup', { button: 3, bubbles: true, cancelable: true }); window.dispatchEvent(ev); return ev.defaultPrevented; });
+        await pr.waitForTimeout(1200);
+      }
+      record('[제스처] 크롬 원격 데스크톱 화면에서는 ↓ 제스처·마우스 뒤로 버튼이 내 탭을 닫지 않음', !gClosed && bPrevented === false && !pr.isClosed(), { note: `제스처로 닫힘=${gClosed} 뒤로버튼 막음=${bPrevented} 닫힘=${pr.isClosed()}` });
+      await pr.close().catch(() => {});
+      await opener2.close().catch(() => {});
     }
     // ↑ 맨 위로 스크롤
     {

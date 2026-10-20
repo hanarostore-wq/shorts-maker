@@ -134,6 +134,8 @@
     return document.scrollingElement || document.documentElement;
   }
 
+  // 크롬 원격 데스크톱 화면에서는 제스처·마우스 뒤로 버튼을 내 크롬이 가로채지 않는다(원격 컴퓨터로 그대로 전달)
+  const REMOTE = /(^|\.)remotedesktop\.google\.com$/i;
   function send(action) {
     chrome.runtime.sendMessage({ type: 'smd:black-gesture', action }).then(
       (r) => r?.error && showErr({ what: core.ACTIONS[action], ...r.error }),
@@ -156,7 +158,7 @@
   addEventListener(
     'mousedown',
     (e) => {
-      if (e.button !== 2 || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || !on || globalThis.__SMD_OFF || tiny()) return; // __SMD_OFF: 이 사이트 제외
+      if (e.button !== 2 || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || !on || globalThis.__SMD_OFF || REMOTE.test(location.hostname) || tiny()) return; // __SMD_OFF: 이 사이트 제외
       if (!alive() && !newest()) return;
       down = true;
       swallow = false;
@@ -226,7 +228,7 @@
   addEventListener(
     'mouseup',
     (e) => {
-      if (e.button !== 3 || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || !on || globalThis.__SMD_OFF) return;
+      if (e.button !== 3 || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || !on || globalThis.__SMD_OFF || REMOTE.test(location.hostname)) return;
       if (window.top !== window || history.length > 1) return;
       e.preventDefault();
       e.stopImmediatePropagation();
