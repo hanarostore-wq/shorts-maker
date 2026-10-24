@@ -70,6 +70,23 @@
       <p class="note" id="gestMsg" style="white-space:pre-line" hidden></p>
     </div>
     <div class="card">
+      <div class="card-head"><div class="grow"><strong>451 우회 (법적 사유로 이용 불가)</strong><small>한국 안 서버에서 막힌 사이트를, 한국 밖 프록시로 그 사이트만 돌려서 엽니다. 프록시 서버는 직접 준비해야 합니다 (로그인이 필요한 프록시는 지원하지 않음). 다른 프록시·VPN 확장이 켜져 있으면 동작하지 않습니다</small></div></div>
+      <label class="row-toggle">
+        <div><b>451 우회 사용</b><small>켜면 아래 목록의 사이트만 프록시로 접속하고 나머지는 직접 연결합니다. 451 이 뜬 페이지 아래에 [우회로 다시 열기] 띠가 나옵니다</small></div>
+        <input type="checkbox" id="blackBypassOn" /><span class="sw"><i></i></span>
+      </label>
+      <div class="btns" style="display:flex;gap:8px;margin:8px 0">
+        <input type="text" id="bypassProxy" placeholder="socks5://203.0.113.5:1080" spellcheck="false" style="flex:1;min-width:0" />
+        <button class="btn" type="button" id="bypassSave">저장</button>
+      </div>
+      <div class="btns" style="display:flex;gap:8px;margin:8px 0">
+        <input type="text" id="bypassHost" placeholder="막힌 사이트 (예: example.com)" spellcheck="false" style="flex:1;min-width:0" />
+        <button class="btn" type="button" id="bypassAdd">추가</button>
+      </div>
+      <ul id="bypassList" style="list-style:none;margin:0;padding:0"></ul>
+      <p class="note" id="bypassMsg" style="white-space:pre-line" hidden></p>
+    </div>
+    <div class="card">
       <div class="card-head"><div class="grow"><strong>비밀번호 관리</strong><small>크롬처럼 로그인하면 아이디·비밀번호를 저장하고, 다음에 그 사이트에서 자동으로 채웁니다. 이 PC 에만 보관합니다(동기화·설정 내보내기에 들어가지 않음, 잠금 없음)</small></div></div>
       <label class="row-toggle">
         <div><b>비밀번호 자동 입력</b><small>저장된 계정이 하나면 바로 채우고, 여러 개면 칸을 누를 때 고릅니다</small></div>
@@ -113,6 +130,93 @@
       say(`저장 실패 — 단계: 설정 저장 / 원인: ${err?.message || err} / 조치: 팝업을 닫았다 다시 여세요.`);
     }
   });
+
+  // 451 우회
+  {
+    const on = pane.querySelector('#blackBypassOn');
+    const proxy = pane.querySelector('#bypassProxy');
+    const host = pane.querySelector('#bypassHost');
+    const list = pane.querySelector('#bypassList');
+    const el = pane.querySelector('#bypassMsg');
+    const say = (t, bad = false) => {
+      el.hidden = !t;
+      el.textContent = t;
+      el.style.color = bad ? '#ff6b81' : '';
+    };
+    const fail = (what, e) => say(`${what} 실패\n단계: ${e.step}\n원인: ${e.reason}\n조치: ${e.action || '팝업을 닫았다 다시 여세요.'}`, true);
+    const call = async (what, m) => {
+      try {
+        const r = await chrome.runtime.sendMessage({ ...m, type: 'smd:bypass-' + m.type });
+        if (r?.error) return void fail(what, r.error);
+        return r;
+      } catch (err) {
+        fail(what, { step: '확장 백그라운드 연결', reason: err?.message || err });
+      }
+    };
+    const render = (s) => {
+      on.checked = s.on;
+      if (document.activeElement !== proxy) proxy.value = s.proxy;
+      list.textContent = '';
+      for (const h of s.hosts) {
+        const li = document.createElement('li');
+        li.style.cssText = 'display:flex;gap:6px;align-items:center;padding:3px 0';
+        const name = document.createElement('span');
+        name.style.flex = '1';
+        name.textContent = h;
+        const test = document.createElement('button');
+        test.className = 'btn ghost';
+        test.type = 'button';
+        test.textContent = '시험';
+        test.onclick = async () => {
+          say(`${h} 연결 시험 중… (최대 12초)`);
+          const r = await call('연결 시험', { type: 'test', host: h });
+          if (r) say(`${h}: 프록시로 연결됨 (응답 ${r.status}, 451 아님)`);
+        };
+        const del = document.createElement('button');
+        del.className = 'btn ghost';
+        del.type = 'button';
+        del.textContent = '×';
+        del.setAttribute('aria-label', `${h} 목록에서 빼기`);
+        del.onclick = async () => {
+          const r = await call('사이트 빼기', { type: 'host', remove: h });
+          if (r) render(r);
+        };
+        li.append(name, test, del);
+        list.appendChild(li);
+      }
+    };
+    const load = async () => {
+      const r = await call('우회 설정 불러오기', { type: 'get' });
+      if (r) render(r);
+    };
+    // 권한 묻기는 누른 그 순간에 해야 한다(다른 기다림보다 먼저)
+    const save = async (want) => {
+      try {
+        if (want && !(await chrome.permissions.request({ permissions: ['proxy'] }))) {
+          on.checked = false;
+          return say("451 우회 실패\n단계: 프록시 권한 요청\n원인: 프록시 권한을 허용하지 않았습니다\n조치: 다시 누르고 묻는 창에서 '허용'을 누르세요.", true);
+        }
+      } catch (err) {
+        on.checked = false;
+        return say(`451 우회 실패\n단계: 프록시 권한 요청\n원인: ${err?.message || err}\n조치: 팝업을 닫았다 다시 열고 누르세요.`, true);
+      }
+      const r = await call('우회 설정 저장', { type: 'save', on: want, proxy: proxy.value });
+      if (!r) return void load();
+      render(r);
+      say(r.on ? `우회 켜짐: ${r.hosts.length ? `${r.hosts.length}개 사이트를 ${r.proxy} 로 돌립니다` : '사이트를 추가하면 그 사이트부터 돌립니다'} (열린 탭은 새로고침)` : '우회 꺼짐');
+    };
+    on.addEventListener('change', () => save(on.checked));
+    pane.querySelector('#bypassSave').addEventListener('click', () => save(on.checked || !!proxy.value.trim()));
+    pane.querySelector('#bypassAdd').addEventListener('click', async () => {
+      const r = await call('사이트 추가', { type: 'host', add: host.value });
+      if (!r) return;
+      host.value = '';
+      render(r);
+      say(r.on ? '추가했습니다 (열린 탭은 새로고침)' : '추가했습니다. 위 스위치를 켜야 돌려서 열립니다');
+    });
+    tab.addEventListener('click', load);
+    load();
+  }
 
   // 비밀번호 관리
   {

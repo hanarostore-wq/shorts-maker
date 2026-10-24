@@ -18,8 +18,8 @@ fs.cpSync(src, out, { recursive: true, filter: (p) => path.relative(src, p).spli
 const mfPath = path.join(out, 'manifest.json');
 const mf = JSON.parse(fs.readFileSync(mfPath, 'utf8'));
 mf.content_scripts = (mf.content_scripts || []).filter((g) => !g.js.some((f) => f.startsWith('black/')));
-// 블랙전용 북마크바 아이콘만에만 쓰는 권한
-mf.optional_permissions = (mf.optional_permissions || []).filter((p) => p !== 'bookmarks');
+// 블랙전용 북마크바 아이콘만·451 우회에만 쓰는 권한
+mf.optional_permissions = (mf.optional_permissions || []).filter((p) => p !== 'bookmarks' && p !== 'proxy');
 if (!mf.optional_permissions.length) delete mf.optional_permissions;
 fs.writeFileSync(mfPath, `${JSON.stringify(mf, null, 2)}\n`);
 
@@ -38,7 +38,7 @@ const problems = [];
       fs.writeFileSync(full, text);
     }
     text.split('\n').forEach((l, i) => {
-      if (/black\/|블랙전용|smd:black|blackAltW|blackBm|blackGoogle|blackGesture|__SMD_GESTURE|blackPikpak|blackRemoteKeys|smd-remote|smdRemote|smd-pikpak|SMD_PIKPAK|smdPikpak|blackPw|smd:pw-|"bookmarks"/.test(l)) problems.push(`${path.relative(out, full)}:${i + 1}: ${l.trim().slice(0, 120)}`);
+      if (/black\/|블랙전용|smd:black|blackAltW|blackBm|blackGoogle|blackGesture|__SMD_GESTURE|blackPikpak|blackRemoteKeys|smd-remote|smdRemote|smd-pikpak|SMD_PIKPAK|smdPikpak|blackPw|smd:pw-|blackBypass|smd:bypass|"bookmarks"|"proxy"/.test(l)) problems.push(`${path.relative(out, full)}:${i + 1}: ${l.trim().slice(0, 120)}`);
     });
   }
 })(out);

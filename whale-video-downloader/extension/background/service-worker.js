@@ -8,6 +8,7 @@ import { resolveBg } from './resolvers.js';
 import '../black/black-sw.js'; // 블랙전용 (유료판에서 빠짐)
 import '../black/black-bookmarks.js'; // 블랙전용 (유료판에서 빠짐)
 import '../black/black-pw-sw.js'; // 블랙전용 (유료판에서 빠짐)
+import '../black/black-bypass-sw.js'; // 블랙전용 (유료판에서 빠짐)
 
 const jobs = new Map();
 let jobSeq = 0;

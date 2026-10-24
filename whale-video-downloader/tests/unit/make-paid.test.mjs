@@ -18,6 +18,7 @@ test('유료판: 블랙전용(black/ 폴더·manifest·import·팝업 script) �
   assert.equal(mf.content_scripts.some((g) => g.js.some((f) => f.startsWith('black/'))), false);
   assert.equal((mf.optional_permissions || []).includes('bookmarks'), false);
   assert.equal((mf.permissions || []).includes('bookmarks'), false);
+  assert.equal((mf.optional_permissions || []).includes('proxy'), false);
   assert.doesNotMatch(fs.readFileSync(path.join(ext, 'background', 'service-worker.js'), 'utf8'), /black/);
   assert.doesNotMatch(fs.readFileSync(path.join(ext, 'popup', 'popup.html'), 'utf8'), /black/);
   // 원본(개인판)에는 그대로 있음
