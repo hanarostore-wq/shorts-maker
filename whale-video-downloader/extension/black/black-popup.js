@@ -75,6 +75,10 @@
         <div><b>451 우회 사용</b><small>켜면 아래 목록의 사이트만 프록시로 접속하고 나머지는 직접 연결합니다. 451 이 뜬 페이지 아래에 [우회로 다시 열기] 띠가 나옵니다</small></div>
         <input type="checkbox" id="blackBypassOn" /><span class="sw"><i></i></span>
       </label>
+      <label class="row-toggle">
+        <div><b>451 뜨면 자동으로 우회</b><small>451 이 뜬 사이트를 자동으로 목록에 넣고 바로 새로고침합니다. 끄면 페이지 아래 [우회로 다시 열기]를 눌러야 합니다</small></div>
+        <input type="checkbox" id="bypassAuto" /><span class="sw"><i></i></span>
+      </label>
       <div class="btns" style="display:flex;gap:8px;margin:8px 0">
         <input type="text" id="bypassProxy" placeholder="socks5://203.0.113.5:1080" spellcheck="false" style="flex:1;min-width:0" />
         <button class="btn" type="button" id="bypassSave">저장</button>
@@ -134,6 +138,7 @@
   // 451 우회
   {
     const on = pane.querySelector('#blackBypassOn');
+    const auto = pane.querySelector('#bypassAuto');
     const proxy = pane.querySelector('#bypassProxy');
     const host = pane.querySelector('#bypassHost');
     const list = pane.querySelector('#bypassList');
@@ -155,6 +160,7 @@
     };
     const render = (s) => {
       on.checked = s.on;
+      auto.checked = s.auto !== false;
       if (document.activeElement !== proxy) proxy.value = s.proxy;
       list.textContent = '';
       for (const h of s.hosts) {
@@ -200,12 +206,13 @@
         on.checked = false;
         return say(`451 우회 실패\n단계: 프록시 권한 요청\n원인: ${err?.message || err}\n조치: 팝업을 닫았다 다시 열고 누르세요.`, true);
       }
-      const r = await call('우회 설정 저장', { type: 'save', on: want, proxy: proxy.value });
+      const r = await call('우회 설정 저장', { type: 'save', on: want, auto: auto.checked, proxy: proxy.value });
       if (!r) return void load();
       render(r);
       say(r.on ? `우회 켜짐: ${r.hosts.length ? `${r.hosts.length}개 사이트를 ${r.proxy} 로 돌립니다` : '사이트를 추가하면 그 사이트부터 돌립니다'} (열린 탭은 새로고침)` : '우회 꺼짐');
     };
     on.addEventListener('change', () => save(on.checked));
+    auto.addEventListener('change', () => save(on.checked));
     pane.querySelector('#bypassSave').addEventListener('click', () => save(on.checked || !!proxy.value.trim()));
     pane.querySelector('#bypassAdd').addEventListener('click', async () => {
       const r = await call('사이트 추가', { type: 'host', add: host.value });

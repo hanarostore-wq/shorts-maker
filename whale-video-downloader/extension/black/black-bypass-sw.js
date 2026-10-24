@@ -1,13 +1,13 @@
 // 블랙전용(개인용 기능) — HTTP 451 우회(서비스워커 쪽). 유료판에서는 tools/make-paid.mjs 가 이 파일과 import 줄을 뺀다.
 //  - 보관: chrome.storage.local 의 blackBypass {on, proxy, hosts} — 설정(settings)과 따로 두어 내보내기·동기화에 들어가지 않는다.
-//  - 451 이 뜬 탭에는 아래쪽에 [우회로 다시 열기] 띠를 넣는다. 눌러야만 그 사이트가 프록시 목록에 들어간다(몰래 돌리지 않음).
+//  - 451 이 뜨면(자동 우회 켬, 기본) 그 사이트만 목록에 넣고 바로 새로고침한다. 자동이 꺼져 있거나 못 하면 아래쪽에 [우회로 다시 열기] 띠를 넣는다.
 //  - 프록시는 PAC 로 '목록의 사이트만' 돌린다. 다른 확장이 프록시를 쥐고 있으면 덮어쓰지 않고 이유를 알린다.
 import { normalizeHost, parseProxy, planBypass } from './black-bypass-core.js';
 
 const KEY = 'blackBypass';
 const err = (step, reason, action) => ({ error: { step, reason, action } });
 const ext = (sender) => sender.id === chrome.runtime.id && String(sender.url || '').startsWith(`chrome-extension://${chrome.runtime.id}/`);
-const read = async () => ({ on: false, proxy: '', hosts: [], ...((await chrome.storage.local.get(KEY))[KEY] || {}) });
+const read = async () => ({ on: false, auto: true, proxy: '', hosts: [], ...((await chrome.storage.local.get(KEY))[KEY] || {}) });
 const write = (s) => chrome.storage.local.set({ [KEY]: s });
 let lock = Promise.resolve();
 const serial = (fn) => {
@@ -43,7 +43,7 @@ async function apply(state) {
   return { applied: true, hosts: plan.hosts, proxy: plan.proxy.normalized };
 }
 
-const view = (s) => ({ on: s.on, proxy: s.proxy, hosts: s.hosts });
+const view = (s) => ({ on: s.on, auto: s.auto, proxy: s.proxy, hosts: s.hosts });
 const hasPerm = () => chrome.permissions.contains({ permissions: ['proxy'] }).catch(() => false);
 
 // 시작할 때·권한이 생겼을 때 한 번 맞춰 둔다(브라우저가 설정을 기억해도 목록과 어긋나 있지 않게)
@@ -63,27 +63,47 @@ chrome.webRequest.onCompleted.addListener(
 );
 chrome.webRequest.onBeforeRequest.addListener((d) => void hit.delete(d.tabId), { urls: ['http://*/*', 'https://*/*'], types: ['main_frame'] });
 chrome.tabs.onRemoved.addListener((id) => hit.delete(id));
+const tried = new Map(); // tabId → 자동 우회를 이미 한 번 해 본 호스트(같은 사이트에서 새로고침이 끝없이 되풀이되지 않게)
+// 451 호스트를 목록에 넣고 프록시에 반영한다 → {ok} 또는 {error}
+async function addHost(host) {
+  if (!(await hasPerm())) return err('프록시 권한 확인', '프록시 권한이 아직 없습니다', '먼저 팝업 블랙전용 → 451 우회에서 프록시 주소를 저장하고 권한을 허용하세요.');
+  return serial(async () => {
+    const s = await read();
+    if (parseProxy(s.proxy).error) return err('프록시 주소 확인', s.proxy ? '저장된 프록시 주소를 읽지 못했습니다' : '프록시 주소가 아직 없습니다', '팝업 블랙전용 → 451 우회에서 한국 밖 프록시 주소를 저장하세요.');
+    const next = { ...s, on: true, hosts: [...new Set([...s.hosts, host])] };
+    const a = await apply(next);
+    if (a.error) return a;
+    await write(next);
+    return { ok: true, host };
+  });
+}
 chrome.tabs.onUpdated.addListener(async (tabId, info) => {
   const h = hit.get(tabId);
   if (info.status !== 'complete' || !h) return;
   hit.delete(tabId);
+  let msg = '';
+  let button = '';
   try {
     const s = await read();
     const routed = s.on && s.hosts.includes(h.host);
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: injectBar,
-      args: [
-        routed
-          ? '우회 프록시로 열었는데도 451 입니다. 프록시가 한국 안에 있거나 같은 클라우드플레어 서버를 쓰는 것 같습니다 — 한국 밖(일본·미국 등) 프록시로 바꿔 보세요.'
-          : '이 사이트는 한국 안 서버에서 법적 사유(451)로 막혔습니다. 한국 밖 프록시로 이 사이트만 돌려서 열 수 있습니다.',
-        routed ? '' : '우회로 다시 열기',
-      ],
-    });
+    if (routed) {
+      msg = '우회 프록시로 열었는데도 451 입니다. 프록시가 한국 안에 있거나 같은 클라우드플레어 서버를 쓰는 것 같습니다 — 한국 밖(일본·미국 등) 프록시로 바꿔 보세요.';
+    } else if (s.auto && tried.get(tabId) !== h.host) {
+      // 자동 우회: 451 이 뜬 사이트만 목록에 넣고 바로 새로고침
+      tried.set(tabId, h.host);
+      const r = await addHost(h.host);
+      if (r.ok) return void chrome.tabs.reload(tabId, { bypassCache: true });
+      msg = `451 로 막힌 사이트를 자동으로 우회하지 못했습니다\n단계: ${r.error.step}\n원인: ${r.error.reason}\n조치: ${r.error.action}`;
+    } else {
+      msg = '이 사이트는 한국 안 서버에서 법적 사유(451)로 막혔습니다. 한국 밖 프록시로 이 사이트만 돌려서 열 수 있습니다.';
+      button = '우회로 다시 열기';
+    }
+    await chrome.scripting.executeScript({ target: { tabId }, func: injectBar, args: [msg, button] });
   } catch {
     // 띠를 못 넣는 탭(보호된 페이지 등)은 건너뜀 — 팝업에서 직접 사이트를 추가할 수 있다
   }
 });
+chrome.tabs.onRemoved.addListener((id) => tried.delete(id));
 
 // 탭 안에 넣는 띠(이 함수는 그대로 페이지에 들어가므로 바깥 변수를 쓰지 않는다)
 function injectBar(text, button) {
@@ -134,16 +154,7 @@ const handlers = {
     if (sender.frameId !== 0 || !sender.tab) return err('사이트 찾기', '우회할 탭을 브라우저가 알려 주지 않았습니다', '팝업 블랙전용 → 451 우회에서 사이트를 직접 추가하세요.');
     const r = normalizeHost(sender.url);
     if (r.error) return r;
-    if (!(await hasPerm())) return err('프록시 권한 확인', '프록시 권한이 아직 없습니다', '먼저 팝업 블랙전용 → 451 우회에서 프록시 주소를 저장하고 권한을 허용하세요.');
-    return serial(async () => {
-      const s = await read();
-      if (parseProxy(s.proxy).error) return err('프록시 주소 확인', s.proxy ? '저장된 프록시 주소를 읽지 못했습니다' : '프록시 주소가 아직 없습니다', '팝업 블랙전용 → 451 우회에서 한국 밖 프록시 주소를 저장하세요.');
-      const next = { ...s, on: true, hosts: [...new Set([...s.hosts, r.host])] };
-      const a = await apply(next);
-      if (a.error) return a;
-      await write(next);
-      return { ok: true, host: r.host };
-    });
+    return addHost(r.host);
   },
   // ── 팝업(블랙전용 탭) ──
   async 'smd:bypass-get'(msg, sender) {
@@ -161,7 +172,7 @@ const handlers = {
     } else if (msg.on) return err('프록시 주소 확인', '프록시 주소를 입력하지 않았습니다', '한국 밖에 있는 프록시를 socks5://주소:포트 형식으로 넣으세요.');
     if (msg.on && !(await hasPerm())) return err('프록시 권한 확인', '프록시 권한이 없습니다', '[저장]을 다시 누르고 권한 묻기 창에서 [허용]을 누르세요.');
     return serial(async () => {
-      const next = { ...(await read()), proxy: norm, on: !!msg.on };
+      const next = { ...(await read()), proxy: norm, on: !!msg.on, auto: msg.auto !== false };
       const a = await apply(next);
       if (a.error) return a;
       await write(next);
