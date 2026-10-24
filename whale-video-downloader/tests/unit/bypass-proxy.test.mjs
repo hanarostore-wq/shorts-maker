@@ -70,3 +70,13 @@ test('오류 경로: 닫힌 포트는 연결 거절(rep 5), 없는 이름은 호
   assert.equal((await socks(pp, 'no-such-host.invalid', 80)).rep, 4);
   proxy.close();
 });
+
+test('설치 스크립트(install.sh)에 들어 있는 프록시가 원본(socks5-proxy.mjs)과 같음', async () => {
+  const fs = await import('node:fs');
+  const { buildInstaller } = await import('../../tools/bypass-proxy/make-installer.mjs');
+  const dir = new URL('../../tools/bypass-proxy/', import.meta.url);
+  const sh = fs.readFileSync(new URL('install.sh', dir), 'utf8');
+  assert.equal(sh, buildInstaller(), 'install.sh 가 오래됨 — node tools/bypass-proxy/make-installer.mjs 를 다시 실행하세요');
+  const b64 = sh.split("<<'B64'\n")[1].split('\nB64')[0].replace(/\s+/g, '');
+  assert.equal(Buffer.from(b64, 'base64').toString(), fs.readFileSync(new URL('socks5-proxy.mjs', dir), 'utf8'));
+});

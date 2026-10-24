@@ -8,29 +8,18 @@
 - Node 18 이상 (`node -v` 로 확인)
 - 내 PC 의 공인 IP — https://api.ipify.org 를 열면 나옵니다. (확장은 프록시 로그인을 지원하지 않아 **내 IP 만 허용**하는 방식입니다)
 
-## 설치 (서버에서)
+## 설치 (서버에서, 한 번에)
+1. 서버에 `tools/bypass-proxy/install.sh` 파일 하나만 올립니다 (`scp tools/bypass-proxy/install.sh root@서버IP:` 또는 내용을 붙여넣기).
+2. 서버에 SSH 로 접속해 실행합니다.
 ```bash
-git clone https://github.com/hanarostore-wq/shorts-maker.git && cd shorts-maker/whale-video-downloader
-ALLOW_IPS=내공인IP PORT=1080 node tools/bypass-proxy/socks5-proxy.mjs
+sudo bash install.sh            # 지금 SSH 로 접속한 내 주소를 자동으로 허용 IP 로 씀
+sudo bash install.sh 203.0.113.7 1080   # IP·포트를 직접 줄 때
 ```
-`SOCKS5 프록시 켜짐: 포트 1080, 허용 IP …` 가 나오면 됩니다. 계속 켜 두려면:
-```bash
-sudo tee /etc/systemd/system/bypass-proxy.service >/dev/null <<UNIT
-[Unit]
-Description=451 bypass SOCKS5 proxy
-After=network.target
-[Service]
-Environment=ALLOW_IPS=내공인IP
-Environment=PORT=1080
-WorkingDirectory=/경로/shorts-maker/whale-video-downloader
-ExecStart=/usr/bin/node tools/bypass-proxy/socks5-proxy.mjs
-Restart=always
-[Install]
-WantedBy=multi-user.target
-UNIT
-sudo systemctl enable --now bypass-proxy
-```
-서버 방화벽(클라우드 보안 그룹 포함)에서 1080 포트를 **내 공인 IP 에만** 열어 두세요.
+Node.js 설치 · 프록시 설치 · 자동 시작(systemd) · 서버 방화벽(ufw) 설정을 알아서 하고, 끝에 확장에 넣을 `socks5://서버IP:포트` 를 알려 줍니다.
+3. 서버 업체 콘솔의 보안 그룹·방화벽에서 TCP 1080 을 **내 공인 IP 에게만** 열어 줍니다 (업체 설정이라 스크립트가 못 합니다).
+
+설치 파일은 `node tools/bypass-proxy/make-installer.mjs` 로 만듭니다(프록시 코드를 고쳤을 때 다시 실행 — 안 하면 테스트가 알려 줍니다).
+직접 실행하려면: `ALLOW_IPS=내공인IP PORT=1080 node tools/bypass-proxy/socks5-proxy.mjs`
 
 ## 확장에 넣기
 팝업 → `블랙전용` → `451 우회` → 주소칸에 `socks5://서버IP:1080` → [저장] (권한 묻기에서 [허용]).
