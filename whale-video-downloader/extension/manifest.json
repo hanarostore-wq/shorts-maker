@@ -3,7 +3,7 @@
   "manifest_version": 3,
   "name": "웨일 영상 다운로더",
   "short_name": "영상 다운로더",
-  "version": "1.44.2",
+  "version": "1.44.3",
   "description": "유튜브·쇼츠·틱톡·인스타·X·블루스카이·빌리빌리 등 17개 사이트 영상을 원본화질로 바로 저장합니다. 별도 프로그램 없이 확장프로그램만으로 동작합니다.",
   "minimum_chrome_version": "116",
   "icons": {
@@ -57,7 +57,12 @@
       "all_frames": true,
       "exclude_matches": [
         "*://remotedesktop.google.com/*",
-        "*://*.remotedesktop.google.com/*"
+        "*://*.remotedesktop.google.com/*",
+        "*://*.google.com/*",
+        "*://*.googleapis.com/*",
+        "*://*.gstatic.com/*",
+        "*://*.googleusercontent.com/*",
+        "*://*.chromoting.com/*"
       ]
     },
     {
@@ -72,7 +77,12 @@
       "world": "MAIN",
       "exclude_matches": [
         "*://remotedesktop.google.com/*",
-        "*://*.remotedesktop.google.com/*"
+        "*://*.remotedesktop.google.com/*",
+        "*://*.google.com/*",
+        "*://*.googleapis.com/*",
+        "*://*.gstatic.com/*",
+        "*://*.googleusercontent.com/*",
+        "*://*.chromoting.com/*"
       ]
     },
     {
@@ -143,7 +153,12 @@
       "all_frames": true,
       "exclude_matches": [
         "*://remotedesktop.google.com/*",
-        "*://*.remotedesktop.google.com/*"
+        "*://*.remotedesktop.google.com/*",
+        "*://*.google.com/*",
+        "*://*.googleapis.com/*",
+        "*://*.gstatic.com/*",
+        "*://*.googleusercontent.com/*",
+        "*://*.chromoting.com/*"
       ]
     },
     {
@@ -177,25 +192,6 @@
         "content/bsky-tools.js"
       ],
       "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "*://remotedesktop.google.com/*"
-      ],
-      "js": [
-        "black/black-remote-flag.js"
-      ],
-      "run_at": "document_start"
-    },
-    {
-      "matches": [
-        "*://remotedesktop.google.com/*"
-      ],
-      "js": [
-        "black/black-remote.js"
-      ],
-      "run_at": "document_start",
-      "world": "MAIN"
     },
     {
       "matches": [
@@ -234,7 +230,12 @@
       "all_frames": true,
       "exclude_matches": [
         "*://remotedesktop.google.com/*",
-        "*://*.remotedesktop.google.com/*"
+        "*://*.remotedesktop.google.com/*",
+        "*://*.google.com/*",
+        "*://*.googleapis.com/*",
+        "*://*.gstatic.com/*",
+        "*://*.googleusercontent.com/*",
+        "*://*.chromoting.com/*"
       ]
     },
     {
@@ -248,7 +249,12 @@
       "all_frames": true,
       "exclude_matches": [
         "*://remotedesktop.google.com/*",
-        "*://*.remotedesktop.google.com/*"
+        "*://*.remotedesktop.google.com/*",
+        "*://*.google.com/*",
+        "*://*.googleapis.com/*",
+        "*://*.gstatic.com/*",
+        "*://*.googleusercontent.com/*",
+        "*://*.chromoting.com/*"
       ]
     },
     {
