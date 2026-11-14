@@ -3,13 +3,13 @@
 //    이 화면이 포커스를 잃거나(다른 탭·창을 누름) 가려지면 바로 푼다 → 다른 탭을 누르면 풀림
 //  - 한계(브라우저 규칙): 크롬은 키보드 잠금을 '전체 화면'일 때만 실제로 적용한다. 전체 화면(F11 또는 원격 데스크톱의 전체 화면 단추)에서는 Alt+Tab·Windows 키·Esc 등 시스템 키까지 원격으로 가고,
 //    일반 창에서는 Ctrl+W·Ctrl+T·Ctrl+N 같은 브라우저 예약 키는 어떤 확장도 막을 수 없다
-//  - 켜고 끄기: 팝업 블랙전용 탭의 '원격 데스크톱 키 전달' 스위치(<html data-smd-remote-keys="0|1">, 기본 켬) · '이 사이트 제외'(<html data-smd-off>)
+//  - 켜고 끄기: 팝업 블랙전용 탭의 '원격 데스크톱 키 전달' 스위치(<html data-smd-remote-keys="0|1">, 기본 끔 — 켜 두면 일부 환경에서 원격 연결 오류가 날 수 있어 직접 켜야 함) · '이 사이트 제외'(<html data-smd-off>)
 (() => {
   'use strict';
   if (globalThis.__smdRemoteKeys || window.top !== window) return;
   Object.defineProperty(globalThis, '__smdRemoteKeys', { value: true, enumerable: false });
   const root = () => document.documentElement;
-  const enabled = () => !root()?.hasAttribute('data-smd-off') && root()?.dataset.smdRemoteKeys !== '0';
+  const enabled = () => !root()?.hasAttribute('data-smd-off') && root()?.dataset.smdRemoteKeys === '1';
   let locked = false;
 
   async function lock() {

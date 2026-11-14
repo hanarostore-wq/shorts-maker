@@ -11,7 +11,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     await Promise.all(
       tabs.map((t) => {
         const host = hostOfUrl(t.url);
-        if (!host || isExcluded(settings?.excludedSites, host)) return null;
+        if (!host || /(^|\.)remotedesktop\.google\.com$/i.test(host) || isExcluded(settings?.excludedSites, host)) return null;
         return chrome.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: ['black/black-gesture-core.js', 'black/black-gesture.js'] }).catch(() => null);
       }),
     );
